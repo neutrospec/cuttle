@@ -1,14 +1,14 @@
 # 0004 — Configuration and reload
 
-**Status** — Proposed (TASK-0001, 2026-11-25).
+**Status** — Proposed (TASK-0001, 2026-11-25; revised in iteration 2).
 
 ## Context
 
-Operators edit routing rules by hand and, from M2, through the admin
-settings page. Both paths must produce the same validated configuration,
-and a change must apply without dropping existing tunnels. This record
-defines the file format, the source of truth, the schema, validation, the
-starter file, reload, and the atomic write procedure.
+Operators edit routing rules by hand and, from M2, as TOML text in the
+admin settings page. Both paths must produce the same validated
+configuration, and a change must apply without dropping existing tunnels.
+This record defines the file format, the source of truth, the schema,
+validation, the starter file, reload, and the atomic write procedure.
 
 ## Decisions
 
@@ -17,18 +17,19 @@ starter file, reload, and the atomic write procedure.
 - Path: `$XDG_CONFIG_HOME/cuttle/config.toml`, by default
   `~/.config/cuttle/config.toml` ([0006 D1][d6-1]). Every command accepts
   `--config PATH` to override it.
-- Format: TOML 1.0, parsed with `github.com/BurntSushi/toml` v1.
+- Format: TOML 1.0, parsed with `github.com/BurntSushi/toml` v1. The
+  orchestrator approved this dependency in iteration 2.
 - Durations are Go duration strings such as `"10s"`. The file is limited to
   256 KiB.
 
-The dependency is justified as follows:
+Why TOML and this library:
 
 - Operators annotate rule groups, so the format needs comments. JSON has
   none.
 - The library is pure Go under the MIT licence, reports line numbers in
   parse errors, and exposes undecoded keys, so cuttle can reject unknown
-  keys and typos. Assumption: it adds no transitive modules; the
-  implementer confirms with `go mod graph` in the first T0 evidence.
+  keys and typos. The implementer records `go mod graph` in the first T0
+  evidence to show what it adds.
 - cuttle never encodes TOML. The settings page edits the file as text
   ([0005 D10][d5-10]), so comments and order survive edits.
 - YAML brings a larger dependency and implicit typing. A custom line format
@@ -60,16 +61,16 @@ Top level:
 
 | Key | Type | Default | Applies | Meaning |
 | --- | --- | --- | --- | --- |
-| `name` | string | required | reload | Instance pseudonym for `Via` and logs, `^[a-z][a-z0-9-]{0,62}$` ([0003 D5][d3-5]) |
+| `name` | string | required | reload | Instance pseudonym for `Via` and logs, `^[a-z][a-z0-9-]{0,62}$` ([0003 D2][d3-2]) |
 
 `[proxy]`:
 
 | Key | Type | Default | Applies | Meaning |
 | --- | --- | --- | --- | --- |
-| `listen` | array of `IP:port` | `["127.0.0.1:3128"]` | restart | Proxy listeners ([0003 D7][d3-7]) |
-| `ports` | array of integers | `[80, 443]` | reload | Allowed destination ports |
+| `listen` | array of `IP:port` | `["127.0.0.1:3128"]` | restart | Proxy listeners ([0003 D9][d3-9]) |
 | `default` | action | required | reload | Action for local clients when no rule matches |
 | `connect_timeout` | duration | `"10s"` | reload | Direct TCP connect, 100 ms–10 min |
+| `response_timeout` | duration | `"60s"` | reload | Direct plain-HTTP response head, 100 ms–10 min |
 | `idle_timeout` | duration | `"1h"` | reload | Tunnel idle limit; `"0s"` disables |
 | `max_connections` | integer | `1024` | reload | Client connection cap, 16–65536 |
 
@@ -78,9 +79,12 @@ Top level:
 | Key | Type | Default | Applies | Meaning |
 | --- | --- | --- | --- | --- |
 | `sources` | array of CIDR | `[]` | reload | Allowed remote sources; required for a non-loopback listener |
+| `ports` | array of integers | `[80, 443]` | reload | Destination ports open to remote clients ([0003 D10][d3-10]) |
 | `default` | action | `"block"` | reload | Action for remote clients when no rule matches |
-| `allow_direct` | boolean | `false` | reload | Allow `direct` for remote clients ([0003 D8][d3-8]) |
+| `allow_direct` | boolean | `false` | reload | Allow `direct` for remote clients |
 | `max_connections_per_source` | integer | `128` | reload | Per-source cap, 1–65536 |
+
+Local clients have no port policy.
 
 `[[upstream]]`, zero or more:
 
@@ -88,10 +92,10 @@ Top level:
 | --- | --- | --- | --- | --- |
 | `name` | string | required | reload | `^[a-z][a-z0-9-]{0,31}$`, unique |
 | `address` | `host:port` | required | reload | Plain-HTTP proxy address |
+| `forward` | string | required | reload | `via` for another cuttle instance, `exact` for the corporate proxy or any proxy that must see the client's own head ([0003 D1][d3-1]) |
 | `connect_timeout` | duration | `"10s"` | reload | 100 ms–10 min |
-| `handshake_timeout` | duration | `"30s"` | reload | 100 ms–10 min |
-| `via` | boolean | `true` | reload | Send `Via` to this upstream ([0003 D5][d3-5]) |
-| `unreachable_hold` | duration | `"5s"` | reload | Fail fast after a connect failure, 100 ms–5 min; `"0s"` disables ([0003 D12][d3-12]) |
+| `response_timeout` | duration | `"60s"` | reload | Response head for `CONNECT` and plain HTTP, 100 ms–10 min |
+| `unreachable_hold` | duration | `"5s"` | reload | Fail fast after a connect failure, 100 ms–5 min; `"0s"` disables ([0003 D8][d3-8]) |
 
 `[[rule]]`, zero or more, evaluated in file order:
 
@@ -101,9 +105,10 @@ Top level:
 | `hosts` | array of names | `[]` | Exact names ([0002 D4][d2-4]) |
 | `domains` | array of names | `[]` | Names and their subdomains |
 | `cidrs` | array of CIDR | `[]` | IP-literal targets |
-| `ports` | array of integers | `[]` | Port condition; empty means any allowed port |
+| `ports` | array of integers | `[]` | Port condition; empty means any port |
 | `action` | action | required | `direct`, `block`, or `upstream:<name>` |
-| `allow_loopback` | boolean | `false` | `direct` only; see [0003 D9][d3-9] |
+| `allow_loopback` | boolean | `false` | `direct` only: local clients may reach loopback and own addresses ([0003 D11][d3-11]) |
+| `allow_private` | boolean | `false` | `direct` only: local clients may reach private addresses that a name resolves to ([0003 D11][d3-11]) |
 
 All rule keys apply on reload.
 
@@ -135,7 +140,8 @@ it, the line.
 Errors:
 
 - TOML syntax errors, unknown keys, wrong types, and values out of range.
-- A missing `name`, `proxy.default`, or rule `action`.
+- A missing `name`, `proxy.default`, rule `action`, or upstream `forward`,
+  or a `forward` other than `via` or `exact`.
 - Duplicate upstream or rule names, or an action naming an unknown
   upstream. The rule names `default`, `remote-default`, `port`, and
   `remote-direct` are reserved for decisions that no rule made.
@@ -146,16 +152,20 @@ Errors:
   address in `hosts` or `domains`. The message suggests the correct field
   or the A-label form.
 - An invalid CIDR, or a CIDR with host bits set.
-- `allow_loopback` on a rule whose action is not `direct`.
-- The exposure errors of [0003 D7][d3-7] and [D8][d3-8].
+- `allow_loopback` or `allow_private` on a rule whose action is not
+  `direct`.
+- The exposure errors of [0003 D9][d3-9] and [D10][d3-10].
 - An upstream address equal to a listener ([0003 D1][d3-1]).
 - An `admin.listen` that is not a loopback literal, or that equals a proxy
   listener.
 
 Warnings, printed by `cuttle check` and the settings page:
 
-- A pattern repeated in a later rule; the later entry can never match.
-- A rule whose `ports` are all outside `proxy.ports`.
+- A later rule repeats a pattern of an earlier rule whose port condition
+  covers the later rule's ports, because it has no `ports` or a superset.
+  That entry of the later rule can never match.
+- `proxy.remote.sources` contains `0.0.0.0/0` or `::/0`, which admits every
+  address that can reach a non-loopback listener.
 - An upstream that no action uses.
 
 ### D5. Starter configuration
@@ -172,14 +182,13 @@ name = "cuttle-<hex>"  # unique per instance; appears in Via headers
 
 [proxy]
 listen = ["127.0.0.1:3128"]
-ports = [80, 443]
 default = "direct"  # direct, block, or upstream:<name>
 
 [admin]
 listen = "127.0.0.1:3129"  # set a password with `cuttle admin passwd`
 
-# Local services named explicitly. Names that merely resolve to loopback
-# stay blocked.
+# Local services named explicitly, on any port. Other names that resolve
+# to loopback stay refused.
 [[rule]]
 name = "loopback"
 hosts = ["localhost"]
@@ -187,10 +196,19 @@ cidrs = ["127.0.0.0/8", "::1/128"]
 action = "direct"
 allow_loopback = true
 
-# Example upstream and rule:
+# Devices on the home network by name, such as a NAS. Private IP literals
+# work without a rule; names that resolve to private addresses need one.
+# [[rule]]
+# name = "home-lan"
+# domains = ["lan", "home.arpa"]
+# action = "direct"
+# allow_private = true
+
+# Another cuttle instance as an upstream:
 # [[upstream]]
 # name = "office"
 # address = "10.8.0.6:3128"
+# forward = "via"    # "exact" for a corporate proxy
 #
 # [[rule]]
 # name = "office-only"
@@ -198,8 +216,11 @@ allow_loopback = true
 # action = "upstream:office"
 ```
 
-The starter default is `direct`, which on a loopback listener gives a local
-client the same reach it has without a proxy.
+With the starter default `direct` on a loopback listener, a local client
+has the reach it has without a proxy, on any port, with two exceptions:
+names that resolve to loopback, own, or private addresses need a rule with
+`allow_loopback` or `allow_private`, and link-local, multicast, and
+unspecified addresses are always refused ([0003 D11][d3-11]).
 
 ### D6. Reload
 
@@ -209,12 +230,11 @@ Triggers: `SIGHUP`, `cuttle reload` through the control socket
 
 1. Read and validate the file. On failure, keep the running configuration,
    log the errors, and return them to the caller.
-2. Build a new immutable policy snapshot: compiled rules, ports, remote
-   settings, upstream table, timeouts, and name.
-3. Reuse the transport and reachability state of each upstream whose
-   `address` and timeouts are unchanged. Create new ones for the rest and
-   close the idle connections of the replaced ones. New direct transports
-   are created for the snapshot.
+2. Build a new immutable policy snapshot: compiled rules, remote settings,
+   upstream table, timeouts, and name.
+3. Keep the reachability state of each upstream whose `address`,
+   `forward`, and timeouts are unchanged; changed and new upstreams start
+   `up`.
 4. Swap the snapshot pointer atomically. Apply `log.level` and `[stats]`
    settings.
 5. Record which restart-only keys differ from the running values. `cuttle
@@ -226,23 +246,28 @@ In-flight work:
   never re-evaluated or closed by a reload, even when the new rules would
   block them; they end normally or on idle timeout.
 - The next request on a kept-alive plain-HTTP connection uses the new
-  snapshot, and its source is checked again ([0003 D8][d3-8]).
+  snapshot, and its source is checked again ([0003 D10][d3-10]). An
+  outbound connection that the client connection owns is reused only if its
+  upstream's settings are unchanged; otherwise it is closed and the request
+  dials anew ([0002 D5][d2-5]).
 
 ### D7. Atomic write
 
 `cuttle init`, first start, the settings page, and `cuttle admin passwd`
 write files this way:
 
-1. Resolve symbolic links in the target path, so that a dotfile manager's
-   link stays intact and its target is replaced.
+1. Resolve symbolic links in the target path. All later steps work in the
+   resolved target's directory, so a dotfile manager's link stays intact,
+   and the temporary file and `.bak` sit beside the link's target, not
+   beside the link.
 2. If the caller supplies the SHA-256 of the content it started from,
    compare it with the current file and stop with a conflict on mismatch.
    A narrow race remains between this check and the rename; it is accepted
    for a single local user.
-3. Create `.<base>.tmp-<random>` in the target's directory with `O_EXCL`
-   and mode 0600, write, `fsync`, and close.
-4. For the configuration file, write the previous content to
-   `<base>.bak` the same way, then rename it into place.
+3. Create `.<base>.tmp-<random>` in that directory with `O_EXCL` and mode
+   0600, write, `fsync`, and close.
+4. For the configuration file, write the previous content to `<base>.bak`
+   in that directory the same way, then rename it into place.
 5. Rename the temporary file over the target, then `fsync` the directory.
 6. On any failure, remove the temporary file and leave the target
    unchanged.
@@ -254,12 +279,12 @@ The target always exists, holding the old or the new content.
 | ID | Criterion | Check |
 | --- | --- | --- |
 | K1 | Each D4 error has a sample file that fails with the documented key path and line, and each warning appears in `cuttle check` output with exit status 0. | T0 `TestConfigValidation`, `TestCheckCommand` |
-| K2 | `cuttle serve` with an empty `HOME` creates `~/.config/cuttle` (0700) and the D5 file (0600), which passes `cuttle check`, has a `cuttle-<hex>` name, and serves on `127.0.0.1:3128`. | T1 `TestFirstRun` |
+| K2 | With `HOME` and the `XDG_*` variables set to temporary directories, `cuttle init` creates `~/.config/cuttle` (0700) and the D5 file (0600), which passes `cuttle check` and has a `cuttle-<hex>` name. `cuttle serve` given that file with `proxy.listen` changed to a port the test chose serves on that port. A unit test shows that `serve` writes the same starter file when none exists. No test binds port 3128. | T1 `TestFirstRun`; T0 `TestServeWritesStarter` |
 | K3 | A tunnel opened before a reload keeps transferring after it. A request after the reload follows the new rules. | T1 `TestReloadKeepsTunnels` |
 | K4 | Reloading an invalid file keeps the previous policy, logs the errors, and returns them through `cuttle reload` with a non-zero exit status. `SIGHUP` behaves the same apart from the return path. | T1 `TestReloadInvalid`, `TestReloadSIGHUP` |
 | K5 | Changing `proxy.listen` and reloading leaves the listeners unchanged and lists `proxy.listen` under `restart_required`. | T1 `TestReloadRestartRequired` |
-| K6 | Changing an upstream's address and reloading lets an existing tunnel through the old address continue while new requests use the new one. | T1 `TestReloadUpstreamChange` |
-| K7 | Atomic write: a concurrent reader never sees partial content; a symlinked configuration keeps its link and gets a new target; `.bak` holds the previous content; a stale SHA-256 leaves the file unchanged. | T0 `TestAtomicWrite` |
+| K6 | Changing an upstream's address and reloading lets an existing tunnel through the old address continue, while the next request on a kept-alive client connection goes to the new address on a new connection. | T1 `TestReloadUpstreamChange` |
+| K7 | Atomic write: a concurrent reader never sees partial content; a symlinked configuration keeps its link, gets a new target, and has its temporary file and `.bak` beside the target; `.bak` holds the previous content; a stale SHA-256 leaves the file unchanged. | T0 `TestAtomicWrite` |
 
 ## Alternatives considered
 
@@ -268,17 +293,21 @@ The target always exists, holding the old or the new content.
 - **File watching with `fsnotify`.** It adds a dependency and applies
   half-saved editor states; an explicit reload is predictable.
 - **Structured settings forms that rewrite the file.** They would lose
-  comments without a comment-preserving TOML encoder. Forms can be added
-  later on top of text editing.
+  comments without a comment-preserving TOML encoder. The user chose text
+  editing.
+- **A global destination port list for every client.** It made
+  `curl http://localhost:3000` fail and gave local clients less reach than
+  no proxy; ports are limited for remote clients only.
 
 [d2-3]: 0002-proxy-core-and-routing.md#d3-authority-normalization
 [d2-4]: 0002-proxy-core-and-routing.md#d4-rules-and-evaluation-order
-[d3-1]: 0003-upstream-chaining-and-exposure.md#d1-upstreams
-[d3-12]: 0003-upstream-chaining-and-exposure.md#d12-unreachable-upstream-hold
-[d3-5]: 0003-upstream-chaining-and-exposure.md#d5-via-and-loop-detection
-[d3-7]: 0003-upstream-chaining-and-exposure.md#d7-listeners
-[d3-8]: 0003-upstream-chaining-and-exposure.md#d8-source-classes-and-remote-policy
-[d3-9]: 0003-upstream-chaining-and-exposure.md#d9-destination-address-policy-for-direct-routes
+[d2-5]: 0002-proxy-core-and-routing.md#d5-actions-and-forwarding
+[d3-1]: 0003-upstream-chaining-and-exposure.md#d1-upstreams-and-forwarding-modes
+[d3-2]: 0003-upstream-chaining-and-exposure.md#d2-head-edits-via-and-loop-detection
+[d3-8]: 0003-upstream-chaining-and-exposure.md#d8-unreachable-upstream-hold
+[d3-9]: 0003-upstream-chaining-and-exposure.md#d9-listeners
+[d3-10]: 0003-upstream-chaining-and-exposure.md#d10-source-classes-and-remote-policy
+[d3-11]: 0003-upstream-chaining-and-exposure.md#d11-destination-address-policy-for-direct-routes
 [d5-3]: 0005-statistics-and-admin.md#d3-retention-and-size
 [d5-10]: 0005-statistics-and-admin.md#d10-settings
 [d6-1]: 0006-packaging-paths-and-lifecycle.md#d1-paths

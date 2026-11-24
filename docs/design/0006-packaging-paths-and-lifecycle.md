@@ -1,6 +1,6 @@
 # 0006 — Packaging, paths, and lifecycle
 
-**Status** — Proposed (TASK-0001, 2026-11-25).
+**Status** — Proposed (TASK-0001, 2026-11-25; revised in iteration 2).
 
 ## Context
 
@@ -23,7 +23,7 @@ calls `os.UserConfigDir` or `os.UserCacheDir`.
 
 | Item | Path | Mode |
 | --- | --- | --- |
-| Configuration | `$XDG_CONFIG_HOME/cuttle/config.toml`, plus `config.toml.bak` | 0600 |
+| Configuration | `$XDG_CONFIG_HOME/cuttle/config.toml`, plus `config.toml.bak` beside it, or beside the link's target when the path is a symbolic link ([0004 D7][d4-7]) | 0600 |
 | Admin password hash | `$XDG_DATA_HOME/cuttle/admin-password` | 0600 |
 | Statistics | `$XDG_STATE_HOME/cuttle/stats.db`, plus `-wal` and `-shm` | 0600 |
 | Log | `$XDG_STATE_HOME/cuttle/cuttle.log`, plus `.1` to `.5` | 0600 |
@@ -88,7 +88,7 @@ control   /var/folders/xy/abc123/T/cuttle/control.sock  TMPDIR
   $ cuttle explain https://wiki.corp.example/
   target  wiki.corp.example:443 (connect, local client)
   rule    office-only (#2)
-  action  upstream:office -> 10.8.0.6:3128
+  action  upstream:office -> 10.8.0.6:3128 (forward via)
   ```
 
 ### D4. Control socket
@@ -134,7 +134,7 @@ control   /var/folders/xy/abc123/T/cuttle/control.sock  TMPDIR
 5. Opens the statistics database (M2); failure is not fatal
    ([0005 D4][d5-4]).
 6. Opens the control socket; failure is not fatal.
-7. Binds listeners ([0003 D7][d3-7]).
+7. Binds listeners ([0003 D9][d3-9]).
 8. Logs the version, name, paths, and listeners. Without a password file it
    logs that admin login stays disabled until `cuttle admin passwd` runs.
 
@@ -277,8 +277,8 @@ and the log.
 | --- | --- | --- |
 | P1 | For each XDG variable unset, empty, relative, and absolute, the resolved paths match D1; the runtime directory falls back to `$TMPDIR` when `XDG_RUNTIME_DIR` is unset or not 0700. | T0 `TestPaths` |
 | P2 | `cuttle paths --json` equals the `paths` of `/v1/status` for the same environment; with a different `XDG_STATE_HOME` the CLI prints the mismatch warning. | T1 `TestPathsMatchService` |
-| P3 | After first run, every created directory is 0700 and every file 0600. A group-writable configuration stops `cuttle serve` with an error; a 0755 socket directory leaves the service running without a control socket. | T1 `TestPermissions` |
-| P4 | `cuttle status` and `cuttle reload` work over the socket; a second `cuttle serve` exits with status 1; a stale socket is replaced. | T1 `TestControlSocket` |
+| P3 | After first run, every created directory is 0700 and every file 0600. A group-writable configuration stops `cuttle serve` with an error. | T1 `TestPermissions` |
+| P4 | `cuttle status` and `cuttle reload` work over the socket; a second `cuttle serve` exits with status 1; a stale socket is replaced; a 0755 socket directory leaves the service running without a control socket and logs a warning. | T1 `TestControlSocket` |
 | P5 | The built binary, sent `SIGTERM` with an open tunnel and an in-flight 2 s plain-HTTP response, completes the response, closes the tunnel, and exits 0 within 8 s; a second signal exits at once. | T1 `TestServeSIGTERM` |
 | P6 | With a test threshold of 64 KiB, rotation keeps exactly five rotated files. | T1 `TestLogRotation` |
 | P7 | `cuttle explain` prints the D3 fields for direct, upstream, block, and `--remote` targets, and `cuttle check` exits 0, 1, or 2 as specified. | T1 `TestExplainCommand`, `TestCheckCommand` |
@@ -311,9 +311,10 @@ and the log.
 
 [d2-7]: 0002-proxy-core-and-routing.md#d7-byte-accounting-and-live-counters
 [d2-8]: 0002-proxy-core-and-routing.md#d8-decision-log
-[d3-7]: 0003-upstream-chaining-and-exposure.md#d7-listeners
+[d3-9]: 0003-upstream-chaining-and-exposure.md#d9-listeners
 [d4-5]: 0004-configuration-and-reload.md#d5-starter-configuration
 [d4-6]: 0004-configuration-and-reload.md#d6-reload
+[d4-7]: 0004-configuration-and-reload.md#d7-atomic-write
 [d5-4]: 0005-statistics-and-admin.md#d4-write-path
 [d5-6]: 0005-statistics-and-admin.md#d6-password
 [oi]: ../OPEN_ISSUES.md

@@ -18,7 +18,8 @@ ordered rules on host name, domain, IP prefix, and port:
   nothing.
 - Chains such as home cuttle → office cuttle → corporate proxy are supported,
   with loop detection and source and destination controls for listeners
-  reachable over a VPN.
+  reachable over a VPN. Toward a picky corporate proxy, cuttle forwards each
+  request head byte for byte as the client sent it.
 - Live counters, a decision log, hourly per-domain statistics in SQLite, and
   a password-protected dashboard and settings page on loopback show where
   traffic went.

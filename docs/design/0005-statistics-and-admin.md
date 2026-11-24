@@ -1,6 +1,6 @@
 # 0005 — Statistics and admin
 
-**Status** — Proposed (TASK-0001, 2026-11-25).
+**Status** — Proposed (TASK-0001, 2026-11-25; revised in iteration 2).
 
 ## Context
 
@@ -26,7 +26,7 @@ cuttle aggregates per hour, host, action, upstream, rule, and source class.
 | `host` | Normalized name or IP literal ([0002 D3][d2-3]); IPv6 without brackets; `*` for folded rows (D4) |
 | `action`, `upstream` | Route taken; `upstream` is empty unless the action is `upstream` |
 | `rule` | Rule name, or `default`, `remote-default`, `port`, `remote-direct` |
-| `source` | `local` or `remote` ([0003 D8][d3-8]) |
+| `source` | `local` or `remote` ([0003 D10][d3-10]) |
 | `connects` | `CONNECT` decisions |
 | `http_requests` | Plain-HTTP decisions |
 | `failures` | Decisions with outcome `loop`, `dns_error`, `prohibited`, `refused`, `timeout`, `unavailable`, `upstream_status`, `upstream_protocol`, or `internal` |
@@ -157,7 +157,7 @@ rate.
   This defeats DNS rebinding, which Go's server does not check by default
   ([research 0002 §7][r2-7]).
 - Remote proxy clients cannot reach the admin port: it listens on loopback,
-  and they have no route to loopback ([0003 D9][d3-9]).
+  and they have no route to loopback ([0003 D11][d3-11]).
 - Every response carries `Content-Security-Policy: default-src 'self';
   frame-ancestors 'none'; form-action 'self'; base-uri 'none'`,
   `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, and
@@ -225,7 +225,7 @@ rate.
   extend the delay. Success resets the count. Each failure is logged
   without the password.
 
-### D9. Dashboard and API
+### D9. Dashboard
 
 Windows are `1h`, `24h` (default), `7d`, and `30d`, or `from` and `to` as
 local calendar dates, inclusive, within the retention period. A preset
@@ -243,10 +243,6 @@ exact range.
 | `GET` | `/settings` | Session | Configuration editor (D10) |
 | `POST` | `/settings/validate` | Session, CSRF | Validate text without saving |
 | `POST` | `/settings` | Session, CSRF | Validate, save, reload |
-| `GET` | `/explain` | Session | Route for `target` and `source` ([0006 D3][d6-3]) |
-| `GET` | `/api/summary` | Session | JSON totals for `window` |
-| `GET` | `/api/domains` | Session | JSON host rows for `window`, `route`, `source`, `sort`, `limit`, `offset` |
-| `GET` | `/api/live` | Session | JSON live counters and active tunnels |
 | `GET` | `/static/*` | Host check | Embedded styles |
 
 `route` is `direct`, `upstream` (all upstreams), `upstream:<name>`,
@@ -257,16 +253,11 @@ The domain table shows host, route, rules, requests (`connects` plus
 seen. A host that took several routes appears once per route. Bars drawn
 with CSS widths stand in for charts.
 
-`/api/domains` returns:
-
-```json
-{"window": {"from": 1764032400, "to": 1764118800},
- "rows": [{"host": "wiki.corp.example", "action": "upstream",
-           "upstream": "office", "rules": ["office-only"],
-           "requests": 42, "failures": 1, "bytes_up": 51234,
-           "bytes_down": 9876543, "first_seen": 1764040000,
-           "last_seen": 1764110000}]}
-```
+The pages are rendered on the server; there is no JSON API and no
+`/explain` page, because no consumer needs them. Operators use
+`cuttle explain` and `cuttle status` from the terminal
+([0006 D3][d6-3]), and tests exercise the query functions in
+`internal/stats` directly.
 
 ### D10. Settings
 
@@ -309,7 +300,7 @@ timeouts.
 | A5 | A `POST` with `Sec-Fetch-Site: cross-site`, without the CSRF token, or a login without the `cuttle_login` cookie gets `403`. | `TestAdminCSRF` |
 | A6 | A session ends after 30 idle minutes, after `cuttle admin passwd` changes the file, and after logout. | `TestAdminSessionEnd` |
 | A7 | Every admin response carries the D5 security headers. | `TestAdminHeaders` |
-| A8 | After S1's traffic, `/api/domains` for `upstream:office`, `direct`, and `block` over `24h` lists exactly the expected hosts; `1h` excludes rows from earlier hours; `/api/live` lists an open tunnel. | `TestAdminDomainsAPI` |
+| A8 | After S1's traffic, the query for `upstream:office`, `direct`, and `block` over `24h` returns exactly the expected hosts, and `1h` excludes rows from earlier hours. `/domains` renders those rows, and `/live` lists an open tunnel. | `TestStatsDomainsQuery`, `TestAdminPages` |
 | A9 | A valid save replaces the file (0600, `.bak` written), reloads, and an open tunnel survives; invalid text gets `422` with line numbers and leaves the file; a stale `base` gets `409` and leaves the file; a `proxy.listen` change shows `restart_required`. | `TestAdminSettings` |
 | A10 | Headless Chrome with a throwaway profile and `--use-mock-keychain` logs in at `http://127.0.0.1:<port>/` and renders the overview. No window opens. | T2-lite at M2 close, [0007 D7][d7-7] |
 
@@ -338,8 +329,8 @@ timeouts.
 
 [d2-3]: 0002-proxy-core-and-routing.md#d3-authority-normalization
 [d2-7]: 0002-proxy-core-and-routing.md#d7-byte-accounting-and-live-counters
-[d3-8]: 0003-upstream-chaining-and-exposure.md#d8-source-classes-and-remote-policy
-[d3-9]: 0003-upstream-chaining-and-exposure.md#d9-destination-address-policy-for-direct-routes
+[d3-10]: 0003-upstream-chaining-and-exposure.md#d10-source-classes-and-remote-policy
+[d3-11]: 0003-upstream-chaining-and-exposure.md#d11-destination-address-policy-for-direct-routes
 [d4-3]: 0004-configuration-and-reload.md#d3-schema
 [d4-4]: 0004-configuration-and-reload.md#d4-validation
 [d4-6]: 0004-configuration-and-reload.md#d6-reload
