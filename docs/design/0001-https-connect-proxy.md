@@ -1,6 +1,16 @@
 # 0001 — HTTPS CONNECT proxy
 
-**Status** — Proposed initial scope.
+**Status** — Superseded on 2026-11-25 by
+[0002](0002-proxy-core-and-routing.md) and
+[0003](0003-upstream-chaining-and-exposure.md) (TASK-0001).
+
+This record used the working name `squid`; the product is now `cuttle`. Its
+successors keep blind tunnels, ordered first-match rules, `403` for policy
+blocks, no rerouting after an upstream failure, and per-direction byte
+counts. They add plain `http://` routing, chained upstreams, remote
+listeners, statistics, and an admin UI, and change the default action from
+`block` to a required setting whose starter value is `direct`. The original
+text follows unchanged.
 
 ## Context
 
