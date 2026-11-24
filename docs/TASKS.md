@@ -44,20 +44,20 @@ A closed task becomes one line under Closed:
 ### TASK-0001 — Revise goals and design for chaining, admin, packaging, and mocks
 
 - Milestone: M1
-- Status: review
-- Iteration: 1/3
-- Workers: researcher ×2 done (notes 0001 and 0002 landed in `c901460`);
-  designer done in T3 worktree
+- Status: design
+- Iteration: 2/3
+- Workers: designer in T3 worktree
   `<worktree>`, branch
-  `t3/cuttle-proxy-design`; reviewer pending
+  `t3/cuttle-proxy-design`; reviewer for iteration 1 done
 - Base: `7c35afa`
-- Candidate: `aa1978c` (tree `d4e72ee`), design records 0002-0007, roadmap
-  M1-M3, OI-0001 to OI-0005
-- Evidence: docs checks on the candidate tree passed (links, anchors,
-  whitespace, language); no gate tier applies
-- Findings: none yet
-- Next action: reviewer — independent review of `aa1978c` against the user
-  requirements and the design brief
+- Candidate: `aa1978c` (tree `d4e72ee`), returned for revision
+- Evidence: docs checks on `d4e72ee` passed; iteration 1 review verdict
+  "revise"
+- Findings: open R1 (port policy breaks local traffic, major), R2 (private
+  addresses reachable by name, major), R3 (no client check at M1 close,
+  major), R4-R9 (minor), R10 (nits); all owned by design
+- Next action: designer — revise the candidate for R1-R10 and the decisions
+  below, then return a new commit for a fresh review
 
 Decisions for TASK-0001 from the user and orchestrator (2026-11-25):
 
@@ -68,5 +68,11 @@ Decisions for TASK-0001 from the user and orchestrator (2026-11-25):
 - Plain `http://` requests are routed with the same rules as HTTPS.
 - The admin dashboard and settings pages listen on loopback only and require
   a password.
+- Iteration 2 (user): direct routes refuse private addresses reached by name
+  unless a rule allows them. The office-to-home VPN is WireGuard on a home
+  server or router. A headless Chrome and `/usr/bin/curl` check runs at M1
+  close. Settings are edited as TOML text in the admin page.
+- Iteration 2 (orchestrator): `github.com/BurntSushi/toml` is approved. The
+  default action is a required setting whose starter value is `direct`.
 
 ## Closed
