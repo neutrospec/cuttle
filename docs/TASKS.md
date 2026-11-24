@@ -44,18 +44,20 @@ A closed task becomes one line under Closed:
 ### TASK-0001 — Revise goals and design for chaining, admin, packaging, and mocks
 
 - Milestone: M1
-- Status: design
+- Status: review
 - Iteration: 1/3
 - Workers: researcher ×2 done (notes 0001 and 0002 landed in `c901460`);
-  designer in a T3 isolated worktree
-- Base: `c901460` plus this board update
-- Candidate: none
-- Evidence: research notes
-  [0001](research/0001-homebrew-launchd-xdg.md) and
-  [0002](research/0002-proxy-chaining-and-interception.md); docs checks only
-- Findings: none
-- Next action: designer — write the revised roadmap and design records on
-  the task branch and return the candidate commit for review
+  designer done in T3 worktree
+  `<worktree>`, branch
+  `t3/cuttle-proxy-design`; reviewer pending
+- Base: `7c35afa`
+- Candidate: `aa1978c` (tree `d4e72ee`), design records 0002-0007, roadmap
+  M1-M3, OI-0001 to OI-0005
+- Evidence: docs checks on the candidate tree passed (links, anchors,
+  whitespace, language); no gate tier applies
+- Findings: none yet
+- Next action: reviewer — independent review of `aa1978c` against the user
+  requirements and the design brief
 
 Decisions for TASK-0001 from the user and orchestrator (2026-11-25):
 
