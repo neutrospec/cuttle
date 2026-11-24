@@ -14,3 +14,45 @@ removes entries. Append new entries at the end, oldest first.
 ```
 
 ## Entries
+
+### 2026-11-25 — researcher — Homebrew, launchd, and XDG research
+
+- Task: TASK-0001, running shell commands for research note 0001.
+- Attempts: 2.
+- What failed: The Bash tool runs zsh, which aborts a command when an
+  unquoted glob matches nothing. `grep -rn PATTERN DIR --include=*.rb`
+  failed with `no matches found: --include=*.rb`, and
+  `curl -sSf https://api.github.com/repos/OWNER/REPO/tags?per_page=1`
+  failed with `no matches found: https://...?per_page=1`. zsh also does not
+  word-split unquoted variables, so `set -- $q` inside a loop put the whole
+  string in `$1`.
+- What to do instead: Quote every argument that contains `*`, `?`, or `[`,
+  for example `--include='*.rb'` and `"https://...?per_page=1"`. For loops
+  that split strings into fields, write a POSIX script file and run it with
+  `sh script.sh`.
+
+### 2026-11-25 — researcher — proxy chaining and interception research
+
+- Task: TASK-0001, client tests of proxy failure responses for research note
+  0002.
+- Attempts: 1 visible failure, recorded because it reached the user's screen.
+- What failed: A command-line Swift probe used `URLSession` with a per-session
+  proxy and default authentication handling
+  (`./cfnet/probe certs/ca.pem ... https://s407.cuttle.test/cf-c407`). The mock
+  proxy answered `407` with `Proxy-Authenticate: Basic`, and macOS showed a
+  proxy sign-in dialog on the user's desktop. Go `Transport`,
+  `/usr/bin/curl`, and headless Chrome with `--use-mock-keychain` showed no
+  dialog for the same response.
+- What to do instead: Never let a mock proxy answer `407` to an Apple-framework
+  client (`URLSession`, `CFNetwork`, Safari) on the user's desktop. If the case
+  must be tested, refuse the challenge in the client's authentication handler.
+  Get user approval before any client test that can open a window.
+
+### 2026-11-25 — researcher — WebKit sources for Safari behavior
+
+- Task: TASK-0001, Safari proxy behavior for research note 0002.
+- Attempts: 2.
+- What failed: `bugs.webkit.org` timed out with `curl -sSL -m 60` (exit 28)
+  and with the web fetch tool.
+- What to do instead: Use the Safari release notes on `webkit.org` or the
+  WebKit source on GitHub. Do not retry `bugs.webkit.org` more than once.
