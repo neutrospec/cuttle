@@ -1,13 +1,13 @@
 # Lessons
 
-Every agent reads this file before starting. An agent that hits the same
-failure twice and has to redo work appends the lesson. The docs role maintains
-formatting and merges duplicates with the original context preserved.
+Repeated failures and how to avoid them. Read this file before starting any
+task. The [lesson rules](../AGENTS.md#lessons) say who writes, edits, and
+removes entries. Append new entries at the end, oldest first.
 
 ```text
 ### YYYY-MM-DD — role — short task name
 
-- Task: What the agent was trying to do.
+- Task: Task ID if any, and what the agent was trying to do.
 - Attempts: Number of attempts.
 - What failed: Failure and the relevant command or tool call.
 - What to do instead: The working approach.

@@ -7,6 +7,7 @@ and [open issues](../../docs/OPEN_ISSUES.md).
 - Keep the reading order and design and research indexes current. Repair stale
   references and apply the repository's naming conventions.
 - Maintain the format of lessons and open issues while preserving history and
-  linking resolutions to evidence.
+  linking resolutions to evidence. Edit the [task board](../../docs/TASKS.md)
+  only for formatting work the orchestrator assigns.
 - Route changes to technical decisions, test findings, and product behavior
   to the role that owns them.

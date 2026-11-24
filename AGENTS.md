@@ -5,8 +5,23 @@ metrics. The [roadmap](docs/ROADMAP.md) defines milestone outcomes. Read
 [LESSONS.md](docs/LESSONS.md), the [documentation index](docs/README.md), and
 the relevant design before starting work.
 
-The orchestrator communicates with the user in Korean. Repository documents,
-code, comments, commit messages, and worker reports use English.
+## Language
+
+The orchestrator speaks Korean with the user. Everything else in the project
+uses English:
+
+- Briefs and work orders, every message between agents, and worker reports,
+  including review findings and test evidence.
+- Code identifiers, comments, and doc comments, along with log lines, error
+  messages, metric names and labels, configuration keys, and command-line
+  output.
+- Repository documents, task entries, lessons, open issues, commit messages,
+  branch names, and test names.
+
+Translate a user request into English when relaying it in a brief. Quote the
+Korean original only when its exact wording matters, and put the translation
+beside it. Code and tests contain non-English text only as test data that
+requires it, such as an internationalized domain name.
 
 ## Orchestration and roles
 
@@ -50,9 +65,9 @@ explicitly calls for it and the runtime supports it.
    the landed tree matches the verified tree or run the gates the new tree
    requires.
 
-Keep one current status and next action per change, with links to the base,
-candidate, evidence, and findings. Allow at most three iterations per work
-loop. After the third, record significant remaining work in
+Track each change in [TASKS.md](docs/TASKS.md) under the
+[task rules](#tasks). Allow at most three iterations per work loop. After the
+third, record significant remaining work in
 [OPEN_ISSUES.md](docs/OPEN_ISSUES.md) and decide whether a newly scoped loop or
 user input is needed. Carry the iteration count across handoffs and retries.
 
@@ -63,6 +78,33 @@ findings. Reuse valid evidence for the same inputs and run the missing checks.
 In T3, each review or re-check uses a fresh `delegate_task`. Include the brief,
 design, exact candidate path and SHA, acceptance criteria, test evidence, and
 relevant prior findings in the request.
+
+## Tasks
+
+[TASKS.md](docs/TASKS.md) keeps one current status and next action for each
+change in the work loop. Git state and worker reports remain the source of
+truth. On resume, reconcile the board with them before acting.
+
+- Open a `TASK-NNNN` entry before the first dispatch for a change. Each entry
+  covers one observable change with one producer. Never reuse an ID.
+- Name the task ID in every brief and worker report. The landing commit adds
+  a `task: TASK-NNNN` line next to its `gates:` line.
+- Only the orchestrator edits the board, apart from formatting work it assigns
+  to the docs role. Workers return status, candidates, evidence, findings, and
+  lessons in their reports and leave the board unchanged in every checkout.
+- Update the entry when the step, iteration, candidate, open findings,
+  blocking reason, or next action changes. The next action names one owner
+  role and one concrete step.
+- Increase the iteration when review findings return the change to design or
+  implementation. A new entry for the same scope continues the count. After
+  the third iteration, link the open issue that holds the remainder. A newly
+  scoped loop gets its own entry that refers to the old one.
+- Commit board changes on their own as docs-only commits, at least when a task
+  opens, blocks, stops, or closes. Tracking records trigger no gate tier, so a
+  landed tree that differs from the verified tree only in `docs/TASKS.md`,
+  `docs/LESSONS.md`, or `docs/OPEN_ISSUES.md` reuses the candidate's evidence.
+- Close a landed task with its landed commit and `gates:` line. Close a
+  stopped task with the reason and any open issue.
 
 ## Checkout and landing
 
@@ -104,9 +146,30 @@ commit can record results after commands have run. For docs-only changes, use
 `gates: none @ <tree-sha>` and record any documentation checks directly.
 Keep reports short for chores and include detailed evidence for milestones.
 
-## Lessons and local artifacts
+## Lessons
 
-An agent that hits the same failure twice and must redo work records it in
-[LESSONS.md](docs/LESSONS.md). Use generated fixtures and controlled test
-destinations. Keep credentials, private keys, real traffic captures, and
-environment-specific artifacts outside Git.
+Read [LESSONS.md](docs/LESSONS.md) before starting any task. Every brief links
+it.
+
+- An agent that fails at the same thing twice, including a command or tool
+  call, and must redo work appends an entry without waiting to be asked. It
+  copies the entry into its report.
+- A read-only worker puts the lesson in its report, and the orchestrator
+  appends it. The orchestrator also records the lesson for a worker it cancels
+  or finds repeating an action without progress.
+- A worker in an isolated worktree commits the entry with its work. If that
+  candidate does not land, the orchestrator carries the entry to the target
+  branch. The orchestrator relays lessons that affect other active workers.
+- Any agent may append. The docs role merges duplicates and fixes formatting
+  without losing context. Only the orchestrator removes an entry that proved
+  wrong or obsolete, and the commit message gives the reason.
+- Resolve conflicting appends by keeping both entries in date order.
+- Write each entry so another agent can avoid the failure without the original
+  transcript. Include the exact command or tool call, the error, and the
+  approach that worked.
+
+## Local artifacts
+
+Use generated fixtures and controlled test destinations. Keep credentials,
+private keys, real traffic captures, and environment-specific artifacts outside
+Git.
