@@ -74,9 +74,9 @@ Decisions for TASK-0001 from the user and orchestrator (2026-11-25):
   close. Settings are edited as TOML text in the admin page.
 - Iteration 2 (orchestrator): `github.com/BurntSushi/toml` is approved. The
   default action is a required setting whose starter value is `direct`.
-- Iteration 2 (user, corrected): toward the corporate proxy, cuttle adds no
-  header the client did not send (no Via or other hop header) and keeps the
-  client's headers and values. Header name case and order may change, and
-  standard `net/http` stays.
+- Iteration 2 (user, final): requests toward the corporate proxy carry no
+  trace of the cuttle hops (no Via, forwarding headers, cuttle names, or home
+  client address). Other header handling follows standard `net/http` at the
+  designer's discretion.
 
 ## Closed
