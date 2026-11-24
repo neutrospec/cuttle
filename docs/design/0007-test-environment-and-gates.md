@@ -7,9 +7,9 @@
 There is no local test network, corporate proxy, or second site to test
 against. The project must therefore provide controlled origins and
 upstream proxies, including a TLS-intercepting one, and run chained cuttle
-instances against them. The corporate hop must receive request bytes
-identical to what the client sent ([0003 D5][d3-5]), so the mocks record
-raw bytes. Research found two hazards: a mock that answers `407` to an
+instances against them. A request reaching the corporate hop must carry no
+trace of the cuttle hops ([0003 D5][d3-5]), so the mocks record exactly
+what they receive. Research found two hazards: a mock that answers `407` to an
 Apple-framework client opens a credential dialog on the user's desktop, and
 browser checks can open windows ([LESSONS](../LESSONS.md),
 [research 0002 §6][r2-6]).
@@ -24,7 +24,7 @@ and the client checks at M1 and M3 close.
 
 | Layer | Contents | Tier |
 | --- | --- | --- |
-| Unit | Authority parsing, `internal/h1` rules, policy, configuration validation, paths, aggregation, rotation, password hashing; no sockets | T0 (`go test -short`) |
+| Unit | Authority parsing, `Via` editing, policy, configuration validation, paths, aggregation, rotation, password hashing; no sockets | T0 (`go test -short`) |
 | Integration | In-process cuttle instances with mocks on `127.0.0.1`, driven by Go, raw-socket, curl, and WebSocket clients | T1 |
 | Binary | Tests that build `./cmd/cuttle` and run it as a process: first run, CLI, control socket, signals | T1 |
 | Client | Headless Chrome and curl against cuttle binaries and `tools/mockenv` at M1 close; Chrome, Safari, and curl at M3 close | T2 |
@@ -82,16 +82,17 @@ real DNS by accident. T0 and T1 use no real DNS, internet, or proxy.
   listener and reports a chosen peer address, such as `10.8.0.1`, so the
   instance classifies that client as remote.
 - Chain: client → home (local client; `office` upstream with
-  `forward = "via"`) → office (sees home as `10.8.0.1`; `corp` upstream
-  with `forward = "exact"`) → intercepting or recording upstream → origin.
+  `trace = "via"`) → office (sees home as `10.8.0.1`; `corp` upstream
+  with `trace = "none"`) → intercepting or recording upstream → origin.
   Upstream addresses in the configurations are test addresses
   (`10.8.0.6:3128`) that `testenv.Net` routes to the real listeners.
-- Golden exact chain ([0003 U12][d3-ac]): the client is a raw Go client
-  that writes a fixed byte sequence, because Go's `http.Transport` would
-  reorder and canonicalize the fields. The test compares the recording
-  upstream's bytes with those bytes.
+- No-trace chain ([0003 U12][d3-ac]): the home client is a raw-socket
+  client behind a `SourceListener` with a distinctive address, so the test
+  can search every recorded header value for that address and both
+  instance names, and can send fields that Go's client would not, such as
+  its own `Via` and no `User-Agent`.
 - Loop: home routes `loop.cuttle.test` to office, and office routes it to
-  home, both with `forward = "via"`; home's second listener reports
+  home, both with `trace = "via"`; home's second listener reports
   office's address. The expected result is `502 proxy_loop_detected` after
   exactly two `CONNECT` requests ([0003 U8][d3-ac]).
 - Binary tests cannot inject `Network`. They use `block` rules, the
@@ -113,8 +114,8 @@ real DNS by accident. T0 and T1 use no real DNS, internet, or proxy.
 
 - **Go**: `http.Transport` with a fixed `Proxy`, `OnProxyConnectResponse`
   to capture `CONNECT` status codes, and the test roots in `RootCAs`.
-- **Raw socket**: writes and reads exact bytes, for framing, pipelining,
-  smuggling cases, golden comparisons, and byte counters.
+- **Raw socket**: writes and reads exact bytes, for the exact `200`,
+  pipelining, the no-trace chain, and byte counters.
 - **curl**: `/usr/bin/curl`, or the path in `CUTTLE_CURL`, run with an
   environment holding only `PATH` and a temporary `HOME`, and with
   `--proxy http://127.0.0.1:<port>`, `--cacert`, `-sS`, and `-w` for
@@ -211,10 +212,10 @@ M1 client check, against mocks only:
 | --- | --- | --- | --- |
 | Direct | `https://127.0.0.1:<origin port>/echo` | The `loopback` rule | Chrome's DOM and curl show the echo; decision `ok`, action `direct` |
 | Block | `https://blocked.cuttle.test/` | `block` rule | Chrome's DOM is empty; curl's `%{http_connect}` is `403`; decision `blocked`; no mock received anything |
-| Upstream | `https://origin.cuttle.test/echo` | Recording upstream, `forward = "via"` | Echo shown; the mock recorded the client's `CONNECT` head plus the cuttle `Via` line |
+| Upstream | `https://origin.cuttle.test/echo` | Recording upstream, `trace = "via"` | Echo shown; the mock recorded the `CONNECT` with one cuttle `Via` entry |
 | WebSocket | `http://ws.cuttle.test/ws.html` | Recording upstream | Chrome only: the mock recorded `CONNECT ws.cuttle.test:80`, and the origin recorded the page's message |
-| Chain | `https://origin.cuttle.test/chain` | Home → office (`exact`) → intercepting upstream | Echo shown through the corporate root; the intercepting mock's `CONNECT` head has no `Via` |
-| Exact comparison | `https://origin.cuttle.test/x` and `http://plain.cuttle.test/x` | Client → recording upstream directly, then client → home → office (`exact`) → recording upstream | For Chrome and for curl, the recorded heads of the two paths are byte for byte equal. Chrome runs the direct path twice with fresh profiles first to confirm its heads repeat ([0003 A6][d3-as]). |
+| Chain | `https://origin.cuttle.test/chain` | Home → office (`none`) → intercepting upstream | Echo shown through the corporate root; the intercepting mock's `CONNECT` head has no `Via` |
+| No trace | `https://origin.cuttle.test/x` and `http://plain.cuttle.test/x` | Client → recording upstream directly, then client → home → office (`none`) → recording upstream | For Chrome and for curl, the chain's requests carry no header from the [0003 D5][d3-5] list and no value containing either instance name or the home client's address, and have the same method, target, and body bytes as the direct run. Other header differences are reported for information. |
 
 M3 matrix, with Chrome, Safari after approval, and `/usr/bin/curl`, and with
 both "Web proxy (HTTP)" and "Secure web proxy (HTTPS)" set to
@@ -227,8 +228,8 @@ both "Web proxy (HTTP)" and "Secure web proxy (HTTPS)" set to
 | Upstream HTTPS | `https://example.org/` | Recording upstream passing allowlisted public names through | Loads with its public certificate; the mock recorded the `CONNECT`; no direct dial |
 | WebSocket | `http://ws.cuttle.test/ws.html` | Recording upstream | The origin recorded the page's message, and the mock recorded the `CONNECT` to port 80 or an absolute-form upgrade, whichever the client sent |
 | Block | `https://example.net/` | `block` | Chrome `ERR_TUNNEL_CONNECTION_FAILED`, Safari generic failure, curl `403`; decision `blocked`; no dial |
-| Chain | `https://origin.cuttle.test/` | Home → office (`exact`) → intercepting | Loads only when the corporate root is trusted (Chrome SPKI flag, Safari keychain after approval, curl `--cacert`) |
-| Exact comparison | As at M1 | As at M1 | Equal heads, now including Safari |
+| Chain | `https://origin.cuttle.test/` | Home → office (`none`) → intercepting | Loads only when the corporate root is trusted (Chrome SPKI flag, Safari keychain after approval, curl `--cacert`) |
+| No trace | As at M1 | As at M1 | The M1 properties, now including Safari |
 | IPv6 literal | `https://[2001:db8::1]/` | Recording upstream, status `403` | The recorded `CONNECT` spelling ([OI-0002][oi]) |
 | Admin UI | `http://127.0.0.1:3129/` | — | Login and dashboard work |
 
@@ -258,9 +259,8 @@ macOS versions, the tested commit, and evidence links.
 - **Chrome against public sites at M1.** Mocks keep the M1 check offline and
   let it compare recorded bytes; public sites wait for M3.
 
-[d3-5]: 0003-upstream-chaining-and-exposure.md#d5-what-an-exact-mode-upstream-sees
+[d3-5]: 0003-upstream-chaining-and-exposure.md#d5-no-trace-toward-the-corporate-upstream
 [d3-ac]: 0003-upstream-chaining-and-exposure.md#acceptance-criteria
-[d3-as]: 0003-upstream-chaining-and-exposure.md#assumptions
 [oi]: ../OPEN_ISSUES.md
 [r2-5]: ../research/0002-proxy-chaining-and-interception.md#5-how-macos-clients-choose-and-talk-to-the-proxy
 [r2-6]: ../research/0002-proxy-chaining-and-interception.md#6-what-clients-show-for-proxy-generated-failures

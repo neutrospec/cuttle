@@ -88,7 +88,7 @@ control   /var/folders/xy/abc123/T/cuttle/control.sock  TMPDIR
   $ cuttle explain https://wiki.corp.example/
   target  wiki.corp.example:443 (connect, local client)
   rule    office-only (#2)
-  action  upstream:office -> 10.8.0.6:3128 (forward via)
+  action  upstream:office -> 10.8.0.6:3128 (trace via)
   ```
 
 ### D4. Control socket

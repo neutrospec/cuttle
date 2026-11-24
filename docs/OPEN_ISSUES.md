@@ -18,27 +18,27 @@ Move resolved items to Closed with their resolving commit or evidence.
 - Responsible step: test, run by the user on the office Mac and at home.
 - Status: open.
 - Blocking reason: Only the user can reach the corporate proxy and the VPN,
-  and research was not allowed to contact a real proxy. The user reports
-  that the corporate proxy rejects requests that do not look exactly like
-  office Chrome's, so the design forwards heads unchanged in `exact` mode
-  and assumes the proxy relies on nothing else that cuttle cannot
-  reproduce. It also assumes the re-signed leaves meet Safari's
-  requirements, a listener bound to the WireGuard address survives a
-  tunnel restart, and the macOS firewall prompt appears on the first
-  non-loopback bind. Whether the home WireGuard server routes or
-  masquerades home LAN traffic is unknown.
+  and research was not allowed to contact a real proxy. The user requires
+  that requests reach the corporate proxy without any trace of a proxy, so
+  the design uses `trace = "none"` toward it and assumes the proxy accepts
+  such requests with standard header handling. It also assumes the
+  re-signed leaves meet Safari's requirements, a listener bound to the
+  WireGuard address survives a tunnel restart, and the macOS firewall
+  prompt appears on the first non-loopback bind. Whether the home
+  WireGuard server routes or masquerades home LAN traffic is unknown.
 - Next action: tester — give the user steps to:
   1. Start office cuttle with the placeholder `sources = ["192.0.2.1/32"]`,
      send one request from the home Mac through home cuttle, and read the
      office log's rejected-source warning: the home Mac's LAN address means
      routed, the WireGuard server's tunnel address means NAT. Set `sources`
      accordingly.
-  2. Confirm `exact` mode against the real corporate proxy: load a few
+  2. Confirm `trace = "none"` against the real corporate proxy: load a few
      office-only sites in office Chrome directly through the corporate
      proxy, then from home Chrome and curl through home → office cuttle,
      and record that each succeeds or fails the same way. Before that,
-     point office cuttle's `exact` upstream at a local recording mock once
-     and confirm that the recorded heads equal what the home client sent.
+     point office cuttle's `corp` upstream at a local recording mock once
+     and confirm that the recorded requests carry no trace of the cuttle
+     hops.
   3. Record how the corporate proxy refuses a site and its `CONNECT`
      timeout, and run
      `openssl s_client -proxy <corp>:<port> -connect <site>:443 -showcerts`
@@ -50,9 +50,10 @@ Move resolved items to Closed with their resolving commit or evidence.
 
 - Origin: research 0002 [open questions 1, 7, and 8][r2-oq];
   [0005 assumption B1][d5-a].
-- Affected milestone: M3.2. M1 accepts CFNetwork's bracketless IPv6
-  `CONNECT` and forwards it unchanged on upstream routes on CFNetwork
-  evidence alone; Safari's spelling is unconfirmed.
+- Affected milestone: M3.2. In M1, Go's server rejects CFNetwork's
+  bracketless IPv6 `CONNECT` with `400`, a documented limitation. The
+  Safari check decides whether cuttle must accept that form (research open
+  question 8).
 - Iterations used: none; recorded in TASK-0001 iteration 1.
 - Responsible step: test.
 - Status: open.
@@ -62,9 +63,9 @@ Move resolved items to Closed with their resolving commit or evidence.
   [0007 D8 M3 matrix][d7-8], recording the IPv6 `CONNECT` spelling, the
   error UI for `403`, `502`, and `504`, for `ws://` both the proxy entry
   Safari uses and whether it sends `CONNECT` to port 80 or an absolute-form
-  upgrade, whether Safari bypasses loopback, whether Safari's heads match
-  between the direct and `exact` paths, and whether the admin session
-  cookie is kept; restore the settings.
+  upgrade, whether Safari bypasses loopback, whether the no-trace
+  properties hold for Safari, and whether the admin session cookie is kept;
+  restore the settings.
 
 ### OI-0003 — Homebrew and launchd behavior unverified
 

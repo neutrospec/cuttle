@@ -10,8 +10,9 @@ and an independent review is complete.
 ## M1 — Routing proxy core with the mock environment
 
 cuttle routes `CONNECT` tunnels and plain `http://` requests to `direct`,
-an upstream proxy, or `block`; forwards request heads unchanged to the
-corporate proxy through a home → office chain; protects a remote listener;
+an upstream proxy, or `block`; reaches the corporate proxy through a
+home → office chain without leaving a trace of the cuttle hops; protects a
+remote listener;
 and reports live traffic. Acceptance uses T0 and T1 with Go, raw-socket,
 and curl clients against the mocks, plus the T2 M1 client check with
 headless Chrome and `/usr/bin/curl` against cuttle binaries and the mocks
@@ -20,15 +21,16 @@ setting, and no keychain change.
 
 | Stage | Done when |
 | --- | --- |
-| M1.1 — Direct and block | The starter configuration is created, and `cuttle check`, `explain`, and `paths` work. `CONNECT` and plain HTTP reach controlled origins on `direct` rules with certificates verified, local clients reach any port, and `block` rules and defaults answer `403` without any lookup or dial. The front end keeps raw heads and enforces its size, syntax, and framing rules, including the smuggling cases. Targets are normalized, including CFNetwork's bracketless IPv6. Each request on a reused connection is routed on its own. WebSocket works over `CONNECT` and absolute-form upgrades. Every decision is logged, and the log rotates. Criteria: 0002 C1–C13 and C16; 0004 K1, K2, and K7; 0006 P1, P3, P6, and P7. |
-| M1.2 — Upstreams and chaining | `via` upstreams receive the client's head plus one cuttle `Via` line; `exact` upstreams receive the client's bytes unchanged, proven by the golden chain test. Any upstream 2xx yields exactly `200`, failures map to `502`, `503`, or `504` with `Proxy-Status` and no direct attempt, and an unreachable upstream is held so later requests fail at once. Home → office → intercepting mock delivers a corporate-root leaf, and a home ↔ office loop stops after two `CONNECT` requests. Criteria: 0003 U1–U13. |
+| M1.1 — Direct and block | The starter configuration is created, and `cuttle check`, `explain`, and `paths` work. `CONNECT` and plain HTTP reach controlled origins on `direct` rules with certificates verified, local clients reach any port, and `block` rules and defaults answer `403` without any lookup or dial. `net/http` serves the proxy port; targets are normalized, and CFNetwork's bracketless IPv6 form is a documented limitation. Each request on a reused connection is routed on its own. WebSocket works over `CONNECT` and absolute-form upgrades. Forwarded requests gain no `Via`, `X-Forwarded-*`, `Accept-Encoding`, or default `User-Agent`. Every decision is logged, and the log rotates. Criteria: 0002 C1–C11 and C14; 0004 K1, K2, and K7; 0006 P1, P3, P6, and P7. |
+| M1.2 — Upstreams and chaining | `trace = "via"` upstreams receive one cuttle `Via` entry; `trace = "none"` upstreams receive no trace of the cuttle hops, shown by the no-trace chain test. Any upstream 2xx yields exactly `200`, failures map to `502`, `503`, or `504` with `Proxy-Status` and no direct attempt, and an unreachable upstream is held so later requests fail at once. Home → office → intercepting mock delivers a corporate-root leaf, and a home ↔ office loop stops after two `CONNECT` requests. Criteria: 0003 U1–U12. |
 | M1.3 — Exposure | Listeners accept only explicit addresses; remote sources need the allowlist, get their own ports and default, and cannot go `direct` unless allowed; direct routes refuse loopback, own, and private addresses reached by name unless a rule allows them, and always refuse link-local addresses; connection limits apply. Criteria: 0003 N1–N4 and N6. |
-| M1.4 — Live operation | Live counters show exact byte deltas during and after a controlled transfer. `cuttle status` and `cuttle reload` work over the control socket; a reload keeps established tunnels and drops removed sources; a listener that cannot bind shows as retrying; `SIGTERM` drains and exits within 8 s. Criteria: 0002 C14–C15; 0003 N5 and N7; 0004 K3–K6; 0006 P2, P4, and P5. |
+| M1.4 — Live operation | Live counters show exact byte deltas during and after a controlled transfer. `cuttle status` and `cuttle reload` work over the control socket; a reload keeps established tunnels and drops removed sources; a listener that cannot bind shows as retrying; `SIGTERM` drains and exits within 8 s. Criteria: 0002 C12–C13; 0003 N5 and N7; 0004 K3–K6; 0006 P2, P4, and P5. |
 
 M1 also needs the test environment criteria 0007 E1–E6 and the M1 client
 check: direct, block, upstream, WebSocket over `CONNECT` to port 80, the
-home → office chain, and the byte comparison of Chrome and curl heads sent
-directly to a mock and through home → office in `exact` mode.
+home → office chain, and the no-trace comparison of Chrome and curl
+requests sent directly to a mock and through home → office with
+`trace = "none"`.
 
 Changes from the suggested split, with reasons:
 
@@ -67,7 +69,7 @@ home and office setup. Acceptance uses T0, T1, and full T2.
 | --- | --- |
 | M3.1 — Homebrew tap and service | `brew install`, `brew test`, and `brew audit` pass; `brew services` start, stop, and restart behave as designed, including `SIGTERM` handling, relaunch, the `.env` override, and log locations. Criteria: 0006 P8–P12. Depends on [OI-0003][oi-3] and [OI-0004][oi-4]. |
 | M3.2 — Client verification | The [design 0007 D8][d7-8] M3 matrix is recorded in the [compatibility matrix](COMPATIBILITY.md) for Chrome, Safari, and `/usr/bin/curl`, with admin login in Chrome and Safari. Depends on [OI-0002][oi-2] and [OI-0005][oi-5]. |
-| M3.3 — Home and office deployment | A deployment guide gives the [design 0003 D13][d3-13] configuration, both WireGuard cases, the trust steps and their consequences, the timeout budget, and verification commands. The two-instance chain is verified with `tools/mockenv`. The user confirms on the real corporate proxy that requests through office cuttle in `exact` mode work as Chrome's direct requests do, or defers that with the user's consent. Depends on [OI-0001][oi-1]. |
+| M3.3 — Home and office deployment | A deployment guide gives the [design 0003 D13][d3-13] configuration, both WireGuard cases, the trust steps and their consequences, the timeout budget, and verification commands. The two-instance chain is verified with `tools/mockenv`. The user confirms on the real corporate proxy that requests through office cuttle with `trace = "none"` work as office Chrome's direct requests do, or defers that with the user's consent. Depends on [OI-0001][oi-1]. |
 
 ## Later
 
@@ -90,15 +92,15 @@ home and office setup. Acceptance uses T0, T1, and full T2.
   `Cache-Control`) for little gain, because browsers keep their own caches.
   Caching HTTPS content would require TLS interception.
 - **TLS interception** and filtering on URL paths, headers, or bodies.
-- **Imitating anything beyond the request bytes** toward the corporate
-  proxy, such as timing, TCP behavior, or a different client's identity
-  ([design 0003 D5][d3-5]).
+- **Hiding anything beyond the request contents** from the corporate
+  proxy, such as timing, connection reuse, the office Mac's address, or the
+  client's own identity ([design 0003 D5][d3-5]).
 - **Transparent proxying.** Clients configure cuttle explicitly.
 - **Authentication on the proxy listener.** cuttle never answers `407`.
 - **System-wide installation.** No `sudo brew services` and no
   LaunchDaemon.
 
-[d3-5]: design/0003-upstream-chaining-and-exposure.md#d5-what-an-exact-mode-upstream-sees
+[d3-5]: design/0003-upstream-chaining-and-exposure.md#d5-no-trace-toward-the-corporate-upstream
 [d3-13]: design/0003-upstream-chaining-and-exposure.md#d13-home-office-and-corporate-deployment
 [d7-8]: design/0007-test-environment-and-gates.md#d8-client-checks
 [oi-1]: OPEN_ISSUES.md#oi-0001--real-corporate-proxy-and-office-vpn-behavior

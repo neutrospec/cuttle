@@ -92,7 +92,7 @@ Local clients have no port policy.
 | --- | --- | --- | --- | --- |
 | `name` | string | required | reload | `^[a-z][a-z0-9-]{0,31}$`, unique |
 | `address` | `host:port` | required | reload | Plain-HTTP proxy address |
-| `forward` | string | required | reload | `via` for another cuttle instance, `exact` for the corporate proxy or any proxy that must see the client's own head ([0003 D1][d3-1]) |
+| `trace` | string | required | reload | `via` for another cuttle instance; `none` for the corporate proxy or any proxy that must see no trace of the cuttle hops ([0003 D1][d3-1]) |
 | `connect_timeout` | duration | `"10s"` | reload | 100 ms–10 min |
 | `response_timeout` | duration | `"60s"` | reload | Response head for `CONNECT` and plain HTTP, 100 ms–10 min |
 | `unreachable_hold` | duration | `"5s"` | reload | Fail fast after a connect failure, 100 ms–5 min; `"0s"` disables ([0003 D8][d3-8]) |
@@ -140,8 +140,8 @@ it, the line.
 Errors:
 
 - TOML syntax errors, unknown keys, wrong types, and values out of range.
-- A missing `name`, `proxy.default`, rule `action`, or upstream `forward`,
-  or a `forward` other than `via` or `exact`.
+- A missing `name`, `proxy.default`, rule `action`, or upstream `trace`,
+  or a `trace` other than `via` or `none`.
 - Duplicate upstream or rule names, or an action naming an unknown
   upstream. The rule names `default`, `remote-default`, `port`, and
   `remote-direct` are reserved for decisions that no rule made.
@@ -208,7 +208,7 @@ allow_loopback = true
 # [[upstream]]
 # name = "office"
 # address = "10.8.0.6:3128"
-# forward = "via"    # "exact" for a corporate proxy
+# trace = "via"      # "none" for a corporate proxy
 #
 # [[rule]]
 # name = "office-only"
@@ -232,9 +232,10 @@ Triggers: `SIGHUP`, `cuttle reload` through the control socket
    log the errors, and return them to the caller.
 2. Build a new immutable policy snapshot: compiled rules, remote settings,
    upstream table, timeouts, and name.
-3. Keep the reachability state of each upstream whose `address`,
-   `forward`, and timeouts are unchanged; changed and new upstreams start
-   `up`.
+3. Keep the transport and reachability state of each upstream whose
+   `address`, `trace`, and timeouts are unchanged. Create new ones for the
+   rest, close the idle connections of the replaced transports, and create
+   new direct transports for the snapshot.
 4. Swap the snapshot pointer atomically. Apply `log.level` and `[stats]`
    settings.
 5. Record which restart-only keys differ from the running values. `cuttle
@@ -246,10 +247,9 @@ In-flight work:
   never re-evaluated or closed by a reload, even when the new rules would
   block them; they end normally or on idle timeout.
 - The next request on a kept-alive plain-HTTP connection uses the new
-  snapshot, and its source is checked again ([0003 D10][d3-10]). An
-  outbound connection that the client connection owns is reused only if its
-  upstream's settings are unchanged; otherwise it is closed and the request
-  dials anew ([0002 D5][d2-5]).
+  snapshot, and its source is checked again ([0003 D10][d3-10]). Pooled
+  outbound connections are reused only within their snapshot's transports
+  ([0002 D5][d2-5]).
 
 ### D7. Atomic write
 
@@ -283,7 +283,7 @@ The target always exists, holding the old or the new content.
 | K3 | A tunnel opened before a reload keeps transferring after it. A request after the reload follows the new rules. | T1 `TestReloadKeepsTunnels` |
 | K4 | Reloading an invalid file keeps the previous policy, logs the errors, and returns them through `cuttle reload` with a non-zero exit status. `SIGHUP` behaves the same apart from the return path. | T1 `TestReloadInvalid`, `TestReloadSIGHUP` |
 | K5 | Changing `proxy.listen` and reloading leaves the listeners unchanged and lists `proxy.listen` under `restart_required`. | T1 `TestReloadRestartRequired` |
-| K6 | Changing an upstream's address and reloading lets an existing tunnel through the old address continue, while the next request on a kept-alive client connection goes to the new address on a new connection. | T1 `TestReloadUpstreamChange` |
+| K6 | Changing an upstream's address and reloading lets an existing tunnel through the old address continue while new requests use the new one. | T1 `TestReloadUpstreamChange` |
 | K7 | Atomic write: a concurrent reader never sees partial content; a symlinked configuration keeps its link, gets a new target, and has its temporary file and `.bak` beside the target; `.bak` holds the previous content; a stale SHA-256 leaves the file unchanged. | T0 `TestAtomicWrite` |
 
 ## Alternatives considered
@@ -302,8 +302,8 @@ The target always exists, holding the old or the new content.
 [d2-3]: 0002-proxy-core-and-routing.md#d3-authority-normalization
 [d2-4]: 0002-proxy-core-and-routing.md#d4-rules-and-evaluation-order
 [d2-5]: 0002-proxy-core-and-routing.md#d5-actions-and-forwarding
-[d3-1]: 0003-upstream-chaining-and-exposure.md#d1-upstreams-and-forwarding-modes
-[d3-2]: 0003-upstream-chaining-and-exposure.md#d2-head-edits-via-and-loop-detection
+[d3-1]: 0003-upstream-chaining-and-exposure.md#d1-upstreams-and-trace-modes
+[d3-2]: 0003-upstream-chaining-and-exposure.md#d2-via-entries-and-loop-detection
 [d3-8]: 0003-upstream-chaining-and-exposure.md#d8-unreachable-upstream-hold
 [d3-9]: 0003-upstream-chaining-and-exposure.md#d9-listeners
 [d3-10]: 0003-upstream-chaining-and-exposure.md#d10-source-classes-and-remote-policy
