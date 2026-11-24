@@ -46,15 +46,16 @@ A closed task becomes one line under Closed:
 - Milestone: M1
 - Status: design
 - Iteration: 1/3
-- Workers: researcher ×2 (research notes 0001 and 0002), then designer;
-  shared checkout `~/projects/squid`, branch `main`
-- Base: `a0011d2`
+- Workers: researcher ×2 done (notes 0001 and 0002 landed in `c901460`);
+  designer in a T3 isolated worktree
+- Base: `c901460` plus this board update
 - Candidate: none
-- Evidence: none
+- Evidence: research notes
+  [0001](research/0001-homebrew-launchd-xdg.md) and
+  [0002](research/0002-proxy-chaining-and-interception.md); docs checks only
 - Findings: none
-- Next action: researcher — write research notes 0001 (Homebrew, launchd,
-  XDG, Go storage) and 0002 (proxy chaining, intercepting upstreams, HTTP
-  forwarding, admin exposure)
+- Next action: designer — write the revised roadmap and design records on
+  the task branch and return the candidate commit for review
 
 Decisions for TASK-0001 from the user and orchestrator (2026-11-25):
 
