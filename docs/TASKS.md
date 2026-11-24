@@ -41,4 +41,29 @@ A closed task becomes one line under Closed:
 
 ## Active
 
+### TASK-0001 — Revise goals and design for chaining, admin, packaging, and mocks
+
+- Milestone: M1
+- Status: design
+- Iteration: 1/3
+- Workers: researcher ×2 (research notes 0001 and 0002), then designer;
+  shared checkout `~/projects/squid`, branch `main`
+- Base: `a0011d2`
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: researcher — write research notes 0001 (Homebrew, launchd,
+  XDG, Go storage) and 0002 (proxy chaining, intercepting upstreams, HTTP
+  forwarding, admin exposure)
+
+Decisions for TASK-0001 from the user and orchestrator (2026-11-25):
+
+- Installable name `cuttle` for the formula, binary, service, and XDG
+  directories. The repository stays `squid`.
+- Go is the implementation language. SQLite is the heaviest allowed storage.
+- The corporate upstream proxy needs no proxy authentication.
+- Plain `http://` requests are routed with the same rules as HTTPS.
+- The admin dashboard and settings pages listen on loopback only and require
+  a password.
+
 ## Closed
