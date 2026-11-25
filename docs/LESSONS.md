@@ -82,3 +82,16 @@ removes entries. Append new entries at the end, oldest first.
   takes the command's exit status, then run `test -z "$out"` on its own
   line. Verify by injecting a failing command and checking that the script
   exits non-zero.
+
+### 2026-11-25 — reviewer — injecting failures into a gate script
+
+- Task: TASK-0004, proving that `scripts/gate` fails when a command fails.
+- Attempts: 1, recorded because it exhausted the machine's process slots.
+- What failed: Wrapper scripts placed first on `PATH` called the real tool
+  through `command -v <tool>`. For `git`, that resolved to another wrapper
+  that looks up `git` on `PATH` again, so the two wrappers called each other
+  in a loop until `fork: Resource temporarily unavailable`.
+- What to do instead: Do not shadow tools on `PATH`. Inject failures by
+  editing a scratch copy of the script with `sed`, for example
+  `go list -deps ./cmd/no-such-pkg`. If a wrapper is unavoidable, point it
+  at an absolute path that you have checked is the real binary.
