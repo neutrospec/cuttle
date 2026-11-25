@@ -150,3 +150,33 @@ func TestConfigInterfaces(t *testing.T) {
 		t.Logf("parser message changed: %v", err)
 	}
 }
+
+// TestRedactMACs checks the redaction of validation messages (TASK-0009
+// N-R1): every MAC-shaped token goes, with exact MAC widths, and IPv4
+// addresses, IPv6 addresses, and ordinary names stay.
+func TestRedactMACs(t *testing.T) {
+	for in, want := range map[string]string{
+		"interface[1].00:00:5e:00:53:21":                        "interface[1].<redacted>",
+		"00:00:5E:00:53:23":                                     "<redacted>",
+		"proxy.00-00-5e-00-53-24":                               "proxy.<redacted>",
+		"rule[1].0000.5e00.5325":                                "rule[1].<redacted>",
+		"00005e005326":                                          "<redacted>",
+		`"00:00:5e:00:53:28" is not host:port`:                  `"<redacted>" is not host:port`,
+		`"00:00:5e:00:53:28:3128"`:                              `"<redacted>:3128"`,
+		"a 00:00:5e:00:53:01 b 00:00:5e:00:53:02":               "a <redacted> b <redacted>",
+		"mac-00-00-5e-00-53-2a":                                 "mac-<redacted>",
+		`"10.20.0.5" is an address, not a CIDR`:                 `"10.20.0.5" is an address, not a CIDR`,
+		"192.168.100.200:3128 and 203.0.113.20":                 "192.168.100.200:3128 and 203.0.113.20",
+		"2001:db8::1 fe80::aa:bb:cc 2001:db8:aa:bb:cc:dd:ee:ff": "2001:db8::1 fe80::aa:bb:cc 2001:db8:aa:bb:cc:dd:ee:ff",
+		`"cuttle-a1b2c3" does not match`:                        `"cuttle-a1b2c3" does not match`,
+		"updates.example rule[2].hosts[1]":                      "updates.example rule[2].hosts[1]",
+		"50ms is out of range 100ms-10m0s":                      "50ms is out of range 100ms-10m0s",
+		"00:00:5e:00:53 aa:bb:cc:dd:ee:ff:00":                   "00:00:5e:00:53 <redacted>:00",
+		"x00:00:5e:00:53:21 00:00:5e:00:53:21x":                 "x00:00:5e:00:53:21 00:00:5e:00:53:21x",
+		"deadbeef00005e005326 0000.5e00.53210":                  "deadbeef00005e005326 0000.5e00.53210",
+	} {
+		if got := redactMACs(in); got != want {
+			t.Errorf("redactMACs(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

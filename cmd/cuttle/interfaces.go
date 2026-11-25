@@ -41,25 +41,43 @@ func cmdInterfaces(args []string, lookup env, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	defs := interfaceDefs(*cfgFlag, lookup, stderr)
-	links, err := interfaceSource.Read()
+	ctx := context.Background()
+	if *watch {
+		var stop context.CancelFunc
+		ctx, stop = signal.NotifyContext(ctx, os.Interrupt)
+		defer stop()
+	}
+	return listInterfaces(ctx, interfaceSource, iface.RealTimers{}, time.Now, defs, *all, *asJSON, *watch, stdout, stderr)
+}
+
+// listInterfaces prints the table and, with watch, a line per change until
+// ctx ends. With watch it opens the notice sockets before the first read,
+// so that no change falls between them (design 0008 D5).
+func listInterfaces(ctx context.Context, src iface.Source, timers iface.Timers, now func() time.Time, defs []iface.Def,
+	all, asJSON, watch bool, stdout, stderr io.Writer) int {
+	var notices <-chan struct{}
+	if watch {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithCancel(ctx)
+		defer cancel()
+		notices = src.Watch(ctx)
+	}
+	links, err := src.Read()
 	if err != nil {
 		fmt.Fprintln(stderr, "cuttle: cannot read the interface table:", err)
 		return exitFailure
 	}
-	rows := interfaceRows(links, defs, *all)
-	if *asJSON {
+	rows := interfaceRows(links, defs, all)
+	if asJSON {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		enc.Encode(rows)
 		return exitOK
 	}
 	printInterfaces(stdout, rows)
-	if !*watch {
-		return exitOK
+	if watch {
+		watchInterfaces(ctx, notices, src, timers, now, links, all, stdout, stderr)
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-	watchInterfaces(ctx, interfaceSource, iface.RealTimers{}, time.Now, links, *all, stdout, stderr)
 	return exitOK
 }
 
@@ -176,18 +194,21 @@ func printInterfaces(w io.Writer, rows []interfaceRow) {
 }
 
 // watchInterfaces re-reads the table as the monitor of design 0008 D5
-// does, Debounce after the first notice and every SafetyInterval, and
-// prints one line per change: a timestamp, the device, and each changed
-// field. It does not decode notices. It returns when ctx ends.
-func watchInterfaces(ctx context.Context, src iface.Source, timers iface.Timers, now func() time.Time, prev []iface.Link,
-	all bool, stdout, stderr io.Writer) {
-	var mu sync.Mutex
+// does, Debounce after the first notice since the last re-read and every
+// SafetyInterval, and prints one line per change: a timestamp, the device,
+// and each changed field. It does not decode notices. As in the monitor,
+// the debounce ends before its read starts, so a notice that arrives
+// during a read schedules the next one. It returns when the notice channel
+// closes after ctx ends.
+func watchInterfaces(ctx context.Context, notices <-chan struct{}, src iface.Source, timers iface.Timers, now func() time.Time,
+	prev []iface.Link, all bool, stdout, stderr io.Writer) {
+	var mu sync.Mutex     // guards pending
+	var readMu sync.Mutex // serializes re-reads and guards prev
 	pending := false
 	reread := func() {
+		readMu.Lock()
+		defer readMu.Unlock()
 		links, err := src.Read()
-		mu.Lock()
-		defer mu.Unlock()
-		pending = false
 		if err != nil {
 			fmt.Fprintln(stderr, "cuttle: cannot read the interface table:", err)
 			return
@@ -208,11 +229,14 @@ func watchInterfaces(ctx context.Context, src iface.Source, timers iface.Timers,
 	}
 	stopSafety := timers.AfterFunc(iface.SafetyInterval, safety)
 	defer stopSafety()
-	for range src.Watch(ctx) {
+	for range notices {
 		mu.Lock()
 		if !pending {
 			pending = true
 			timers.AfterFunc(iface.Debounce, func() {
+				mu.Lock()
+				pending = false
+				mu.Unlock()
 				if ctx.Err() == nil {
 					reread()
 				}

@@ -518,6 +518,10 @@ func TestDefaultRoutes(t *testing.T) {
 		rtMessage(13, up|gw, 4, sin("0.0.0.0"), sin("198.18.0.1"), []byte{}),
 		rtMessage(14, up|gw, 5, sin6("2001:db8::"), link, []byte{0}),
 		rtMessage(15, up|gw, 5, sin("0.0.0.0"), sin("198.18.0.1"), nil),
+		// A zero destination with a mask that is not /0, here 0.0.0.0/1,
+		// is no default route.
+		rtMessage(17, up|gw, 5, sin("0.0.0.0"), sin("198.18.0.1"), []byte{8, 2, 0, 0, 128, 0, 0, 0}),
+		rtMessage(18, up|gw, 5, sin6("::"), link, []byte{9, 30, 0, 0, 0, 0, 0, 0, 128}),
 	} {
 		rib = append(rib, m...)
 	}
@@ -529,4 +533,98 @@ func TestDefaultRoutes(t *testing.T) {
 	if fmt.Sprint(d4) != fmt.Sprint(want4) || fmt.Sprint(d6) != fmt.Sprint(want6) {
 		t.Errorf("defaults %v %v, want %v %v", d4, d6, want4, want6)
 	}
+}
+
+// testClock is an injected clock for demotion.
+type testClock struct {
+	mu sync.Mutex
+	t  time.Time
+}
+
+func (c *testClock) now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.t
+}
+
+func (c *testClock) advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.t = c.t.Add(d)
+}
+
+// demotionMonitor returns a monitor over rows3 with a captured log and an
+// injected clock.
+func demotionMonitor(t *testing.T, demotion time.Duration) (*iface.Monitor, *testClock, *stats.Live, func() string) {
+	t.Helper()
+	clock := &testClock{t: time.Date(2026, 11, 25, 0, 0, 0, 0, time.UTC)}
+	var mu sync.Mutex
+	var logs bytes.Buffer
+	live := stats.NewLive()
+	m := iface.NewMonitor(iface.Options{
+		Source: testenv.NewInterfaces(rows3()...), Timers: &testenv.Timers{}, Live: live, Clock: clock.now,
+		Logger: logx.NewLogger(&syncWriter{w: &logs, mu: &mu}, slog.LevelDebug),
+	})
+	if err := m.Configure(defs3(), demotion); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(m.Stop)
+	return m, clock, live, func() string { mu.Lock(); defer mu.Unlock(); return logs.String() }
+}
+
+// demote reports a dial in which name timed out and wifi connected.
+func demote(m *iface.Monitor, name string) {
+	m.Report([]iface.Tried{{Interface: name, Result: iface.ResultTimeout}, {Interface: "wifi", Result: iface.ResultConnected}}, "wifi")
+}
+
+// TestDemotionRules checks that interface_demotion = "0s" disables
+// demotion, that a changed definition starts without the demotion of the
+// old one while an unchanged one keeps it (design 0008 D9, D14; TASK-0009
+// N-R4 MC, MD), and that a demotion that expired unobserved ends with its
+// restored line before the next one starts (N-R7).
+func TestDemotionRules(t *testing.T) {
+	t.Run("0s disables demotion", func(t *testing.T) {
+		m, _, live, logs := demotionMonitor(t, 0)
+		demote(m, "eth-a")
+		if m.PlanState("eth-a").Demoted || strings.Contains(logs(), "interface demoted") ||
+			live.Get(stats.InterfaceState, "interface", "eth-a", "state", iface.StateDemoted) != 0 {
+			t.Errorf("interface_demotion = 0s demoted eth-a:\n%s", logs())
+		}
+	})
+
+	t.Run("a changed definition starts afresh", func(t *testing.T) {
+		m, _, _, logs := demotionMonitor(t, 30*time.Second)
+		demote(m, "eth-a")
+		demote(m, "eth-b")
+		changed := defs3()
+		changed[0] = iface.Def{Name: "eth-a", Device: "en7"} // the same row, found by device now
+		if err := m.Configure(changed, 30*time.Second); err != nil {
+			t.Fatal(err)
+		}
+		if st := m.PlanState("eth-a"); !st.Online || st.Demoted {
+			t.Errorf("changed eth-a kept its demotion: %+v", st)
+		}
+		if !m.PlanState("eth-b").Demoted {
+			t.Errorf("unchanged eth-b lost its demotion")
+		}
+		if n := strings.Count(logs(), `msg="interface state" interface=eth-a`); n != 2 {
+			t.Errorf("%d state lines for eth-a, want 2 (start and the changed definition)", n)
+		}
+	})
+
+	t.Run("an expired demotion ends before the next", func(t *testing.T) {
+		m, clock, _, logs := demotionMonitor(t, time.Second)
+		demote(m, "eth-a")
+		clock.advance(2 * time.Second)
+		demote(m, "eth-a") // no plan or status read looked at eth-a in between
+		l := logs()
+		restored := strings.Index(l, `msg="interface restored" interface=eth-a cause=expired`)
+		second := strings.LastIndex(l, `msg="interface demoted" interface=eth-a`)
+		if strings.Count(l, `msg="interface demoted" interface=eth-a`) != 2 || restored < 0 || restored > second {
+			t.Errorf("want demoted, restored with cause=expired, demoted:\n%s", l)
+		}
+		if !m.PlanState("eth-a").Demoted {
+			t.Errorf("eth-a not demoted again")
+		}
+	})
 }

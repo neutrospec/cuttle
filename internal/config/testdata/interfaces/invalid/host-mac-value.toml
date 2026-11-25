@@ -1,0 +1,8 @@
+# want: 7 rule[1].hosts[1]: "<redacted>"
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[rule]]
+name = "x"
+hosts = ["00:00:5e:00:53:27"]
+action = "direct"

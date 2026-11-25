@@ -383,6 +383,9 @@ func (s *serveState) Status() control.Status {
 	cfg, loadedAt, rr, lastErr := s.cfg, s.loadedAt, s.restartRequired, s.lastReloadError
 	s.mu.Unlock()
 	now := time.Now()
+	// Reading the interface states first ends any expired demotion, so the
+	// counters snapshot below shows the same state in interface_state.
+	interfaces := s.p.InterfaceStatus()
 	st := control.Status{
 		Version:    version,
 		Name:       cfg.Name,
@@ -408,7 +411,7 @@ func (s *serveState) Status() control.Status {
 		st.Upstreams = append(st.Upstreams, control.Upstream{Name: u.Name, Address: u.Address, State: u.State, Since: u.Since.UTC(),
 			DownS: u.DownFor.Round(time.Millisecond).Seconds(), FailedFast: u.FailedFast, LastError: u.LastError})
 	}
-	for _, i := range s.p.InterfaceStatus() {
+	for _, i := range interfaces {
 		ci := control.Interface{Name: i.Name, Device: i.Device, State: i.State, Reason: i.Reason,
 			Families: i.Families.List(), Primary: i.Primary.List(), Since: i.Since.UTC()}
 		if !i.DemotedUntil.IsZero() {

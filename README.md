@@ -113,7 +113,8 @@ repository root with `scripts/gate`, which runs exactly the commands of
 ```sh
 scripts/gate t0   # gofmt, go mod tidy -diff, vet, build, unit tests,
                   # no tracked keys, cmd/cuttle free of test-only packages
-                  # and golang.org/x/net, and a build without cgo
+                  # and golang.org/x/net, no cgo files in its packages,
+                  # and a build without cgo
 scripts/gate t1   # every test with -race, including integration and
                   # binary tests; needs /usr/bin/curl (or CUTTLE_CURL)
 ```

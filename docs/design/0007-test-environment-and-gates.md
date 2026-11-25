@@ -186,6 +186,8 @@ go list -deps ./cmd/cuttle >"$deps"
 rc=0
 grep -E 'internal/testenv|^golang\.org/x/net/' "$deps" || rc=$?
 test "$rc" -eq 1
+out=$(go list -deps -f '{{if .CgoFiles}}{{.ImportPath}}{{end}}' ./cmd/cuttle)
+test -z "$out"
 CGO_ENABLED=0 go build -o /dev/null ./cmd/cuttle
 ```
 
@@ -197,8 +199,12 @@ status 1, no match; status 0 lists a forbidden package, and status 2 means
 `grep` itself failed. The pattern forbids every package of the
 `golang.org/x/net` module, while the standard library's own
 `vendor/golang.org/x/net/...` packages, which every `net/http` program
-links, do not start with `golang.org` and pass. The last command shows
-that cuttle still builds without cgo ([0008 D16][d8-16]).
+links, do not start with `golang.org` and pass. The last three commands
+show that cuttle uses no cgo ([0008 D16][d8-16]): the `go list` command
+runs in the default environment, where cgo is enabled, and lists every
+linked package that has cgo files, because `CGO_ENABLED=0 go build`
+silently leaves out a file that imports `C` and fails only when another
+file refers to it; the build then shows that cuttle builds without cgo.
 
 T1:
 
@@ -302,7 +308,7 @@ macOS versions, the tested commit, and evidence links.
 | ID | Criterion | Check |
 | --- | --- | --- |
 | E1 | Mock self-tests pass: the inspecting egress mock's leaves have a SAN, the serverAuth EKU, and at most 825 days of validity; the recording upstream records requests byte for byte per connection; `testenv.Net` records lookups and dials. | T1 `go test ./internal/testenv/...` |
-| E2 | `cmd/cuttle` links neither `internal/testenv` nor any package of the `golang.org/x/net` module, `x/net/websocket` included, and builds with `CGO_ENABLED=0`. | T0 commands above |
+| E2 | `cmd/cuttle` links neither `internal/testenv` nor any package of the `golang.org/x/net` module, `x/net/websocket` included, none of the packages it links has cgo files in the default environment, and it builds with `CGO_ENABLED=0`. | T0 commands above |
 | E3 | Git tracks no key or certificate file. | T0 command above |
 | E4 | `tools/mockenv` rejects any `407` mode. | T1 `TestMockenvRefuses407` |
 | E5 | The full T1 run completes within its 10-minute timeout. | T1 command above |

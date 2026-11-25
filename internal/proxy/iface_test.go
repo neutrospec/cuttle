@@ -612,6 +612,35 @@ interfaces = ["eth-b"]
 		}
 	})
 
+	t.Run("order is part of the list", func(t *testing.T) {
+		// ["eth-a", "eth-b"] and ["eth-b", "eth-a"] are different lists
+		// with their own pools (TASK-0009 N-R4 ME).
+		rev := ifaceConfig(`interfaces = ["eth-a", "eth-b"]
+`, `
+[[rule]]
+name = "rev"
+hosts = ["rev.cuttle.test"]
+action = "direct"
+interfaces = ["eth-b", "eth-a"]
+`)
+		e, _, _ := newIfaceEnv(t, rev, envOptions{})
+		c, _ := e.goClient()
+		pooledGet(t, c, "http://plain.cuttle.test/echo")
+		wantDials(t, e.net, "eth-a 203.0.113.10:80")
+		s := e.p.snap.Load()
+		if len(s.direct) != 3 {
+			t.Errorf("%d direct transport sets, want 3: none, eth-a,eth-b, and eth-b,eth-a", len(s.direct))
+		}
+		swapped := *s
+		settings := s.cfg.PolicySettings()
+		settings.Rules = append([]policy.Rule{{Name: "rev-plain", Hosts: []string{"plain.cuttle.test"},
+			Route: policy.Route{Action: policy.ActionDirect}, Interfaces: []string{"eth-b", "eth-a"}}}, settings.Rules...)
+		swapped.policy = policy.New(settings)
+		e.p.snap.Store(&swapped)
+		pooledGet(t, c, "http://plain.cuttle.test/echo")
+		wantDials(t, e.net, "eth-a 203.0.113.10:80", "eth-b 203.0.113.10:80")
+	})
+
 	t.Run("online closes idle", func(t *testing.T) {
 		e, src, timers := newIfaceEnv(t, cfg, envOptions{interfaces: testenv.NewInterfaces(rowsWith(map[string]func(*iface.Link){"en7": linkDown})...)})
 		c, _ := e.goClient()

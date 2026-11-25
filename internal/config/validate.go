@@ -36,7 +36,52 @@ var (
 	macShaped = regexp.MustCompile(`(?i)([0-9a-f]{1,4}[:.-]){2,}[0-9a-f]{1,4}|[0-9a-f]{12}`)
 	// quoted finds the double-quoted fragments of a parser message.
 	quoted = regexp.MustCompile(`"(?:[^"\\]|\\.)*"`)
+	// macTokens find a hardware address that a validation message would
+	// echo in a key path or a value: six colon- or dash-separated pairs,
+	// three dot-separated groups of four, or twelve hex digits. Each group
+	// has exactly its MAC width, and the address may not continue a run of
+	// letters or digits, so IPv4 addresses and ordinary names never match.
+	// A colon form may not follow a colon either, so an IPv6 address whose
+	// later groups happen to be pairs keeps its text.
+	macTokens = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)(^|[^0-9a-z:])((?:[0-9a-f]{2}:){5}[0-9a-f]{2})($|[^0-9a-z])`),
+		regexp.MustCompile(`(?i)(^|[^0-9a-z])((?:[0-9a-f]{2}-){5}[0-9a-f]{2})($|[^0-9a-z])`),
+		regexp.MustCompile(`(?i)(^|[^0-9a-z])([0-9a-f]{4}\.[0-9a-f]{4}\.[0-9a-f]{4})($|[^0-9a-z])`),
+		regexp.MustCompile(`(?i)(^|[^0-9a-z])([0-9a-f]{12})($|[^0-9a-z])`),
+	}
 )
+
+// redacted replaces a MAC-shaped key segment or value in a message.
+const redacted = "<redacted>"
+
+// redactMACs replaces every MAC-shaped token of s with redacted. A match
+// takes the characters around it as its boundaries, so the replacement
+// repeats until nothing changes to reach tokens that share a boundary.
+func redactMACs(s string) string {
+	for _, re := range macTokens {
+		for {
+			next := re.ReplaceAllString(s, "${1}"+redacted+"${3}")
+			if next == s {
+				break
+			}
+			s = next
+		}
+	}
+	return s
+}
+
+// redactReport removes MAC-shaped key segments and values from every
+// issue, keeping its line, so that neither cuttle check, the log, nor
+// last_reload_error carries a MAC, even from a quoted key that the schema
+// does not know (design 0008 D6).
+func redactReport(r *Report) {
+	for _, list := range [][]Issue{r.Errors, r.Warnings} {
+		for i := range list {
+			list[i].Key = redactMACs(list[i].Key)
+			list[i].Msg = redactMACs(list[i].Msg)
+		}
+	}
+}
 
 // interfaceSyntaxHint replaces a TOML syntax message that could quote part
 // of a hardware address (design 0008 D6, 0004 D4).
@@ -61,6 +106,7 @@ const (
 // messages. The Config is nil when the report has errors.
 func Parse(data []byte, file string) (*Config, *Report) {
 	r := &Report{}
+	defer redactReport(r)
 	var raw map[string]any
 	if _, err := toml.Decode(string(data), &raw); err != nil {
 		var pe toml.ParseError
@@ -85,7 +131,7 @@ func Parse(data []byte, file string) (*Config, *Report) {
 // in its message, so a message whose last key is an interface key, or
 // whose line holds anything MAC-shaped, becomes a fixed hint, and every
 // other message loses its double-quoted fragments. A MAC-shaped last key,
-// possible with a quoted key, is left out too.
+// possible with a quoted key, is redacted with the rest of the report.
 func syntaxIssue(pe toml.ParseError, data []byte, file string) Issue {
 	key := pe.LastKey
 	line := ""
@@ -95,9 +141,6 @@ func syntaxIssue(pe toml.ParseError, data []byte, file string) Issue {
 	msg := "TOML syntax: " + quoted.ReplaceAllString(pe.Message, `"..."`)
 	if interfaceKey(key) || macShaped.MatchString(line) || macShaped.MatchString(key) {
 		msg = interfaceSyntaxHint
-	}
-	if macShaped.MatchString(key) {
-		key = ""
 	}
 	return Issue{File: file, Line: pe.Position.Line, Key: key, Msg: msg}
 }

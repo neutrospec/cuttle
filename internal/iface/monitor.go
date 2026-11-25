@@ -538,6 +538,11 @@ func (m *Monitor) demoteLocked(e *entry, now time.Time, reason string) {
 	if m.demotion <= 0 || !e.m.Online {
 		return
 	}
+	// A demotion that expired unobserved ends first, so its restored line
+	// comes before the next demoted line.
+	if !e.until.IsZero() && !now.Before(e.until) {
+		m.restoreLocked(e, now, CauseExpired)
+	}
 	already := !e.until.IsZero() && now.Before(e.until)
 	e.until = now.Add(m.demotion)
 	if already {

@@ -1,0 +1,14 @@
+# warn: 13 rule[2].domains[2]: "<redacted>.example" repeats rule "a"
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[rule]]
+name = "a"
+domains = ["00-00-5e-00-53-29.example"]
+action = "direct"
+
+[[rule]]
+name = "b"
+domains = ["x.example",
+  "00-00-5e-00-53-29.example"]
+action = "block"

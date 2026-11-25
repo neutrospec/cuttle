@@ -268,22 +268,31 @@ func TestDialPlan(t *testing.T) {
 		}
 	})
 
-	t.Run("upstream private address in group 0", func(t *testing.T) {
+	t.Run("upstream non-public addresses in group 0", func(t *testing.T) {
+		// D11: an upstream's private, loopback, and own addresses are
+		// dialed unbound; only its public addresses are bound. Loopback and
+		// own addresses also name no interface (D15).
 		m := testMonitor(t, nil)
 		n := newBnet()
-		for _, addr := range []string{"10.8.0.6", "203.0.113.20"} {
-			a, _ := authority.ParseConnect(addr + ":3128")
+		self := func() []netip.Addr { return []netip.Addr{netip.MustParseAddr("192.0.2.50")} }
+		for _, c := range []struct {
+			addr  string
+			local bool
+		}{{"10.8.0.6", false}, {"127.0.0.1", true}, {"192.0.2.50", true}, {"203.0.113.20", false}} {
+			a, _ := authority.ParseConnect(c.addr + ":3128")
 			dl := &UpstreamDialer{Network: n, Timeout: time.Second, Interfaces: []string{"eth-a", "wifi"}, Monitor: m,
-				AttemptTimeout: func() time.Duration { return 100 * time.Millisecond }}
-			c, info, err := dl.Dial(context.Background(), a)
+				SelfAddrs: self, AttemptTimeout: func() time.Duration { return 100 * time.Millisecond }}
+			conn, info, err := dl.Dial(context.Background(), a)
 			if err != nil {
 				t.Fatal(err)
 			}
-			c.Close()
-			_ = info
+			conn.Close()
+			if info.Local != c.local {
+				t.Errorf("%s: Local %v, want %v", c.addr, info.Local, c.local)
+			}
 		}
-		if got := strings.Join(n.log(), ","); got != " 10.8.0.6,eth-a 203.0.113.20" {
-			t.Errorf("dials %q", got)
+		if got := strings.Join(n.log(), ","); got != " 10.8.0.6, 127.0.0.1, 192.0.2.50,eth-a 203.0.113.20" {
+			t.Errorf("dials %q, want the private, loopback, and own addresses unbound", got)
 		}
 	})
 }
@@ -379,6 +388,51 @@ func TestFailover(t *testing.T) {
 			if got := strings.Join(n.log(), ","); got != " 10.20.0.5,eth-a 203.0.113.10" || info.Skipped != "" {
 				t.Errorf("%v: dials %q skipped %q", e, got, info.Skipped)
 			}
+		}
+	})
+
+	t.Run("one pending and one refused attempt end the dial", func(t *testing.T) {
+		// D8: the group did not connect and one attempt ended with an
+		// error that is not a failover error, so the dial ends with it,
+		// even though the other attempt was still pending at the deadline.
+		n := newBnet()
+		n.names["two.example"] = []netip.Addr{netip.MustParseAddr("203.0.113.10"), netip.MustParseAddr("203.0.113.11")}
+		n.set("eth-a", "203.0.113.10", "hang")
+		n.set("eth-a", "203.0.113.11", syscall.ECONNREFUSED)
+		_, err := dial(n, testMonitor(t, nil), "two.example:443", all...)
+		var de *DialError
+		if !errors.As(err, &de) || de.Type != ErrRefused || !errors.Is(err, syscall.ECONNREFUSED) || de.Skipped != "eth-a:refused" {
+			t.Fatalf("a refused attempt beside a pending one did not end the dial: %v (skipped %q)", err, skippedOf(de))
+		}
+		if got := strings.Join(n.log(), ","); got != "eth-a 203.0.113.10,eth-a 203.0.113.11" {
+			t.Errorf("dials %q, want no eth-b or wifi dial", got)
+		}
+	})
+
+	t.Run("group 0 gets the attempt timeout", func(t *testing.T) {
+		// D7 timing: a silent private address holds the public addresses
+		// back for the attempt timeout, not the whole budget.
+		n := newBnet()
+		n.names["lan.example"] = []netip.Addr{netip.MustParseAddr("10.20.0.5"), netip.MustParseAddr("203.0.113.10")}
+		n.set("", "10.20.0.5", "hang")
+		dl := &Dialer{Network: n, Timeout: 2 * time.Second, Stagger: 50 * time.Millisecond, AttemptTimeout: 300 * time.Millisecond,
+			Interfaces: testMonitor(t, nil)}
+		d := decision(t, "lan.example:443", all...)
+		d.AllowPrivate = true
+		start := time.Now()
+		c, info, err := dl.Dial(context.Background(), d)
+		if err != nil {
+			t.Fatalf("a silent group 0 held the public addresses for the whole budget: %v after %v", err, time.Since(start))
+		}
+		c.Close()
+		n.mu.Lock()
+		times := slices.Clone(n.times)
+		n.mu.Unlock()
+		if got := strings.Join(n.log(), ","); got != " 10.20.0.5,eth-a 203.0.113.10" || info.Interface != "eth-a" || len(times) != 2 {
+			t.Fatalf("dials %q info %+v", got, info)
+		}
+		if gap := times[1].Sub(times[0]); gap < 200*time.Millisecond || gap > 400*time.Millisecond {
+			t.Errorf("eth-a started %v after group 0, want the 300 ms attempt timeout", gap)
 		}
 	})
 
@@ -511,4 +565,11 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func skippedOf(de *DialError) string {
+	if de == nil {
+		return ""
+	}
+	return de.Skipped
 }

@@ -1,0 +1,5 @@
+# want: 2 <redacted>: unknown key
+"00005e005326" = true
+name = "cuttle-test"
+[proxy]
+default = "direct"

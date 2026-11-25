@@ -114,9 +114,10 @@ func TestInterfacesFormat(t *testing.T) {
 	var out, errOut lockedBuffer
 	done := make(chan struct{})
 	now := time.Date(2026, 11, 25, 1, 2, 3, 456e6, time.UTC)
+	notices := src.Watch(ctx)
 	first, _ := src.Read()
 	go func() {
-		watchInterfaces(ctx, src, timers, func() time.Time { return now }, first, false, &out, &errOut)
+		watchInterfaces(ctx, notices, src, timers, func() time.Time { return now }, first, false, &out, &errOut)
 		close(done)
 	}()
 	for src.ActiveWatches() == 0 {
@@ -659,5 +660,218 @@ func TestStopWaitsForReload(t *testing.T) {
 	log, _ = os.ReadFile(s.paths.Log.Path)
 	if !strings.Contains(string(log), "msg=stopped") {
 		t.Errorf("no stopped line:\n%s", log)
+	}
+}
+
+// blockingSource holds one Read open until the test releases it. The held
+// read returns the rows as they were when it started.
+type blockingSource struct {
+	*testenv.Interfaces
+	mu      sync.Mutex
+	armed   bool
+	enter   chan struct{}
+	release chan struct{}
+	calls   []string
+}
+
+func (b *blockingSource) Read() ([]iface.Link, error) {
+	links, err := b.Interfaces.Read()
+	b.mu.Lock()
+	b.calls = append(b.calls, "read")
+	armed := b.armed
+	b.armed = false
+	b.mu.Unlock()
+	if armed {
+		close(b.enter)
+		<-b.release
+	}
+	return links, err
+}
+
+func (b *blockingSource) Watch(ctx context.Context) <-chan struct{} {
+	b.mu.Lock()
+	b.calls = append(b.calls, "watch")
+	b.mu.Unlock()
+	return b.Interfaces.Watch(ctx)
+}
+
+// TestInterfacesWatchNoticeDuringRead checks TASK-0009 N-R2: a notice that
+// arrives while a re-read runs schedules another re-read 200 ms later, so
+// the change it reports does not wait for the 30 s safety re-read. I20
+// step 5 measures notice latency with this command.
+func TestInterfacesWatchNoticeDuringRead(t *testing.T) {
+	src := &blockingSource{Interfaces: testenv.NewInterfaces(formatTable()...), enter: make(chan struct{}), release: make(chan struct{})}
+	timers := &testenv.Timers{}
+	ctx, cancel := context.WithCancel(context.Background())
+	var out, errOut lockedBuffer
+	now := time.Date(2026, 11, 25, 1, 2, 3, 456e6, time.UTC)
+	notices := src.Watch(ctx)
+	first, _ := src.Read()
+	done := make(chan struct{})
+	go func() {
+		watchInterfaces(ctx, notices, src, timers, func() time.Time { return now }, first, false, &out, &errOut)
+		close(done)
+	}()
+
+	// A notice starts a re-read, which the source holds open.
+	src.mu.Lock()
+	src.armed = true
+	src.mu.Unlock()
+	src.Notice()
+	if !timers.WaitPending(2, 2*time.Second) {
+		t.Fatalf("no debounce after the first notice: %d timers", timers.Pending())
+	}
+	advanced := make(chan struct{})
+	go func() {
+		timers.Advance(iface.Debounce)
+		close(advanced)
+	}()
+	select {
+	case <-src.enter:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the re-read did not start")
+	}
+	// The link drops during the read, and its notice arrives.
+	src.Update("en7", func(l *iface.Link) { l.Media = iface.MediaInactive })
+	src.Notice()
+	timers.WaitPending(2, 500*time.Millisecond)
+	close(src.release)
+	<-advanced
+
+	// 200 ms later the change is printed, long before the safety re-read.
+	timers.Advance(iface.Debounce)
+	cancel()
+	<-done
+	want := "2026-11-25T01:02:03.456Z en7 media active->inactive\n"
+	if out.String() != want {
+		t.Errorf("a notice during a read was dropped: output %q, want %q (stderr %q)", out.String(), want, errOut.String())
+	}
+}
+
+// TestInterfacesWatchOrder checks that --watch opens the notice sockets
+// before the first read, and that a failed read ends the Watch call
+// (TASK-0009 N-R2).
+func TestInterfacesWatchOrder(t *testing.T) {
+	src := &blockingSource{Interfaces: testenv.NewInterfaces(formatTable()...)}
+	ctx, cancel := context.WithCancel(context.Background())
+	var out, errOut lockedBuffer
+	done := make(chan int)
+	go func() {
+		done <- listInterfaces(ctx, src, &testenv.Timers{}, time.Now, nil, false, false, true, &out, &errOut)
+	}()
+	for src.ActiveWatches() == 0 {
+		time.Sleep(time.Millisecond)
+	}
+	cancel()
+	if code := <-done; code != exitOK {
+		t.Errorf("exit %d", code)
+	}
+	src.mu.Lock()
+	order := strings.Join(src.calls, ",")
+	src.mu.Unlock()
+	if order != "watch,read" {
+		t.Errorf("calls %q, want watch,read", order)
+	}
+	if !strings.HasPrefix(out.String(), "index ") {
+		t.Errorf("no table before the change lines")
+	}
+
+	src.FailRead(errors.New("injected read failure"))
+	if code := listInterfaces(context.Background(), src, &testenv.Timers{}, time.Now, nil, false, false, true, &out, &errOut); code != exitFailure {
+		t.Errorf("unreadable table: exit %d", code)
+	}
+	if !src.WaitWatchEnded(time.Second) {
+		t.Errorf("the Watch call outlived a failed read")
+	}
+}
+
+// TestStatusInterfaceConsistency checks TASK-0009 N-R6: when a demotion
+// has expired unobserved, one status reply shows the interface online in
+// both interfaces and the interface_state gauge.
+func TestStatusInterfaceConsistency(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test; skipped with -short")
+	}
+	lookup, vars := tempEnv(t)
+	path := filepath.Join(vars["XDG_CONFIG_HOME"], "cuttle", "config.toml")
+	os.MkdirAll(filepath.Dir(path), 0o700)
+	os.WriteFile(path, []byte(`name = "cuttle-test"
+[proxy]
+listen = ["127.0.0.1:18080"]
+default = "direct"
+interfaces = ["eth-a", "eth-b"]
+interface_attempt_timeout = "100ms"
+interface_demotion = "1s"
+[admin]
+listen = ""
+
+[[interface]]
+name = "eth-a"
+mac = "00:00:5e:00:53:0a"
+
+[[interface]]
+name = "eth-b"
+mac = "00:00:5e:00:53:0b"
+`), 0o600)
+	origin := testenv.NewOrigin(t, testenv.OriginOptions{})
+	n := testenv.NewNet()
+	n.Route("203.0.113.10:80", origin.Addr)
+	n.OnInterface("eth-a", "", testenv.Blackhole)
+	s, err := prepareServe(lookup, "", io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.close()
+	s.network, s.selfAddrs, s.timers = n, testenv.SelfAddrs, &testenv.Timers{}
+	s.interfaces = testenv.NewInterfaces(testenv.Row(7, "en7", 0x0a, "198.18.0.7"), testenv.Row(8, "en8", 0x0b, "198.18.0.8"))
+	var bound atomicAddr
+	listen := func(network, _ string) (net.Listener, error) {
+		ln, err := net.Listen(network, "127.0.0.1:0")
+		if err == nil {
+			bound.set(ln.Addr().String())
+		}
+		return ln, err
+	}
+	signals := make(chan os.Signal, 1)
+	done := make(chan int, 1)
+	go func() { done <- s.run(io.Discard, listen, signals) }()
+	defer func() {
+		signals <- syscall.SIGTERM
+		<-done
+	}()
+	waitControl(t, lookup)
+
+	// eth-a times out, eth-b carries the tunnel, and eth-a is demoted.
+	c, err := net.DialTimeout("tcp", bound.get(), 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.SetDeadline(time.Now().Add(10 * time.Second))
+	io.WriteString(c, "CONNECT 203.0.113.10:80 HTTP/1.1\r\nHost: 203.0.113.10:80\r\n\r\n")
+	if res, err := http.ReadResponse(bufio.NewReader(c), nil); err != nil || res.StatusCode != 200 {
+		t.Fatalf("CONNECT: %v %v", res, err)
+	}
+	c.Close()
+	status := func() (string, map[string]int64) {
+		t.Helper()
+		code, out, errOut := runCLI(lookup, "status", "--json")
+		if code != exitOK {
+			t.Fatalf("status: exit %d %s", code, errOut)
+		}
+		var st control.Status
+		json.Unmarshal([]byte(out), &st)
+		return st.Interfaces[0].State, st.Counters
+	}
+	gauge := func(c map[string]int64, state string) int64 {
+		return c[`interface_state{interface="eth-a",state="`+state+`"}`]
+	}
+	if state, counters := status(); state != "demoted" || gauge(counters, "demoted") != 1 {
+		t.Fatalf("after the timeout: state %q, demoted gauge %d", state, gauge(counters, "demoted"))
+	}
+	time.Sleep(1100 * time.Millisecond)
+	state, counters := status()
+	if state != "online" || gauge(counters, "online") != 1 || gauge(counters, "demoted") != 0 {
+		t.Errorf("one reply disagrees after the demotion expired: state %q, gauge online %d demoted %d",
+			state, gauge(counters, "online"), gauge(counters, "demoted"))
 	}
 }

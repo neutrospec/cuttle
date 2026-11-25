@@ -1,4 +1,4 @@
-# want: 6 : TOML syntax: invalid value; put it in double quotes
+# want: 6 notes.<redacted>: TOML syntax: invalid value; put it in double quotes
 name = "cuttle-test"
 [proxy]
 default = "direct"
