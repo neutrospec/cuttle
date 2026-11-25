@@ -363,8 +363,8 @@ Move resolved items to Closed with their resolving commit or evidence.
     take `s.reloadMu` before logging `stopped`.
 - Next action: orchestrator — include the open items (V4–V6, V8, V11,
   V12, P1, W1–W3, Z2, Z4, G1–G2, and M-R1–M-R4) in the briefs of the
-  stages they
-  affect; the producer closes each item with the commit that settles it.
+  stages they affect; the producer closes each item with the commit that
+  settles it.
   The M1.4 items, R5 with the C13 remainder, the per-request source
   recheck of 0003 D10 with N5, the bind retry of V1, Z3, W-R1, and W-R2,
   are settled in TASK-0007.
