@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/authority"
-	"squid/internal/policy"
+	"github.com/neutrospec/cuttle/internal/authority"
+	"github.com/neutrospec/cuttle/internal/policy"
 )
 
 func TestClassify(t *testing.T) {

@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"squid/internal/logx"
-	"squid/internal/stats"
+	"github.com/neutrospec/cuttle/internal/logx"
+	"github.com/neutrospec/cuttle/internal/stats"
 )
 
 // Re-read timing (design 0008 D5).

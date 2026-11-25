@@ -19,8 +19,8 @@ import (
 
 	"golang.org/x/net/websocket"
 
-	"squid/internal/stats"
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/stats"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 // viaConfig routes cuttle.test names and h to the upstream rec at

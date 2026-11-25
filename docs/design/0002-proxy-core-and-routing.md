@@ -8,8 +8,9 @@ Together with [0003](0003-upstream-chaining-and-exposure.md) it supersedes
 ## Context
 
 cuttle is an explicit forward proxy for Chrome, Safari, and terminal clients
-on macOS. The repository is named `squid`; the formula, binary, service, and
-XDG directories are named `cuttle`. Each HTTPS `CONNECT` tunnel and each plain
+on macOS. The repository was developed under the working name `squid` and
+is published as `neutrospec/cuttle`; the formula, binary, service, and XDG
+directories are named `cuttle`. Each HTTPS `CONNECT` tunnel and each plain
 `http://` request is routed by the same rules to `direct`, an upstream proxy,
 or `block`, and the traffic is counted.
 
@@ -36,8 +37,10 @@ cuttle never answers `407`; the default action is a required setting.
 
 ### D1. Toolchain, dependencies, and layout
 
-The module path is `squid`. Nothing installs cuttle with `go install`, so
-the path does not need to name a host. The command is `./cmd/cuttle`. The
+The module path is `github.com/neutrospec/cuttle`, the public repository
+([OI-0004](../OPEN_ISSUES.md#oi-0004--tap-hosting-repository-remote-and-licence)).
+The Homebrew formula is the supported install; the path names the host so
+that the module resolves like any other. The command is `./cmd/cuttle`. The
 `go` directive is `1.26.0`, the minimum that modernc.org/sqlite requires and
 below the Homebrew `go` 1.27.4 that builds the formula
 ([research 0001 §1][r1-1], [§6][r1-6]). Gates run with the Homebrew Go

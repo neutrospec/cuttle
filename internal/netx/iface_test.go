@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/authority"
-	"squid/internal/iface"
-	"squid/internal/policy"
+	"github.com/neutrospec/cuttle/internal/authority"
+	"github.com/neutrospec/cuttle/internal/iface"
+	"github.com/neutrospec/cuttle/internal/policy"
 )
 
 // fakeSource is an interface source with fixed rows and no notices.

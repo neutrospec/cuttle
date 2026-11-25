@@ -80,18 +80,62 @@ Move resolved items to Closed with their resolving commit or evidence.
 - Affected milestone: M3.1.
 - Iterations used: none; recorded in TASK-0001 iteration 1.
 - Responsible step: test, with infra for the tap tooling.
-- Status: open.
+- Status: open; everything except the final P8 run is settled in TASK-0015.
 - Approval (user, 2026-11-26): the M3.1 checks may install a throwaway
   local tap and the cuttle formula, and load and unload the user-level
   agent with `brew services`, including `kill -9` relaunch, provided
   everything is stopped, uninstalled, and cleaned up afterwards, nothing
   else holds `127.0.0.1:3128` during the checks, and the user's own cuttle
   configuration and data are only read.
-- Next action: infra — in TASK-0015, with a throwaway formula, record
-  `SIGTERM` and `ExitTimeOut` timing, the `.env` override, uninstall
-  leftovers, loopback TCP in `brew test`, the modernc.org/sqlite build under
-  Homebrew, and the open-file limit of the agent, before the M3.1 formula
-  is final.
+- Results (TASK-0015, Homebrew 7.0.16, a throwaway tap `cuttle-check/local`
+  with a `file://` tarball of the candidate commit, every `XDG_*` of the
+  service in scratch directories through `cuttle.env`; details in 0006 D8):
+  - Build: `fetch` runs `go mod download` with network access, then
+    `go build` runs offline from Homebrew's Go caches; modernc.org/sqlite
+    and the other modules build with `CGO_ENABLED=0`; 10 s from source.
+  - `brew test` passes. Loopback TCP needs network access in the test
+    phase: with `deny_network_access! :test` even `free_port` fails with
+    `EPERM`, so the formula declares `allow_network_access! :test` (C2).
+  - `brew audit --strict` passes, with no complaint about the `file://`
+    URL.
+  - P9: `~/Library/LaunchAgents/sh.brew.cuttle.plist`, label
+    `sh.brew.cuttle`, with `KeepAlive`, `ExitTimeOut` 15, `ProcessType`
+    `Interactive`, both log paths, and the `cuttle.env` values; the
+    service serves on `127.0.0.1:3128`, and `cuttle status` paths equal
+    `cuttle paths`.
+  - P10: `brew services stop` delivered `SIGTERM` 0.33 s after the
+    command; cuttle closed an open tunnel (`outcome=shutdown`) and logged
+    `stopped` 2 ms after the signal, far inside `exit timeout = 15` (C3);
+    `restart` gives a new PID in 0.5 s; after a direct `SIGTERM`
+    (`last exit code = 0`) and after `kill -9`
+    (`last terminating signal = Killed: 9`) launchd relaunched it at once;
+    an invalid configuration exits 1 and is relaunched every 10 s with the
+    error in both logs, and the service served again at the first
+    relaunch after the fix.
+  - P11: a changed `XDG_STATE_HOME` in `cuttle.env` reached the plist and
+    the service after `brew services restart`; the CLI with the old value
+    printed the per-path mismatch warnings (C4).
+  - P12: 24,400 decision lines rotated `cuttle.log` at 10 MiB
+    (`cuttle.log.1` 10,485,586 bytes, `rotation failures 0`), while
+    `var/log/cuttle.log` held only the start-up configuration errors.
+  - 0003 A5: the agent's `rlimit_nofile` is 138,240 (`launchctl limit
+    maxfiles` 256 soft, unlimited hard), well above 4,096.
+  - Uninstall leftovers: `brew uninstall` does not stop the service; the
+    job keeps running from the deleted keg with its plist, and
+    `brew services cleanup` skips it as "not managed by `brew services`".
+    `launchctl bootout gui/<uid>/sh.brew.cuttle` followed by
+    `brew services cleanup` removes it. The README and caveats say to
+    stop first. `brew services start` leaves an `sh.brew.cuttle =>
+    enabled` record in launchd's override database, which needs root to
+    remove and is harmless.
+  - Side effects outside the tap: installing a fully qualified tap
+    formula, even with `--dry-run`, adds it to `trustedformulae` in the
+    user's trust store, and `brew untap` removes it again; `brew test`
+    installs Homebrew's own test gems into its vendor bundle.
+- Next action: orchestrator — after publication, run the final P8 with the
+  real tag: `brew install --build-from-source neutrospec/tap/cuttle`,
+  `brew test cuttle`, and `brew audit --strict neutrospec/tap/cuttle`, then
+  close this issue. C1 stays with the T3 baseline under Later.
 
 ### OI-0004 — Tap hosting, repository remote, and licence
 
@@ -107,9 +151,13 @@ Move resolved items to Closed with their resolving commit or evidence.
   licence is MIT. K1: the user accepts the home-relative checkout path in
   all six commits, so they are not rewritten. Creating the repository and
   every push still need the user's confirmation at that time.
-- Next action: infra — prepare publication in TASK-0015 (licence, module
-  path, formula, and the K2–K4 scan fixes); the orchestrator publishes
-  after the user confirms. Publication follows these rules, because the
+- Prepared in TASK-0015: `LICENSE` (MIT), the module path
+  `github.com/neutrospec/cuttle`, the formula source
+  `packaging/homebrew/cuttle.rb`, and `scripts/publish-scan`, which
+  settles K2–K4.
+- Next action: orchestrator — publish after the user confirms, then copy
+  the formula into the tap with the tag tarball's `sha256`. Publication
+  follows these rules, because the
   TASK-0003 history rewrite left pre-rewrite history in local refs and
   files:
   1. Before the first push, run `git config --get-regexp '^remote\.'` and
@@ -125,29 +173,38 @@ Move resolved items to Closed with their resolving commit or evidence.
   4. The reflogs, `.git/filter-repo/`, the backup bundle, and the commit
      map hold pre-rewrite history. Never copy or share the working folder
      or the bundle.
-  5. After pushing, check that `git ls-remote <remote>` lists only `HEAD`,
-     `refs/heads/main`, and tags. Then scan a fresh clone of the remote:
-     the file contents of every commit, the commit messages without the
-     author and committer lines (the author email is allowed), the tag
-     messages, and the tip tree. The patterns are local values, so they
-     live in `CUTTLE_PUBLISH_SCAN_PATTERNS` in the untracked root `.env`
-     (see [`.env.example`](../.env.example)). Run the commands from the
-     main checkout's root. Each count must be 0; leave out `| wc -l` to see
-     the matching lines.
+  5. Before and after each push, run `scripts/publish-scan <remote-url>`
+     from the main checkout's root. It checks that the remote serves only
+     `HEAD`, `refs/heads/main`, and tags, makes a fresh mirror clone in a
+     temporary directory that it removes on exit, and counts the matches
+     of `CUTTLE_PUBLISH_SCAN_PATTERNS` in every blob of the clone (the
+     files of every commit, symbolic link targets, binary files, and blobs
+     that only a tag points to); the commit messages without the author
+     and committer lines; the name and message of every tag object, inner
+     tags of nested tags included; the tip tree; every file and directory
+     name, also in trees that a tag points to; and the ref names. Every
+     check uses `/usr/bin/grep -a -i -E` in the C locale, so the pattern
+     means the same everywhere; UTF-16 text and compressed content are
+     not decoded. Every count must be 0. It also checks that the distinct
+     author, committer, and tagger identities are exactly
+     `CUTTLE_PUBLISH_IDENTITIES`. It ignores `GIT_DIR` and the other
+     variables that would point git at another repository. Both values are
+     local, so they live in the untracked root `.env` (see
+     [`.env.example`](../.env.example)), and the script reads only those
+     two variables from it. `--show` prints the matching lines. Exit
+     status 0 is a pass, 1 a finding, and 2 a usage or setup error, such
+     as an empty or invalid pattern or a failed clone; the script never
+     reports a pass after a failed command. Never point it at the working
+     repository's path: a path serves every local ref, `refs/t3/*`
+     included. Before the first push, scan exactly what the push will send
+     by pushing it to a scratch bare repository first:
 
      ```sh
-     set -a; . ./.env; set +a
-     p=$CUTTLE_PUBLISH_SCAN_PATTERNS
      d=$(mktemp -d)
-     git clone -q <remote-url> "$d/clone" && cd "$d/clone"
-     git rev-list --all | while read -r r; do
-       git grep -I -i -E -e "$p" "$r" --
-     done | wc -l
-     git log --all --format=%B | grep -i -E -e "$p" | wc -l
-     git for-each-ref --format='%(contents)' refs/tags |
-       grep -i -E -e "$p" | wc -l
-     git grep -I -i -E -e "$p" HEAD -- | wc -l
-     cd - >/dev/null && rm -rf "$d"
+     git init -q --bare -b main "$d/pre.git"
+     git push -q "$d/pre.git" main 'refs/tags/*:refs/tags/*'
+     scripts/publish-scan "$d/pre.git"
+     rm -rf "$d"
      ```
   6. Delete or securely store the bundle and the commit map once the user
      approves.
@@ -162,14 +219,26 @@ Move resolved items to Closed with their resolving commit or evidence.
   - K2 (infra, required): remove `-I` from both `git grep` calls in rule 5,
     so a hit inside a binary file is counted, and add a count over all
     path names, for example `git rev-list --all --objects | cut -s -d' '
-    -f2- | grep -i -E -e "$p" | wc -l`.
+    -f2- | grep -i -E -e "$p" | wc -l`. Settled in TASK-0015 by
+    `scripts/publish-scan`. The suggested command misses path names:
+    `rev-list --objects` prints each object once, under the first path it
+    meets, so a file whose content equals an earlier file's goes unseen,
+    which the positive control showed. The script lists every commit's
+    tree with `git ls-tree -r -t` instead. The TASK-0015 review (F1, F2,
+    F4, F5) then found that `git grep` skips symbolic link targets and
+    reads `\b` and similar escapes differently from `grep`, that a
+    `GIT_DIR` in the environment redirected the scan, and that blobs and
+    inner tags reachable only through tags went unscanned; the script now
+    reads every blob and tag object with one `grep`, and positive
+    controls cover each case.
   - K3 (infra): run the block in a subshell, stop if the clone or `cd`
     fails, check that the pattern compiles and is not empty, read only the
     one variable instead of `set -a`, and clean up with
-    `trap 'rm -rf "$d"' EXIT`.
+    `trap 'rm -rf "$d"' EXIT`. Settled in TASK-0015 by the script, which
+    runs as its own process and reads `.env` in a subshell.
   - K4 (infra): check that the set of distinct author, committer, and
     tagger identities is exactly the allowed one, because rule 5 skips
-    those lines.
+    those lines. Settled in TASK-0015 by the script's identity check.
 
 ### OI-0005 — Private-root trust through the chain
 
@@ -539,10 +608,23 @@ Move resolved items to Closed with their resolving commit or evidence.
     editor does. U-R5 (test, nit): `expectRe` in
     `internal/config/config_test.go` cannot express a key that contains
     `:`, so three MAC-key fixtures no longer check the reported key path.
+  - X-R1–X-R5 (from the TASK-0015 reviews; infra unless noted): X-R1
+    (minor): `scripts/publish-scan` loses a failing `sed` inside the
+    command substitution that tests whether a tag points to a tree, so the
+    tree is skipped and the scan can pass; capture the type with `|| die`
+    first, and add `|| die` to the next line. X-R2 (minor, also docs):
+    `LC_ALL=C` makes `-i` fold ASCII letters only and `.` match one byte;
+    say so in the script header and OI-0004 rule 5, and write each case
+    form of non-ASCII text in the pattern. X-R3 (minor): the tagger and
+    message in a commit's `mergetag` header are not scanned. X-R4 (minor):
+    once a pull request exists, GitHub serves `refs/pull/*` and the refs
+    check fails; decide whether to allow and scan them. X-R5
+    (implementer, nit): `buildVersion` ignores `info.Main.Version`, so
+    `go install …/cmd/cuttle@<tag>` reports `dev`.
 - Next action: orchestrator — include the open items (V5, V8, V11, V12, P1,
-  W1–W3, Z2, Z4, G1–G2, P-R3–P-R7, Q-R1–Q-R4, Q-R6–Q-R8, S-R1–S-R2, and
-  U-R1–U-R5) in the briefs of the stages they affect; the producer closes
-  each item with the commit that settles it.
+  W1–W3, Z2, Z4, G1–G2, P-R3–P-R7, Q-R1–Q-R4, Q-R6–Q-R8, S-R1–S-R2,
+  U-R1–U-R5, and X-R1–X-R5) in the briefs of the stages they affect; the
+  producer closes each item with the commit that settles it.
   The M1.4 items, R5 with the C13 remainder, the per-request source
   recheck of 0003 D10 with N5, the bind retry of V1, Z3, W-R1, and W-R2,
   are settled in TASK-0007.

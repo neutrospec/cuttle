@@ -1,7 +1,8 @@
 # Documentation
 
-The product is `cuttle`: the Homebrew formula, binary, launchd service, and
-XDG directories use that name. The repository stays `squid`, because
+The product is `cuttle`: the public repository `neutrospec/cuttle`, the Go
+module `github.com/neutrospec/cuttle`, the Homebrew formula, binary, launchd
+service, and XDG directories use that name. `squid` was the working name;
 homebrew/core already ships a `squid` formula.
 
 1. [Agent operating rules](../AGENTS.md) define the work loop, checkout rules,

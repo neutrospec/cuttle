@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/netx"
+	"github.com/neutrospec/cuttle/internal/netx"
 )
 
 // Field is one header field line as received: the name as sent and the

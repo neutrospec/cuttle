@@ -29,11 +29,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"squid/internal/config"
-	"squid/internal/iface"
-	"squid/internal/netx"
-	"squid/internal/policy"
-	"squid/internal/stats"
+	"github.com/neutrospec/cuttle/internal/config"
+	"github.com/neutrospec/cuttle/internal/iface"
+	"github.com/neutrospec/cuttle/internal/netx"
+	"github.com/neutrospec/cuttle/internal/policy"
+	"github.com/neutrospec/cuttle/internal/stats"
 )
 
 // Server settings from design 0002 D2.

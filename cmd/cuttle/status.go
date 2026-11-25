@@ -10,8 +10,8 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"squid/internal/control"
-	"squid/internal/paths"
+	"github.com/neutrospec/cuttle/internal/control"
+	"github.com/neutrospec/cuttle/internal/paths"
 )
 
 // controlTimeout bounds a status or reload request over the control socket.

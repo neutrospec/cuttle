@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/stats"
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/stats"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 // reload parses text and applies it to the instance (design 0004 D6).

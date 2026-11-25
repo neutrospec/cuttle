@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"squid/internal/netx"
+	"github.com/neutrospec/cuttle/internal/netx"
 )
 
 // disclosureFields are the fields that reveal an intermediary or the

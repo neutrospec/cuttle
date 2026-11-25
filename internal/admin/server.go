@@ -21,9 +21,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"squid/internal/config"
-	"squid/internal/control"
-	"squid/internal/stats"
+	"github.com/neutrospec/cuttle/internal/config"
+	"github.com/neutrospec/cuttle/internal/control"
+	"github.com/neutrospec/cuttle/internal/stats"
 )
 
 // Cookie names (design 0005 D7, D8).

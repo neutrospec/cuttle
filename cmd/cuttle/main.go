@@ -8,10 +8,50 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"runtime/debug"
 )
 
-// version is set at build time with -ldflags "-X main.version=...".
+// version is set at build time with -ldflags "-X main.version=...", as the
+// Homebrew formula does. A plain go build leaves it at "dev", and init adds
+// the VCS revision that the go command recorded, if any.
 var version = "dev"
+
+func init() {
+	info, _ := debug.ReadBuildInfo() // nil when the binary has none
+	version = buildVersion(version, info)
+}
+
+// buildVersion returns the version cuttle reports. A version set at link
+// time is kept. The default "dev" becomes "dev+<revision>", the first 12
+// hex digits of the recorded vcs.revision, with ".dirty" added when the
+// checkout had uncommitted changes; without a recorded revision, such as
+// in test binaries or a build from a source tarball, it stays "dev".
+func buildVersion(v string, info *debug.BuildInfo) string {
+	if v != "dev" || info == nil {
+		return v
+	}
+	var rev string
+	dirty := false
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			rev = s.Value
+		case "vcs.modified":
+			dirty = s.Value == "true"
+		}
+	}
+	if rev == "" {
+		return v
+	}
+	if len(rev) > 12 {
+		rev = rev[:12]
+	}
+	v += "+" + rev
+	if dirty {
+		v += ".dirty"
+	}
+	return v
+}
 
 // Exit statuses (design 0006 D3).
 const (

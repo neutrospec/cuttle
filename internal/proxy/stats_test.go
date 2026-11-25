@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/stats"
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/stats"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 // openStats opens a statistics service on a temporary database with the

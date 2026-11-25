@@ -17,9 +17,9 @@ import (
 	"syscall"
 	"time"
 
-	"squid/internal/authority"
-	"squid/internal/iface"
-	"squid/internal/policy"
+	"github.com/neutrospec/cuttle/internal/authority"
+	"github.com/neutrospec/cuttle/internal/iface"
+	"github.com/neutrospec/cuttle/internal/policy"
 )
 
 // Binding names the interface a dial must use. The zero value is an

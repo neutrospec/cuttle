@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"squid/internal/control"
-	"squid/internal/stats"
+	"github.com/neutrospec/cuttle/internal/control"
+	"github.com/neutrospec/cuttle/internal/stats"
 )
 
 // Dashboard limits (design 0005 D9).

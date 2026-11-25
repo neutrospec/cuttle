@@ -16,8 +16,8 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"squid/internal/config"
-	"squid/internal/iface"
+	"github.com/neutrospec/cuttle/internal/config"
+	"github.com/neutrospec/cuttle/internal/iface"
 )
 
 // interfaceSource is the interface table that cuttle interfaces reads; tests

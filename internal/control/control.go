@@ -19,7 +19,7 @@ import (
 	"syscall"
 	"time"
 
-	"squid/internal/paths"
+	"github.com/neutrospec/cuttle/internal/paths"
 )
 
 // Errors from Listen.

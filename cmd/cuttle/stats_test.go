@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/stats"
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/stats"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 // statsPath is the sandbox's statistics database (design 0006 D1).

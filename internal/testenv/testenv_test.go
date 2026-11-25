@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/netx"
+	"github.com/neutrospec/cuttle/internal/netx"
 )
 
 // TestBinaryHelperIsolation checks E6 without starting a process: the

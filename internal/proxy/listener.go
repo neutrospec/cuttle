@@ -7,9 +7,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"squid/internal/config"
-	"squid/internal/policy"
-	"squid/internal/stats"
+	"github.com/neutrospec/cuttle/internal/config"
+	"github.com/neutrospec/cuttle/internal/policy"
+	"github.com/neutrospec/cuttle/internal/stats"
 )
 
 // listener classifies each source on accept, before net/http reads a byte

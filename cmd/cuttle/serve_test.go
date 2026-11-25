@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 // TestServeRemoteListener checks that cuttle serve accepts a non-loopback

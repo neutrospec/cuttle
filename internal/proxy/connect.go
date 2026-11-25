@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"squid/internal/stats"
+	"github.com/neutrospec/cuttle/internal/stats"
 )
 
 // connectEstablished is the exact response to a successful CONNECT; Chrome

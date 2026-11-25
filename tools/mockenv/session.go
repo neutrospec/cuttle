@@ -20,7 +20,7 @@ import (
 	"strings"
 	"sync"
 
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 // Names and addresses of the session's test network (design 0007 D3). Every

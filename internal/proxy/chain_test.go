@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 // Chain configurations of design 0003 D13 and 0007 D4: the edge sends

@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/control"
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/control"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 var phcFile = regexp.MustCompile(`^\$argon2id\$v=19\$m=19456,t=2,p=1\$[A-Za-z0-9+/]{22}\$[A-Za-z0-9+/]{43}\n$`)

@@ -20,11 +20,11 @@ import (
 	"syscall"
 	"time"
 
-	"squid/internal/authority"
-	"squid/internal/config"
-	"squid/internal/logx"
-	"squid/internal/netx"
-	"squid/internal/stats"
+	"github.com/neutrospec/cuttle/internal/authority"
+	"github.com/neutrospec/cuttle/internal/config"
+	"github.com/neutrospec/cuttle/internal/logx"
+	"github.com/neutrospec/cuttle/internal/netx"
+	"github.com/neutrospec/cuttle/internal/stats"
 )
 
 // Upstream states (design 0003 D8).
