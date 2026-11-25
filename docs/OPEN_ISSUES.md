@@ -178,6 +178,27 @@ Move resolved items to Closed with their resolving commit or evidence.
   the SPKI flag and in Safari, and run `/usr/bin/curl` without CA options;
   record the results for the deployment guide.
 
+### OI-0007 — Local network privacy for cuttle under launchd
+
+- Origin: research 0003 [local network privacy][r3-lnp], TASK-0008.
+- Affected milestones: M1.5, M3.1, and M3.3.
+- Iterations used: none; recorded in TASK-0008.
+- Responsible step: research, then design.
+- Status: open.
+- Blocking reason: macOS 15 and later apply local network privacy to
+  outgoing connections toward local network addresses. It covers launchd
+  agents, so cuttle under `brew services` may need the user's permission
+  before it can reach a LAN destination, such as a private destination
+  behind an `allow_private` rule or an egress proxy on the gateway
+  machine's LAN. Processes started from Terminal or SSH are exempt, so the
+  current tests and manual runs do not show it. A denial fails at once and
+  could look like an interface or upstream failure.
+- Next action: researcher — on the user's machine, run cuttle as a
+  LaunchAgent with the user's approval, connect to a LAN address, and
+  record whether a prompt appears, the error a denial returns, and how
+  approval persists; the M1.5 and M3 designs then name the outcome and the
+  deployment guide step.
+
 ### OI-0006 — Design follow-ups from the TASK-0001 final review
 
 - Origin: TASK-0001 iteration 3 review of candidate `a1e1e61`, verdict
@@ -329,3 +350,4 @@ Move resolved items to Closed with their resolving commit or evidence.
 [d7-8]: design/0007-test-environment-and-gates.md#d8-client-checks
 [r1-oq]: research/0001-homebrew-launchd-xdg.md#open-questions
 [r2-oq]: research/0002-proxy-chaining-and-interception.md#open-questions
+[r3-lnp]: research/0003-interface-selection.md#local-network-privacy

@@ -12,3 +12,4 @@ and state what evidence would confirm them.
 | --- | --- |
 | [0001](0001-homebrew-launchd-xdg.md) | Homebrew tap and service, launchd environment, XDG paths, Go SQLite drivers. |
 | [0002](0002-proxy-chaining-and-interception.md) | CONNECT and HTTP forwarding through chained and TLS-inspecting proxies, client behavior, exposure risks. |
+| [0003](0003-interface-selection.md) | Binding connections to one network interface on macOS, interface state and naming, DNS scope, VPN and local network privacy interactions. |
