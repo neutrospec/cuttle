@@ -41,37 +41,6 @@ A closed task becomes one line under Closed:
 
 ## Active
 
-### TASK-0005 — M1.2 exposure controls
-
-- Milestone: M1.2
-- Status: review
-- Iteration: 3/3
-- Workers: implementer done on branch `t3/add-remote-proxy-exposure`;
-  fresh final re-check pending
-- Base: `cbf0b07`
-- Candidate: `b75010c` (tree `a9c8992`) on top of `4aea9fa`
-- Evidence: implementer ran `scripts/gate t0`, `t1`, and `-race -count=3`
-  on the proxy package for `a9c8992`, all pass
-- Findings: F1-F4 reported fixed, pending the final re-check
-- Next action: reviewer — fresh final re-check of `4aea9fa..b75010c`
-
-Decisions for TASK-0005 (2026-11-25):
-
-- OI-0006 items settled in this task: V1 (N3 limited to what M1.2 can
-  show; the bind-retry sentence moves to M1.4) and Z1 (validator positions).
-- Ignore the `cuttle` binary that the README quick start builds in the
-  repository root.
-- Iteration 2 (orchestrator): rejected-source and limit warnings keep the
-  per-address once-a-minute rule and gain a global budget of 60 lines a
-  minute plus one summary line with the suppressed count; a full map never
-  resets suppression. An IPv4-mapped source prefix is a validation error
-  with a hint. The once-a-minute limit warning (0003 D12, 0006 D7) is
-  ratified. 0007 D3 names a dedicated rejected-source address. The
-  per-request source recheck after reload goes to the M1.4 brief.
-- Iteration 3 (orchestrator): the summary `count` stays a count of
-  rejected or limited connections that got no warning line and were not
-  covered by one in the last minute; D12 and D7 define it that way.
-
 ## Closed
 
 The history was rewritten on 2026-11-25 (TASK-0003) to remove local
@@ -80,6 +49,9 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0005 — M1.2 exposure controls — landed `3910ad3`, gates: T0 T1 @
+  `9a71cff`; reviewed tree `a9c8992` (iteration 3 of 3); follow-ups G1–G2
+  in OI-0006
 - TASK-0004 — M1.1 direct and block for local clients — landed `a5b9f02`,
   gates: T0 T1 @ `28f3eca`; reviewed tree `f1e6202` (iteration 3 of 3);
   follow-ups Z1–Z4 and R5 in OI-0006
