@@ -1,0 +1,5 @@
+# want: 5 proxy.interface_attempt_timeout: out of range 100ms-10m0s
+name = "cuttle-test"
+[proxy]
+default = "direct"
+interface_attempt_timeout = "50ms"

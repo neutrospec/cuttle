@@ -1,0 +1,7 @@
+# want: 5 interface[1]: needs mac, device, or both
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[interface]]
+name = "eth-a"
+kind = "wired"

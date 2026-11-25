@@ -1,0 +1,4 @@
+# want: 2 name: "<redacted>" does not match
+name = "00-00-5e-00-53-2a"
+[proxy]
+default = "direct"

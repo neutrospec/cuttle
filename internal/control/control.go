@@ -99,7 +99,11 @@ type Status struct {
 	Paths     paths.Paths `json:"paths"`
 	Listeners []Listener  `json:"listeners"`
 	Upstreams []Upstream  `json:"upstreams"`
-	Config    Config      `json:"config"`
+	// Interfaces lists the [[interface]] definitions in configuration
+	// order with their state; it is empty without definitions and never
+	// holds a MAC address (design 0008 D15).
+	Interfaces []Interface `json:"interfaces"`
+	Config     Config      `json:"config"`
 	// Counters holds every live counter by key, such as
 	// bytes_total{action="direct",direction="up"} (design 0002 D7).
 	Counters map[string]int64 `json:"counters"`
@@ -134,6 +138,20 @@ type Upstream struct {
 	LastError  string `json:"last_error"`
 }
 
+// Interface is one interface definition's state (design 0008 D15).
+type Interface struct {
+	Name   string `json:"name"`
+	Device string `json:"device"`
+	State  string `json:"state"`  // online, demoted, or offline
+	Reason string `json:"reason"` // offline reason; "" otherwise
+	// Families and Primary list ipv4 and ipv6.
+	Families []string  `json:"families"`
+	Primary  []string  `json:"primary"`
+	Since    time.Time `json:"since"`
+	// DemotedUntil is the end of a demotion in RFC 3339 form, or "".
+	DemotedUntil string `json:"demoted_until"`
+}
+
 // Config is the state of the configuration (design 0004 D6).
 type Config struct {
 	Path            string    `json:"path"`
@@ -150,9 +168,12 @@ type Tunnel struct {
 	Action   string `json:"action"`
 	Upstream string `json:"upstream,omitempty"`
 	Source   string `json:"source"`
-	AgeS     int64  `json:"age_s"`
-	Up       int64  `json:"up"`
-	Down     int64  `json:"down"`
+	// Interface is the decision-log value of design 0008 D15: a configured
+	// interface name, other, or empty.
+	Interface string `json:"interface"`
+	AgeS      int64  `json:"age_s"`
+	Up        int64  `json:"up"`
+	Down      int64  `json:"down"`
 }
 
 // Log is the state of the log writer (design 0006 D7).

@@ -1,0 +1,9 @@
+# want: 9 rule[1].<redacted>: unknown key
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[rule]]
+name = "x"
+domains = ["x.example"]
+action = "direct"
+"0000.5e00.5325" = true

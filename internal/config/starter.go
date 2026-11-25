@@ -20,6 +20,9 @@ name = "NAME"  # unique per instance; appears in Via headers
 [proxy]
 listen = ["127.0.0.1:3128"]
 default = "direct"  # direct, block, or upstream:<name>
+# Interfaces for direct routes, in priority order; list them with
+# ` + "`cuttle interfaces`" + `. Unset, macOS chooses as for other applications.
+# interfaces = ["eth-a", "wifi"]
 
 [admin]
 listen = "127.0.0.1:3129"  # set a password with ` + "`cuttle admin passwd`" + `
@@ -52,6 +55,16 @@ allow_loopback = true
 # name = "restricted"
 # domains = ["internal.example"]
 # action = "upstream:gateway"
+
+# Network interfaces named for proxy.interfaces and rule lists:
+# [[interface]]
+# name = "eth-a"
+# mac = "00:00:5e:00:53:0a"  # from ` + "`cuttle interfaces`" + `
+#
+# [[interface]]
+# name = "wifi"
+# device = "en0"
+# kind = "wifi"
 `
 
 // Starter returns the starter configuration with a new random instance

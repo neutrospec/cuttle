@@ -396,11 +396,17 @@ Move resolved items to Closed with their resolving commit or evidence.
     in `internal/proxy/live_test.go` above the TestUpgradedConnections doc
     comment. M-R4 (implementer, optional): `ctlSrv.Close()` does not wait
     for a reload in progress, so its `reloaded` line can follow `stopped`;
-    take `s.reloadMu` before logging `stopped`.
+    take `s.reloadMu` before logging `stopped`. M-R1, M-R3, and M-R4 are
+    settled in TASK-0009 (M1.5): `TestControlUnreachable` asserts exit 1,
+    the "cannot reach the running service at <path>" message, and the
+    socket path for `status` and `reload` with a missing directory and with
+    a private directory without a socket; the `upgrade` helper sits above
+    the `TestUpgradedConnections` doc comment; and serve takes `s.reloadMu`
+    before it logs `stopped`, which `TestStopWaitsForReload` checks.
 - Next action: orchestrator — include the open items (V4–V6, V8, V11,
-  V12, P1, W1–W3, Z2, Z4, G1–G2, and M-R1–M-R4) in the briefs of the
-  stages they affect; the producer closes each item with the commit that
-  settles it.
+  V12, P1, W1–W3, Z2, Z4, G1–G2, and M-R2) in the briefs of the stages
+  they affect; the producer closes each item with the commit that settles
+  it.
   The M1.4 items, R5 with the C13 remainder, the per-request source
   recheck of 0003 D10 with N5, the bind retry of V1, Z3, W-R1, and W-R2,
   are settled in TASK-0007.

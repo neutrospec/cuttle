@@ -1,0 +1,23 @@
+# warn: 15 upstream[1]: has no interfaces, so its dials follow system routing
+name = "cuttle-test"
+[proxy]
+default = "direct"
+interfaces = ["eth-a"]
+
+[[interface]]
+name = "eth-a"
+mac = "00:00:5e:00:53:0a"
+
+[[interface]]
+name = "eth-b"
+mac = "00:00:5e:00:53:0b"
+
+[[upstream]]
+name = "egress"
+address = "203.0.113.20:3128"
+disclosure = "none"
+
+[[rule]]
+name = "partner"
+domains = ["partner.example"]
+action = "upstream:egress"

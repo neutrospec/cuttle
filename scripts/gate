@@ -2,7 +2,8 @@
 # Runs the gate commands of design 0007 D7 from the repository root.
 #
 #   scripts/gate t0   formatting, module tidiness, vet, build, unit tests,
-#                     and the key-file and test-dependency checks
+#                     the key-file and dependency checks, no cgo file in
+#                     cmd/cuttle's packages, and a build without cgo
 #   scripts/gate t1   integration and binary tests with the race detector;
 #                     needs /usr/bin/curl or CUTTLE_CURL
 #
@@ -12,7 +13,11 @@
 # fails the gate under set -e; a failure inside test -z "$(...)" or on the
 # left of && would not. The dependency check requires grep's exit status 1,
 # no match: 0 means a forbidden package is linked and prints it, and 2 means
-# grep itself failed.
+# grep itself failed. Its pattern forbids internal/testenv and every package
+# of the golang.org/x/net module; the standard library's own
+# vendor/golang.org/x/net packages do not start with golang.org and pass.
+# The cgo check lists the packages with cgo files in the default
+# environment, because CGO_ENABLED=0 go build silently drops such files.
 set -eu
 
 cd "$(dirname "$0")/.."
@@ -32,8 +37,11 @@ t0() {
 	trap 'rm -f "$deps"' EXIT
 	go list -deps ./cmd/cuttle >"$deps"
 	rc=0
-	grep -E 'internal/testenv|x/net/websocket' "$deps" || rc=$?
+	grep -E 'internal/testenv|^golang\.org/x/net/' "$deps" || rc=$?
 	test "$rc" -eq 1
+	out=$(go list -deps -f '{{if .CgoFiles}}{{.ImportPath}}{{end}}' ./cmd/cuttle)
+	test -z "$out"
+	CGO_ENABLED=0 go build -o /dev/null ./cmd/cuttle
 	{ set +x; } 2>/dev/null
 }
 

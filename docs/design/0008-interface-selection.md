@@ -174,14 +174,21 @@ pure Go through `syscall`, without privileges and without sending a packet:
 | Addresses | `net.Interface.Addrs` |
 | Media status | `ioctl(SIOCGIFMEDIA)` on an `AF_INET` datagram socket (`syscall.SIOCGIFMEDIA`) |
 | Kind | `ioctl(SIOCGIFFUNCTIONALTYPE)`, public `sys/sockio.h`; the constant is defined in cuttle |
-| Default routes | `syscall.RouteRIB(syscall.NET_RT_DUMP, 0)` parsed with `syscall.ParseRoutingMessage` and `syscall.ParseRoutingSockaddr`: messages with `RTF_UP` and `RTF_GATEWAY` whose destination and mask are `0.0.0.0/0` or `::/0`; the header's index names the interface, and `RTF_IFSCOPE` separates scoped routes from the primary's |
+| Default routes | `syscall.RouteRIB(syscall.NET_RT_DUMP, 0)` read by a small parser of `rt_msghdr` and its sockaddrs in cuttle (D16): messages with `RTF_UP` and `RTF_GATEWAY` and without `RTF_HOST`, whose destination is `0.0.0.0` or `::` and whose mask is all zero or absent, which reads as /0; the header's index names the interface, and `RTF_IFSCOPE` separates scoped routes from the primary's |
 
 The default-route source was observed in iteration 2 on the research Mac
 (macOS 27.2.1, Go 1.27.4) with a read-only program that called only these
 three functions: 95 messages parsed, the IPv4 default without
 `RTF_IFSCOPE` on `en7`, the scoped IPv4 default on `en0`, and scoped IPv6
 defaults on `utun0`–`utun7`. This matches what research 0003 read through
-`golang.org/x/net/route` ([research 0003 §3][r3-read]).
+`golang.org/x/net/route` ([research 0003 §3][r3-read]). In TASK-0009,
+cuttle's own parser gave the same default routes as
+`syscall.ParseRoutingMessage` and `syscall.ParseRoutingSockaddr` on the
+implementer's Mac (94 messages). cuttle does not use the standard parser:
+it converts each 4-byte aligned message to a struct that needs 8-byte
+alignment, which the race detector's pointer checks reject
+(`checkptr: misaligned pointer conversion`), so every T1 run under
+`-race` would abort (D16).
 
 A re-read happens:
 
@@ -212,8 +219,10 @@ socket (I17):
   `iface.KernelNotice` reads the vendor, class, and subclass from the fixed
   `kern_event_msg` header and accepts the data-link (`KEV_DL_SUBCLASS`),
   IPv4 (`KEV_INET_SUBCLASS`), and IPv6 (`KEV_INET6_SUBCLASS`) subclasses.
-  The event body is never parsed. These events report attach, detach, and
-  link on and off, which the routing socket does not.
+  The event body is never parsed, and a message shorter than the
+  `kern_event_msg` header counts as a notice, as on the routing socket.
+  These events report attach, detach, and link on and off, which the
+  routing socket does not.
 - A socket read error, such as `ENOBUFS` after a burst, is a notice like
   any other, so it causes a re-read in the same 200 ms window. A socket
   that cannot be opened is logged once at `warn`, and the 30 s re-read
@@ -287,7 +296,9 @@ Validation warnings:
 - An upstream with `interfaces` whose address is a loopback or private
   literal: its dials stay unbound (D11).
 - `proxy.interface_attempt_timeout` at or above `proxy.connect_timeout`:
-  a timeout then never fails over.
+  a timeout then never fails over. The warning appears only when
+  `proxy.interfaces`, a rule, or an upstream has a list, because the key
+  changes nothing otherwise.
 
 No message about an `[[interface]]` key or an `interfaces` list repeats
 the value it is about. Messages name the key path, the line, and the rule
@@ -504,7 +515,8 @@ When the plan has no group, the client gets:
   reason, up to 200 bytes; interface names are configured names, like rule
   and upstream names. For remote clients `details` is omitted, so an edge
   instance learns nothing of the gateway machine's interfaces; the
-  decision line still has `skipped`.
+  decision line still has `skipped`, and its `detail` field is empty as
+  well.
 - No dial is made, and the upstream hold of [0003 D8][d3-8] neither starts
   nor extends.
 - `503` says the condition is temporary and at the proxy, and it matches
@@ -521,9 +533,11 @@ When the plan has no group, the client gets:
   third case of [0003 D13][d3-13], and would let traffic bypass a
   full-tunnel VPN ([research 0003 §7][r3-vpn]).
 - **With a list.** The upstream's resolved addresses form a plan as in D7:
-  `loopback`, `self`, and `private` addresses are dialed unbound in group 0,
-  and `public` addresses are bound per interface, with failover and
-  demotion as in D8 and D9. An upstream on a private-link address such as
+  every address that is not `public` is dialed unbound in group 0, which
+  holds the `loopback`, `self`, and `private` addresses and also unusable
+  ones, which [0003 D11][d3-11] refuses only on direct routes. `public`
+  addresses are bound per interface, with failover and demotion as in D8
+  and D9. An upstream on a private-link address such as
   `10.8.0.6` therefore always follows system routing, and `cuttle check`
   warns when its address is such a literal (D6). Only the grouping uses the
   address classes; the [0003 D11][d3-11] refusals still do not apply to
@@ -709,7 +723,9 @@ list applies. `explain` reads only the file, never the live state.
 - `skipped` lists, in list order as `name:reason` pairs separated by
   commas, the interfaces of the list in force that the dial did not use
   and that come earlier in list order than the interface that carried the
-  connection, or that ended a failed dial. Offline, passed-over, and
+  connection, or that ended a failed dial. An interface that was tried is
+  listed wherever it comes in list order, because demotion can place it
+  after the one that carried the connection. Offline, passed-over, and
   demoted interfaces later in the list are not listed, so unplugged
   devices at the end of the list leave no trace on every decision line. A
   failed dial that ran out of interfaces lists every interface of the
@@ -719,7 +735,9 @@ list applies. `explain` reads only the file, never the live state.
     the connection and never tried;
   - `unreachable` (a failover error) or `timeout`, for an interface tried
     without a connection; for a demoted interface that was tried and
-    failed, the failure reason replaces `demoted`;
+    failed, the failure reason replaces `demoted`; `timeout` also for an
+    interface whose group a failed dial never reached because the connect
+    budget ran out;
   - `refused` (`ECONNREFUSED`, `ECONNRESET`) or `error` (any other error),
     for the interface whose error ended a failed dial.
 
@@ -769,15 +787,17 @@ the column.
 ### D16. Dependencies and platform code
 
 - No new module and no cgo. Binding, state, and notices use `syscall`.
-  `CGO_ENABLED=0 go build ./cmd/cuttle` must keep working (I19).
-- `golang.org/x/net/route` is not used. `syscall.RouteRIB`,
-  `syscall.ParseRoutingMessage`, and `syscall.ParseRoutingSockaddr` return
-  the same default routes, as observed in D5. They are marked deprecated in
-  favor of `x/net/route` but stay under the Go 1 compatibility promise, and
-  `go vet` in the T0 gate does not flag them. [0002 D1][d2-1] keeps
-  `golang.org/x/net` test-only. If the standard parser ever fails on a
-  macOS release, a small parser of `rt_msghdr` in cuttle is the fallback,
-  still without a dependency.
+  `CGO_ENABLED=0 go build ./cmd/cuttle` must keep working, and no package
+  that `cmd/cuttle` links may have cgo files, which that build would drop
+  without a word (I19).
+- `golang.org/x/net/route` is not used. cuttle reads the dump of
+  `syscall.RouteRIB` with a small parser of `rt_msghdr` and its
+  sockaddrs, the fallback this record planned: `syscall.ParseRoutingMessage`
+  fails the race detector's pointer checks in every T1 run (D5). The two
+  parsers gave the same default routes in TASK-0009. `syscall.RouteRIB` is
+  marked deprecated in favor of `x/net/route` but stays under the Go 1
+  compatibility promise, and `go vet` in the T0 gate does not flag it.
+  [0002 D1][d2-1] keeps `golang.org/x/net` test-only.
 - Constants and structures missing from `syscall` are defined in cuttle,
   each with the public header it comes from (checked in iteration 3
   against the macOS SDK's headers):
@@ -796,7 +816,11 @@ the column.
 
   `IP_BOUND_IF`, `IPV6_BOUND_IF`, `SIOCGIFMEDIA`, `AF_ROUTE`,
   `AF_SYSTEM`, `RTF_IFSCOPE`, `RTF_LLINFO`, `RTF_HOST`, `NET_RT_DUMP`, and
-  the `rt_msghdr` layout (`syscall.RtMsghdr`) are in `syscall`.
+  the `rt_msghdr` layout (`syscall.RtMsghdr`) are in `syscall`. The
+  portable notice classifiers and the route parser keep their own copies
+  of the routing constants and the `rt_msghdr` offsets, and a darwin test
+  checks them, and the sizes that the ioctl requests encode, against
+  `syscall`.
 - The private ioctls `SIOCGIFEFLAGS`, `SIOCGIFXFLAGS`, and `SIOCGIFTYPE`
   are not used. The `expensive` and `constrained` flags they expose are not
   needed when the user orders interfaces explicitly.
@@ -905,7 +929,8 @@ type Link struct {
     Index    int
     Device   string
     MAC      net.HardwareAddr
-    Up       bool
+    Up       bool  // IFF_UP
+    Loopback bool  // IFF_LOOPBACK; loopback rows never match (D3)
     Kind     Kind  // from SIOCGIFFUNCTIONALTYPE
     Media    Media // MediaActive, MediaInactive, MediaUnknown
     Addrs    []netip.Addr
@@ -988,7 +1013,7 @@ injected `SelfAddrs`.
 | I7 | A rule with `interfaces = ["eth-b"]` dials only `eth-b` while `eth-a` is online. With `eth-b` absent a local client gets `503` with `Proxy-Status: <name>; error=destination_unavailable; details="no usable interface (eth-b: absent)"`, outcome `no_interface`, and no dial, and a remote client with `allow_direct` gets the same without `details`. A rule with `["eth-b", "eth-a"]` uses `eth-a` when `eth-b` is `link_down`. With `proxy.interfaces` unset, a request whose rule has no list dials unbound. | `TestInterfacePinning` |
 | I8 | After I6 (d), with `interface_demotion = "1s"`, the next request to another destination connects through `eth-b` without an `eth-a` dial and logs `skipped=eth-a:demoted`, `interface_state{interface="eth-a",state="demoted"}` is 1, and one `interface demoted` line with `reason=timeout` is logged. After the injected clock passes 1 s, the next request plans `eth-a` first, and one `interface restored` line with `cause=expired` is logged at that request. A notice that changes `eth-a`'s row ends a demotion at once with `cause=state_changed`. A dial in which every group timed out demotes nothing. | `TestInterfaceDemotion` |
 | I9 | With every listed interface offline, the starter `loopback` rule's targets, the literals `10.20.0.5` and `192.0.2.50` (`self` from the injected `SelfAddrs`), and a name resolving to `10.20.0.5` through an `allow_private` rule are dialed unbound, while `198.18.0.10`, a row's own address, is classified `public` and gets D10. With `eth-a` online for IPv4 only and `eth-b` for both, a name with AAAA and A records gets only the IPv4 attempt on `eth-a`, an IPv6-only name skips `eth-a` with `no_family` and connects on `eth-b`, and with no interface online for IPv6 it gets D10. A name behind an `allow_private` rule that resolves to `10.20.0.5`, which refuses, and to a public address connects through `eth-a` on the public address, as in M1.4, and so it does when the private attempt fails with `EPERM`. | `TestInterfaceAddressClasses` |
-| I10 | A plain-HTTP connection pooled under the default list on `eth-a` is not reused for a request to the same host and port under a rule pinned to `eth-b`. With `eth-a` offline a request pools a connection on `eth-b`; after a notice brings `eth-a` online, that idle connection is closed and the next request dials `eth-a`. A demotion of `eth-a` that ends with `cause=connected` closes `eth-b`'s idle connection, and one that ends with `cause=expired` leaves it open. | `TestInterfacePools` |
+| I10 | Within one snapshot and its transports, a plain-HTTP connection pooled under the default list on `eth-a` is not reused for a request to the same host and port decided under a list pinned to `eth-b`, nor under the default list's interfaces in another order; one snapshot decides a host and port one way, so the test gives the snapshot a policy with the other list while keeping its transports. With `eth-a` offline a request pools a connection on `eth-b`; after a notice brings `eth-a` online, that idle connection is closed and the next request dials `eth-a`. A demotion of `eth-a` that ends with `cause=connected` closes `eth-b`'s idle connection, and one that ends with `cause=expired` leaves it open. | `TestInterfacePools` |
 | I11 | An upstream without `interfaces` is dialed unbound while `proxy.interfaces` is set. An upstream with `["eth-a", "wifi"]` at a public test address dials `eth-a` and fails over to `wifi` on `ENETUNREACH`; at a private test address it is dialed unbound. With neither interface online the public one gets `503` with `error=destination_unavailable` and `next-hop` naming the upstream, outcome `no_interface`, no dial, and `upstream_state` stays `up`. When both groups time out, the hold starts as in [0003 U11][d3-ac]. A notice that brings `eth-a` online closes the idle connections of that upstream's transport. Two upstreams with one address and different lists keep separate holds. | `TestUpstreamInterfaces` |
 | I12 | Row changes followed by a notice give one `interface offline` line with the reason, one `interface online` line with `families` on recovery, and the matching `interface_state` gauge. An ambiguous definition, a `kind` mismatch, and a `device` with another MAC each log their D3 line once. `cuttle status` and `/v1/status` list each interface with the D15 fields, and each tunnel with its `interface`. Neither the status output, the log, the error lines of a reload that fails on a duplicate `mac` or on an unquoted MAC, which is a TOML syntax error, nor `last_reload_error` contains any test MAC in any case or separator form. | `TestInterfaceStateEvents`, `TestStatusInterfaces` |
 | I13 | A tunnel through `eth-b` keeps transferring across a reload that removes `eth-b` from every list and changes its definition; a request after the reload follows the new lists; a demotion of an unchanged definition survives a reload; an upstream whose `interfaces` changed gets a new transport and starts `up` while an unchanged one keeps its pooled connection and hold; after a reload that changes only the `mac` of a definition that an upstream's list names, that upstream's idle connection is not reused and its next request dials; adding the first definition makes one `Watch` call and removing the last ends its context; a reload that adds a definition to a proxy built without a source is refused with the cause in `last_reload_error`. | `TestReloadInterfaces` |
@@ -997,7 +1022,7 @@ injected `SelfAddrs`.
 | I16 | On darwin, the source's `Watch` opens the routing socket and the kernel event socket without privileges and closes both when its context ends. With the fake source and an injected timer, a configuration without definitions makes no `Watch` call; 20 notices within 100 ms cause exactly one re-read, when the timer reaches 200 ms after the first; a notice sent for a socket read error causes a re-read in the same way; advancing the timer by 30 s causes one safety re-read; and each successful re-read calls `SelfChanged` once. | `TestMonitor` |
 | I17 | Fixture messages classify as D5 says: `RTM_NEWADDR`, `RTM_DELADDR`, `RTM_IFINFO`, and a default-route `RTM_ADD` are notices; an `RTM_ADD` or `RTM_DELETE` with `RTF_LLINFO` or `RTF_HOST`, and an `RTM_GET`, are not; a message shorter than its header is a notice. Kernel events of the data-link, IPv4, and IPv6 subclasses are notices, and another subclass or vendor is not. | T0 `TestRouteNotice`, `TestKernelNotice` |
 | I18 | A bound dial failing with `ENXIO`, `EADDRNOTAVAIL`, or `ENETDOWN` causes one re-read when the timer reaches 200 ms. A source whose `Read` fails at start leaves every definition `offline` with reason `unknown`, logs one warning, and a direct request to a public address under a list gets `503 no_interface`; a `Read` that fails later keeps the previous table, so the request still connects, and logs one warning per run of failures. | `TestInterfaceTableFailures` |
-| I19 | `go list -deps ./cmd/cuttle` lists neither `internal/testenv` nor any package under `golang.org/x/net/` (the standard library's `vendor/golang.org/x/net` packages are allowed), and `CGO_ENABLED=0 go build ./cmd/cuttle` succeeds. | T0 gate ([0007 D7][d7-7], E2) |
+| I19 | `go list -deps ./cmd/cuttle` lists neither `internal/testenv` nor any package under `golang.org/x/net/` (the standard library's `vendor/golang.org/x/net` packages are allowed), `go list -deps -f '{{if .CgoFiles}}{{.ImportPath}}{{end}}' ./cmd/cuttle` lists no package in the default environment, and `CGO_ENABLED=0 go build ./cmd/cuttle` succeeds. | T0 gate ([0007 D7][d7-7], E2) |
 | I20 | The device check below is recorded on the user's Mac with the user's five interfaces. | T2, manual, with the user |
 
 ### Device check (I20)
@@ -1092,6 +1117,14 @@ routes); COMPATIBILITY.md (device-check rows); OPEN_ISSUES.md (OI-0008
 origin). At landing, D15 limited `skipped` to interfaces before the one
 that carried or ended the dial, and narrowed the address claim to
 interface table rows.
+
+The TASK-0009 implementation changed, to match the code: D5 and D16 (the
+`rt_msghdr` parser in cuttle, an absent mask as /0, and short kernel
+event messages as notices); D6 (the attempt-timeout warning only with a
+list); D10 (no `detail` for remote clients); D11 (every non-public class
+in group 0); D15 (tried interfaces in `skipped` wherever they come, and
+`timeout` for groups the budget never reached); Interfaces
+(`Link.Loopback`); I10 and I19; and 0007 D7 and E2 (the cgo-file check).
 
 ## Consequences
 

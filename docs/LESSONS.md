@@ -158,3 +158,24 @@ removes entries. Append new entries at the end, oldest first.
   that each start index is below its end index and that each heading
   occurs once, and print the board's headings after every edit before
   committing.
+
+### 2026-11-25 — implementer — mutations that do not compile
+
+- Task: TASK-0009, proving each M1.5 test against a mutation in a scratch
+  copy of the worktree.
+- Attempts: 2; five mutations and one test had to be redone.
+- What failed: Mutations that replaced a condition with `false`, or a
+  function body with a constant, left a loop variable, a local, or an
+  import unused, for example `if i < len(groups)-1 {` → `if false {` and
+  `return strings.Join(list, ",")` → `return ""`. The scratch copy failed
+  with `declared and not used` or `imported and not used`, `go test`
+  exited 1, and only the script's check for `[build failed]` kept those
+  runs from counting as proofs. Separately, a test whose failure path read
+  a result channel a second time blocked until `-timeout 120s` instead of
+  failing with its message.
+- What to do instead: Keep the original expression inside the mutation,
+  as in `if false && i < len(groups)-1 {` or
+  `return strings.Join(nil, ",")`, and count a run as a proof only when
+  the targeted test fails with its own message, not a build error or a
+  timeout. Make every failure path of a test finish, for example by
+  remembering a value already received from a channel.

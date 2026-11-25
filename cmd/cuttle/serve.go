@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
 	"runtime"
@@ -18,6 +19,7 @@ import (
 
 	"squid/internal/config"
 	"squid/internal/control"
+	"squid/internal/iface"
 	"squid/internal/logx"
 	"squid/internal/netx"
 	"squid/internal/paths"
@@ -40,6 +42,13 @@ type serveState struct {
 
 	// retryInterval overrides proxy.RetryInterval in tests.
 	retryInterval time.Duration
+	// network, selfAddrs, interfaces, and timers replace the system
+	// resolver and dialer, this host's addresses, the darwin interface
+	// source, and the real timers of its monitor in tests (design 0007 D3).
+	network    netx.Network
+	selfAddrs  func() []netip.Addr
+	interfaces iface.Source
+	timers     iface.Timers
 
 	p         *proxy.Proxy
 	startCfg  *config.Config // the configuration the listeners were bound with
@@ -218,9 +227,24 @@ func (s *serveState) run(stderr io.Writer, listen func(network, address string) 
 		}
 		listeners = append(listeners, l)
 	}
+	selfAddrs, selfChanged := netx.InterfaceAddrs(10 * time.Second)
+	if s.selfAddrs != nil {
+		selfAddrs = s.selfAddrs
+	}
+	var network netx.Network = netx.System{}
+	if s.network != nil {
+		network = s.network
+	}
+	var ifsrc iface.Source = iface.System{Logger: s.log}
+	if s.interfaces != nil {
+		ifsrc = s.interfaces
+	}
 	p, err := proxy.New(cfg, proxy.Deps{
-		Network:       netx.System{},
-		SelfAddrs:     netx.InterfaceAddrs(10 * time.Second),
+		Network:       network,
+		SelfAddrs:     selfAddrs,
+		SelfChanged:   selfChanged,
+		Interfaces:    ifsrc,
+		Timers:        s.timers,
 		Listeners:     listeners,
 		Retry:         retry,
 		Bind:          listen,
@@ -291,7 +315,11 @@ func (s *serveState) run(stderr io.Writer, listen func(network, address string) 
 				s.log.Warn("shutdown", "error", err.Error())
 			}
 			<-served
+			// A reload that the control socket started before it closed
+			// writes its lines before stopped.
+			s.reloadMu.Lock()
 			s.log.Info("stopped")
+			s.reloadMu.Unlock()
 			return exitOK
 		}
 	}
@@ -355,14 +383,18 @@ func (s *serveState) Status() control.Status {
 	cfg, loadedAt, rr, lastErr := s.cfg, s.loadedAt, s.restartRequired, s.lastReloadError
 	s.mu.Unlock()
 	now := time.Now()
+	// Reading the interface states first ends any expired demotion, so the
+	// counters snapshot below shows the same state in interface_state.
+	interfaces := s.p.InterfaceStatus()
 	st := control.Status{
-		Version:   version,
-		Name:      cfg.Name,
-		PID:       os.Getpid(),
-		StartedAt: s.startedAt.UTC(),
-		Paths:     s.paths.WithPresence(),
-		Listeners: []control.Listener{},
-		Upstreams: []control.Upstream{},
+		Version:    version,
+		Name:       cfg.Name,
+		PID:        os.Getpid(),
+		StartedAt:  s.startedAt.UTC(),
+		Paths:      s.paths.WithPresence(),
+		Listeners:  []control.Listener{},
+		Upstreams:  []control.Upstream{},
+		Interfaces: []control.Interface{},
 		Config: control.Config{
 			Path: s.cfgPath, SHA256: cfg.SHA256, LoadedAt: loadedAt.UTC(),
 			RestartRequired: append([]string{}, rr...), LastReloadError: lastErr,
@@ -379,9 +411,17 @@ func (s *serveState) Status() control.Status {
 		st.Upstreams = append(st.Upstreams, control.Upstream{Name: u.Name, Address: u.Address, State: u.State, Since: u.Since.UTC(),
 			DownS: u.DownFor.Round(time.Millisecond).Seconds(), FailedFast: u.FailedFast, LastError: u.LastError})
 	}
+	for _, i := range interfaces {
+		ci := control.Interface{Name: i.Name, Device: i.Device, State: i.State, Reason: i.Reason,
+			Families: i.Families.List(), Primary: i.Primary.List(), Since: i.Since.UTC()}
+		if !i.DemotedUntil.IsZero() {
+			ci.DemotedUntil = i.DemotedUntil.UTC().Format(time.RFC3339)
+		}
+		st.Interfaces = append(st.Interfaces, ci)
+	}
 	for _, t := range s.p.Tunnels() {
 		st.Tunnels = append(st.Tunnels, control.Tunnel{Target: t.Target, Kind: t.Kind, Action: t.Action, Upstream: t.Upstream,
-			Source: t.Source, AgeS: int64(now.Sub(t.Started) / time.Second), Up: t.Up, Down: t.Down})
+			Source: t.Source, Interface: t.Interface, AgeS: int64(now.Sub(t.Started) / time.Second), Up: t.Up, Down: t.Down})
 	}
 	var rl syscall.Rlimit
 	if syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rl) == nil {

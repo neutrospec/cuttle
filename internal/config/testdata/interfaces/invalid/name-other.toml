@@ -1,0 +1,7 @@
+# want: 6 interface[1].name: is reserved
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[interface]]
+name = "other"
+mac = "00:00:5e:00:53:0a"

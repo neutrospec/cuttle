@@ -196,7 +196,7 @@ disclosure = "none"
 		t.Errorf("exit status %d after SIGTERM: %s", code, stderr.String())
 	}
 	log, _ = os.ReadFile(s2.paths.Log.Path)
-	if want := "source=remote kind=connect target=wiki.internal.example:443 rule=remote-default action=upstream upstream=gw outcome=upstream_status status=502"; !strings.Contains(string(log), want) {
+	if want := "source=remote kind=connect target=wiki.internal.example:443 rule=remote-default action=upstream upstream=gw interface=\"\" outcome=upstream_status status=502"; !strings.Contains(string(log), want) {
 		t.Errorf("log lacks %q:\n%s", want, log)
 	}
 }

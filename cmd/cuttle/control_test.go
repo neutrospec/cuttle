@@ -635,9 +635,9 @@ func TestServeSIGTERM(t *testing.T) {
 	}
 	log, _ := os.ReadFile(sb.LogPath())
 	for _, want := range []string{
-		"kind=connect target=" + target + " rule=loopback action=direct upstream=\"\" outcome=shutdown status=200",
-		"kind=http target=" + target + " rule=loopback action=direct upstream=\"\" outcome=shutdown status=101",
-		"kind=http target=" + target + " rule=loopback action=direct upstream=\"\" outcome=ok status=200",
+		"kind=connect target=" + target + " rule=loopback action=direct upstream=\"\" interface=\"\" outcome=shutdown status=200",
+		"kind=http target=" + target + " rule=loopback action=direct upstream=\"\" interface=\"\" outcome=shutdown status=101",
+		"kind=http target=" + target + " rule=loopback action=direct upstream=\"\" interface=\"\" outcome=ok status=200",
 		"msg=stopping signal=terminated", "msg=stopped",
 	} {
 		if !strings.Contains(string(log), want) {

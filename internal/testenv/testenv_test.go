@@ -15,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"squid/internal/netx"
 )
 
 // TestBinaryHelperIsolation checks E6 without starting a process: the
@@ -196,18 +198,18 @@ func TestNetRecords(t *testing.T) {
 	if _, err := n.LookupNetIP(ctx, "unknown.cuttle.test"); !errors.As(err, &de) || !de.IsNotFound {
 		t.Errorf("unknown: %v", err)
 	}
-	c, err := n.DialContext(ctx, netip.MustParseAddrPort("203.0.113.1:443"))
+	c, err := n.DialContext(ctx, netip.MustParseAddrPort("203.0.113.1:443"), netx.Binding{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	c.Close()
-	if _, err := n.DialContext(ctx, netip.MustParseAddrPort("203.0.113.2:443")); err == nil {
+	if _, err := n.DialContext(ctx, netip.MustParseAddrPort("203.0.113.2:443"), netx.Binding{}); err == nil {
 		t.Error("unrouted dial succeeded")
 	}
 	tctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	if _, err := n.DialContext(tctx, netip.MustParseAddrPort("203.0.113.9:443")); err == nil || time.Since(start) < 40*time.Millisecond {
+	if _, err := n.DialContext(tctx, netip.MustParseAddrPort("203.0.113.9:443"), netx.Binding{}); err == nil || time.Since(start) < 40*time.Millisecond {
 		t.Errorf("blackhole: %v after %v", err, time.Since(start))
 	}
 	var got []string

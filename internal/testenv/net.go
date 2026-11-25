@@ -5,14 +5,19 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"os"
 	"sync"
 	"syscall"
 	"time"
+
+	"squid/internal/netx"
 )
 
 // Net implements the Network seam for tests (design 0007 D3). Lookups answer
 // from a map; dials go to real mock listeners on 127.0.0.1 through routes
-// from test addresses. Every lookup and dial is recorded in order.
+// from test addresses. Every lookup and dial is recorded in order, each
+// dial with its interface binding. A test can give an interface and
+// address its own behavior (design 0008 Interfaces).
 type Net struct {
 	mu        sync.Mutex
 	names     map[string]nameEntry
@@ -20,8 +25,36 @@ type Net struct {
 	blackhole map[netip.Addr]bool
 	holePorts map[netip.AddrPort]bool
 	limits    map[netip.AddrPort]int
+	bound     map[boundKey]Behavior
 	events    []Event
 }
+
+// boundKey selects the dials bound to one interface: to one address and
+// port, to one address on every port, or, with neither, to every address.
+type boundKey struct {
+	iface string
+	addr  netip.Addr
+	port  uint16
+}
+
+// Behavior is what a dial bound to an interface does (design 0007 D3).
+type Behavior struct {
+	kind  int
+	errno syscall.Errno
+}
+
+// Behaviors of a bound dial.
+var (
+	// Route dials as an unbound dial to the address would.
+	Route = Behavior{kind: 1}
+	// Refuse fails with ECONNREFUSED.
+	Refuse = Behavior{kind: 2, errno: syscall.ECONNREFUSED}
+	// Blackhole blocks until the context ends.
+	Blackhole = Behavior{kind: 3}
+)
+
+// Errno fails a bound dial with errno, as a real connect would report it.
+func Errno(e syscall.Errno) Behavior { return Behavior{kind: 2, errno: e} }
 
 type nameEntry struct {
 	addrs []netip.Addr
@@ -35,11 +68,18 @@ type Event struct {
 	Host string // lookups
 	Addr netip.AddrPort
 	Err  string
+	// Interface is the name of a dial's binding; "" for an unbound dial.
+	Interface string
+	Index     int
+	At        time.Time
 }
 
 func (e Event) String() string {
 	if e.Op == "lookup" {
 		return "lookup " + e.Host
+	}
+	if e.Interface != "" {
+		return "dial " + e.Addr.String() + " via " + e.Interface
 	}
 	return "dial " + e.Addr.String()
 }
@@ -52,7 +92,63 @@ func NewNet() *Net {
 		blackhole: map[netip.Addr]bool{},
 		holePorts: map[netip.AddrPort]bool{},
 		limits:    map[netip.AddrPort]int{},
+		bound:     map[boundKey]Behavior{},
 	}
+}
+
+// OnInterface gives dials bound to the interface named iface a behavior;
+// iface "" selects unbound dials. addr is an address and port, an address
+// for every port, or "" for every address. The most specific setting
+// applies; without one, a bound dial behaves as an unbound dial to its
+// address.
+func (n *Net) OnInterface(iface, addr string, b Behavior) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.bound[parseBoundKey(iface, addr)] = b
+}
+
+// ClearInterface removes every behavior of the interface.
+func (n *Net) ClearInterface(iface string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	for k := range n.bound {
+		if k.iface == iface {
+			delete(n.bound, k)
+		}
+	}
+}
+
+func parseBoundKey(iface, addr string) boundKey {
+	k := boundKey{iface: iface}
+	switch {
+	case addr == "":
+	case netip.MustParseAddr(stripPort(addr)).IsValid() && addr != stripPort(addr):
+		ap := netip.MustParseAddrPort(addr)
+		k.addr, k.port = ap.Addr(), ap.Port()
+	default:
+		k.addr = netip.MustParseAddr(addr)
+	}
+	return k
+}
+
+// stripPort returns the address part of "addr:port" or "[addr]:port", or
+// addr itself.
+func stripPort(s string) string {
+	if ap, err := netip.ParseAddrPort(s); err == nil {
+		return ap.Addr().String()
+	}
+	return s
+}
+
+// boundBehavior returns the behavior for a bound dial; the caller holds
+// n.mu.
+func (n *Net) boundBehavior(iface string, ap netip.AddrPort) (Behavior, bool) {
+	for _, k := range []boundKey{{iface, ap.Addr(), ap.Port()}, {iface, ap.Addr(), 0}, {iface: iface}} {
+		if b, ok := n.bound[k]; ok {
+			return b, true
+		}
+	}
+	return Behavior{}, false
 }
 
 // LimitWrites makes each connection dialed to the test address accept at
@@ -145,6 +241,17 @@ func (n *Net) Lookups() []string {
 	return out
 }
 
+// DialEvents returns the recorded dials in order.
+func (n *Net) DialEvents() []Event {
+	var out []Event
+	for _, e := range n.Events() {
+		if e.Op == "dial" {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 // Dials returns the addresses dialed, in order.
 func (n *Net) Dials() []netip.AddrPort {
 	var out []netip.AddrPort
@@ -187,18 +294,31 @@ func (n *Net) LookupNetIP(ctx context.Context, host string) ([]netip.Addr, error
 }
 
 // DialContext connects a routed test address to its real listener. An
-// unrouted address is refused; a blackholed one blocks until ctx ends.
-func (n *Net) DialContext(ctx context.Context, addr netip.AddrPort) (net.Conn, error) {
+// unrouted address is refused; a blackholed one blocks until ctx ends. A
+// dial bound to an interface with its own behavior follows that behavior
+// instead.
+func (n *Net) DialContext(ctx context.Context, addr netip.AddrPort, b netx.Binding) (net.Conn, error) {
 	n.mu.Lock()
 	real, ok := n.routes[addr]
 	limit, limited := n.limits[addr]
 	hole := n.blackhole[addr.Addr()] || n.holePorts[addr]
-	n.events = append(n.events, Event{Op: "dial", Addr: addr})
+	var fail syscall.Errno
+	if bh, set := n.boundBehavior(b.Name, addr); set {
+		switch bh.kind {
+		case 2:
+			fail = bh.errno
+		case 3:
+			hole = true
+		}
+	}
+	n.events = append(n.events, Event{Op: "dial", Addr: addr, Interface: b.Name, Index: b.Index, At: time.Now()})
 	n.mu.Unlock()
 	opErr := func(err error) error {
 		return &net.OpError{Op: "dial", Net: "tcp", Addr: net.TCPAddrFromAddrPort(addr), Err: err}
 	}
 	switch {
+	case fail != 0:
+		return nil, opErr(&os.SyscallError{Syscall: "connect", Err: fail})
 	case hole:
 		<-ctx.Done()
 		return nil, opErr(ctx.Err())

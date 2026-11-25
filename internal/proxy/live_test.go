@@ -497,10 +497,6 @@ func bodyMask(t *testing.T, wire []byte) []bool {
 	return mask
 }
 
-// TestUpgradedConnections checks OI-0006 R5: a connection upgraded after a
-// 101 is tracked like a tunnel. Status lists it, the idle limit closes it,
-// and Shutdown closes it with outcome shutdown (design 0002 D5, 0006 D6).
-// An exchange still in flight when the drain ends also logs shutdown.
 // upgrade opens an absolute-form WebSocket through the instance and
 // completes one echo of "ping".
 func upgrade(t *testing.T, e *env) (net.Conn, *bufio.Reader) {
@@ -520,6 +516,10 @@ func upgrade(t *testing.T, e *env) (net.Conn, *bufio.Reader) {
 	return c, br
 }
 
+// TestUpgradedConnections checks OI-0006 R5: a connection upgraded after a
+// 101 is tracked like a tunnel. Status lists it, the idle limit closes it,
+// and Shutdown closes it with outcome shutdown (design 0002 D5, 0006 D6).
+// An exchange still in flight when the drain ends also logs shutdown.
 func TestUpgradedConnections(t *testing.T) {
 	closedWithin := func(t *testing.T, br *bufio.Reader, max time.Duration) time.Duration {
 		t.Helper()

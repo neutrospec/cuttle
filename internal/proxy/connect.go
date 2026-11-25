@@ -20,11 +20,12 @@ const connectEstablished = "HTTP/1.1 200 Connection established\r\n\r\n"
 // connectDirect dials the target, writes the exact 200, and relays bytes,
 // starting with any bytes the client pipelined after its head.
 func (p *Proxy) connectDirect(w http.ResponseWriter, r *http.Request, ex *exchange) {
-	server, err := ex.snap.dialer.Dial(r.Context(), ex.d)
+	server, info, err := ex.snap.dialer.Dial(r.Context(), ex.d)
 	if err != nil {
 		p.dialFailure(w, ex, err)
 		return
 	}
+	p.useConn(ex, server, info, true)
 	p.establish(w, ex, server, nil)
 }
 
@@ -102,14 +103,15 @@ func (p *Proxy) untrack(t tracked) {
 // trackedStatus describes the exchange of a tracked connection.
 func trackedStatus(ex *exchange, kind string) TunnelStatus {
 	return TunnelStatus{
-		Target:   ex.target,
-		Kind:     kind,
-		Action:   ex.d.Action.String(),
-		Upstream: ex.d.Upstream,
-		Source:   ex.source.String(),
-		Started:  ex.start,
-		Up:       ex.up.Load(),
-		Down:     ex.down.Load(),
+		Target:    ex.target,
+		Kind:      kind,
+		Action:    ex.d.Action.String(),
+		Upstream:  ex.d.Upstream,
+		Source:    ex.source.String(),
+		Interface: ex.ifaceName(),
+		Started:   ex.start,
+		Up:        ex.up.Load(),
+		Down:      ex.down.Load(),
 	}
 }
 

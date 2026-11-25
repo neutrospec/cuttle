@@ -1,0 +1,11 @@
+# want: 11 interface[2].mac: duplicate of interface[1].mac
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[interface]]
+name = "eth-a"
+mac = "00:00:5e:00:53:0a"
+
+[[interface]]
+name = "eth-b"
+mac = "00:00:5E:00:53:0A"

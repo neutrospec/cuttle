@@ -8,12 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/netip"
 	"os"
 	"slices"
 	"strings"
 	"time"
 
+	"squid/internal/iface"
 	"squid/internal/policy"
 )
 
@@ -29,6 +31,9 @@ type Config struct {
 	Admin     Admin
 	Stats     Stats
 	Log       Log
+	// Interfaces are the [[interface]] definitions in file order (design
+	// 0008 D2).
+	Interfaces []Interface
 
 	// SHA256 is the hex digest of the file content.
 	SHA256 string
@@ -43,6 +48,15 @@ type Proxy struct {
 	IdleTimeout     time.Duration
 	MaxConnections  int
 	Remote          Remote
+	// Interfaces is the default interface list of direct routes; empty
+	// follows system routing (design 0008 D6).
+	Interfaces []string
+	// InterfaceAttemptTimeout is the connect time each interface group but
+	// the last gets (design 0008 D8).
+	InterfaceAttemptTimeout time.Duration
+	// InterfaceDemotion is how long a demoted interface stays behind the
+	// others; 0 disables demotion (design 0008 D9).
+	InterfaceDemotion time.Duration
 }
 
 // Remote is the [proxy.remote] table.
@@ -68,6 +82,50 @@ type Upstream struct {
 	ConnectTimeout  time.Duration
 	ResponseTimeout time.Duration
 	UnreachableHold time.Duration
+	// Interfaces is the upstream's own interface list; nil follows system
+	// routing (design 0008 D11).
+	Interfaces []string
+}
+
+// Equal reports whether two upstream entries have the same settings.
+func (u Upstream) Equal(o Upstream) bool {
+	return u.Name == o.Name && u.Address == o.Address && u.Disclosure == o.Disclosure &&
+		u.ConnectTimeout == o.ConnectTimeout && u.ResponseTimeout == o.ResponseTimeout &&
+		u.UnreachableHold == o.UnreachableHold && slices.Equal(u.Interfaces, o.Interfaces) &&
+		(u.Interfaces == nil) == (o.Interfaces == nil)
+}
+
+// Interface is one [[interface]] definition (design 0008 D2).
+type Interface struct {
+	Name   string
+	MAC    net.HardwareAddr // nil when unset
+	Device string           // "" when unset
+	Kind   string           // wired, wifi, cellular, or "" when unset
+}
+
+// Def returns the definition for the interface monitor.
+func (i Interface) Def() iface.Def {
+	k, _ := iface.ParseKind(i.Kind)
+	return iface.Def{Name: i.Name, MAC: i.MAC, Device: i.Device, Kind: k}
+}
+
+// Defs returns every definition for the interface monitor.
+func (c *Config) Defs() []iface.Def {
+	out := make([]iface.Def, len(c.Interfaces))
+	for i, d := range c.Interfaces {
+		out[i] = d.Def()
+	}
+	return out
+}
+
+// Interface returns the named definition.
+func (c *Config) Interface(name string) (Interface, bool) {
+	for _, d := range c.Interfaces {
+		if d.Name == name {
+			return d, true
+		}
+	}
+	return Interface{}, false
 }
 
 // Admin is the [admin] table. An empty Listen disables the admin UI.
@@ -94,6 +152,7 @@ func (c *Config) PolicySettings() policy.Settings {
 		RemoteDefault:     c.Proxy.Remote.Default,
 		RemotePorts:       c.Proxy.Remote.Ports,
 		RemoteAllowDirect: c.Proxy.Remote.AllowDirect,
+		Interfaces:        c.Proxy.Interfaces,
 	}
 }
 

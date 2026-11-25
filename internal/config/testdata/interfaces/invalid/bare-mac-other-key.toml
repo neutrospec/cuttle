@@ -1,0 +1,6 @@
+# want: 6 notes.adapter: TOML syntax: invalid value; put it in double quotes
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[notes]
+adapter = 00005e005312

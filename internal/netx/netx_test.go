@@ -112,7 +112,7 @@ func (f *fakeNet) LookupNetIP(ctx context.Context, host string) ([]netip.Addr, e
 	return nil, &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
 }
 
-func (f *fakeNet) DialContext(ctx context.Context, ap netip.AddrPort) (net.Conn, error) {
+func (f *fakeNet) DialContext(ctx context.Context, ap netip.AddrPort, _ Binding) (net.Conn, error) {
 	f.mu.Lock()
 	f.dials = append(f.dials, ap)
 	mode := f.dial[ap]
@@ -154,7 +154,7 @@ func TestDialerPolicyAndErrors(t *testing.T) {
 	}
 
 	// A name with a private and a public address is dialed on the public one.
-	c, err := dl.Dial(context.Background(), dec("mixed.example:443"))
+	c, _, err := dl.Dial(context.Background(), dec("mixed.example:443"))
 	if err != nil {
 		t.Fatalf("mixed: %v", err)
 	}
@@ -165,14 +165,14 @@ func TestDialerPolicyAndErrors(t *testing.T) {
 
 	// A name resolving to loopback is refused without a dial.
 	fn.dials = nil
-	_, err = dl.Dial(context.Background(), dec("lo.example:443"))
+	_, _, err = dl.Dial(context.Background(), dec("lo.example:443"))
 	var de *DialError
 	if !errors.As(err, &de) || de.Type != ErrProhibited || len(fn.dials) != 0 {
 		t.Fatalf("lo: err %v dials %v", err, fn.dials)
 	}
 
 	// Unknown names are DNS errors.
-	_, err = dl.Dial(context.Background(), dec("unknown.example:443"))
+	_, _, err = dl.Dial(context.Background(), dec("unknown.example:443"))
 	if !errors.As(err, &de) || de.Type != ErrDNS {
 		t.Fatalf("unknown: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestDialerPolicyAndErrors(t *testing.T) {
 	// The second address starts after the stagger and wins.
 	fn.dials = nil
 	start := time.Now()
-	c, err = dl.Dial(context.Background(), dec("slow.example:443"))
+	c, _, err = dl.Dial(context.Background(), dec("slow.example:443"))
 	if err != nil {
 		t.Fatalf("slow: %v", err)
 	}
@@ -190,12 +190,12 @@ func TestDialerPolicyAndErrors(t *testing.T) {
 	}
 
 	// A refused literal is connection_refused; a hanging one times out.
-	_, err = dl.Dial(context.Background(), dec("203.0.113.99:443"))
+	_, _, err = dl.Dial(context.Background(), dec("203.0.113.99:443"))
 	if !errors.As(err, &de) || de.Type != ErrRefused {
 		t.Fatalf("refused: %v", err)
 	}
 	dl.Timeout = 200 * time.Millisecond
-	_, err = dl.Dial(context.Background(), dec("dead.example:443"))
+	_, _, err = dl.Dial(context.Background(), dec("dead.example:443"))
 	if !errors.As(err, &de) || de.Type != ErrTimeout {
 		t.Fatalf("timeout: %v", err)
 	}

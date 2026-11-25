@@ -1,0 +1,7 @@
+# want: 7 interface[1].mac: is a group address
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[interface]]
+name = "eth-a"
+mac = "01:00:5e:90:10:01"

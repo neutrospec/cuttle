@@ -1,0 +1,23 @@
+# warn: 18 upstream[1].interfaces: loopback or private literal
+name = "cuttle-test"
+[proxy]
+default = "direct"
+
+[[interface]]
+name = "eth-a"
+mac = "00:00:5e:00:53:0a"
+
+[[interface]]
+name = "eth-b"
+mac = "00:00:5e:00:53:0b"
+
+[[upstream]]
+name = "gateway"
+address = "10.8.0.6:3128"
+disclosure = "via"
+interfaces = ["eth-a"]
+
+[[rule]]
+name = "restricted"
+domains = ["internal.example"]
+action = "upstream:gateway"

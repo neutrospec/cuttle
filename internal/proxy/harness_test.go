@@ -61,6 +61,12 @@ type envOptions struct {
 	listener net.Listener
 	// clock is the unreachable hold's clock; nil means time.Now.
 	clock func() time.Time
+	// interfaces, timers, and selfChanged are the interface source, the
+	// timer of its monitor, and the hook called after each re-read (design
+	// 0008 Interfaces); nil leaves them out.
+	interfaces  *testenv.Interfaces
+	timers      *testenv.Timers
+	selfChanged func()
 }
 
 // env is one in-process cuttle instance with mock origins behind the test
@@ -172,13 +178,21 @@ func (e *env) start(cfgText string, opt envOptions) {
 	if opt.logWriter != nil {
 		w = io.MultiWriter(e.logs, opt.logWriter)
 	}
-	p, err := New(cfg, Deps{
-		Network:   n,
-		SelfAddrs: testenv.SelfAddrs,
-		Listeners: listeners,
-		Logger:    logx.NewLogger(w, slog.LevelDebug),
-		Clock:     opt.clock,
-	})
+	deps := Deps{
+		Network:     n,
+		SelfAddrs:   testenv.SelfAddrs,
+		Listeners:   listeners,
+		Logger:      logx.NewLogger(w, slog.LevelDebug),
+		Clock:       opt.clock,
+		SelfChanged: opt.selfChanged,
+	}
+	if opt.interfaces != nil {
+		deps.Interfaces = opt.interfaces
+	}
+	if opt.timers != nil {
+		deps.Timers = opt.timers
+	}
+	p, err := New(cfg, deps)
 	if err != nil {
 		t.Fatal(err)
 	}

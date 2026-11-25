@@ -1,0 +1,8 @@
+# want: 7 interface[1].device: names a loopback interface
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[interface]]
+name = "lo"
+device = "lo0"
+kind = "wired"

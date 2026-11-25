@@ -1,0 +1,8 @@
+# want: 7 upstream[1].address: "<redacted>" is not host:port
+name = "cuttle-test"
+[proxy]
+default = "upstream:x"
+[[upstream]]
+name = "x"
+address = "00:00:5e:00:53:28"
+disclosure = "none"

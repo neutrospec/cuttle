@@ -1,0 +1,5 @@
+# want: 5 proxy.<redacted>: unknown key
+name = "cuttle-test"
+[proxy]
+default = "direct"
+"00-00-5E-00-53-24" = 1

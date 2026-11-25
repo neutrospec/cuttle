@@ -1,0 +1,7 @@
+# want: 7 interface[1].mac: not a hardware address
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[interface]]
+name = "eth-a"
+mac = "00-00-5e-00-53-0a"

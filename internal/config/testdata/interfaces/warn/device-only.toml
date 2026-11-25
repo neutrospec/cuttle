@@ -1,0 +1,7 @@
+# warn: 7 interface[1].device: with neither mac nor kind
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[interface]]
+name = "wifi"
+device = "en0"

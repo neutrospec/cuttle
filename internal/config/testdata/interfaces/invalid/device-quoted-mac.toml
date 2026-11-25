@@ -1,0 +1,7 @@
+# want: 7 interface[1].device: not a BSD name such as en0
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[interface]]
+name = "eth-a"
+device = "00:00:5e:00:53:0e"

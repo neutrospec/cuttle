@@ -106,6 +106,9 @@ type Rule struct {
 	Route         Route
 	AllowLoopback bool
 	AllowPrivate  bool
+	// Interfaces is the rule's interface list, which replaces the default
+	// list on a direct route; nil when the rule has none (design 0008 D6).
+	Interfaces []string
 }
 
 // Settings is the routing part of a configuration.
@@ -115,6 +118,9 @@ type Settings struct {
 	RemoteDefault     Route
 	RemotePorts       []uint16
 	RemoteAllowDirect bool
+	// Interfaces is proxy.interfaces, the default list of direct routes;
+	// empty follows system routing (design 0008 D6).
+	Interfaces []string
 }
 
 // Decision is the route chosen for one request.
@@ -132,6 +138,9 @@ type Decision struct {
 	Upstream      string
 	AllowLoopback bool
 	AllowPrivate  bool
+	// Interfaces is the list in force for a direct route: the rule's list,
+	// else proxy.interfaces; empty follows system routing (design 0008 D6).
+	Interfaces []string
 }
 
 // Route returns the decision's action and upstream.
@@ -156,6 +165,7 @@ func (p *Policy) Decide(t authority.Authority, k Kind, s SourceClass) Decision {
 		return d
 	}
 	matched := false
+	var list []string
 	for i := range p.s.Rules {
 		r := &p.s.Rules[i]
 		if r.matches(t) {
@@ -164,6 +174,7 @@ func (p *Policy) Decide(t authority.Authority, k Kind, s SourceClass) Decision {
 			if s == SourceLocal && r.Route.Action == ActionDirect {
 				d.AllowLoopback, d.AllowPrivate = r.AllowLoopback, r.AllowPrivate
 			}
+			list = r.Interfaces
 			matched = true
 			break
 		}
@@ -177,6 +188,14 @@ func (p *Policy) Decide(t authority.Authority, k Kind, s SourceClass) Decision {
 	}
 	if s == SourceRemote && d.Action == ActionDirect && !p.s.RemoteAllowDirect {
 		d = Decision{Target: t, Kind: k, Source: s, Rule: RuleRemoteDirect, Action: ActionBlock}
+	}
+	if d.Action == ActionDirect {
+		if list == nil {
+			list = p.s.Interfaces
+		}
+		if len(list) > 0 {
+			d.Interfaces = list
+		}
 	}
 	return d
 }
