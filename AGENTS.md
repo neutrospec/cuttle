@@ -149,12 +149,26 @@ quick check yourself.
    landing. Findings identify severity, location, impact, and the step that
    owns the fix. Route design findings to design and implementation findings
    to the producer. Corrections go through the applicable tests and fresh
-   review.
+   review. Review depth follows risk:
+   - Reviewers concentrate on correctness, security, privacy, and the
+     acceptance criteria. They report a test gap only when a plausible
+     defect would go unnoticed, not to complete coverage.
+   - Blocking and major findings, and medium findings on security or
+     privacy, return the change for one fix round and a re-check of the
+     fixes only.
+   - Other medium, minor, and nit findings do not block landing. The
+     orchestrator records them in [OPEN_ISSUES.md](docs/OPEN_ISSUES.md),
+     and the next task that touches the code settles them.
+   - Mutation proofs are required for security- and privacy-relevant
+     behavior and for criteria the reviewer doubts, not for every test.
 5. **Approval.** The orchestrator approves when the acceptance criteria and
    review support it. The producer handles routine integration and any
    authorized push. Infra handles conflicts or concurrent writers. Check that
    the landed tree matches the verified tree or run the gates the new tree
    requires.
+
+Milestone-close checks, such as client and device checks, run alongside the
+next milestone's work unless their outcome would change that work.
 
 Track each change in [TASKS.md](docs/TASKS.md) under the
 [task rules](#tasks). Allow at most three iterations per work loop. After the
