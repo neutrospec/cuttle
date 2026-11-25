@@ -46,14 +46,14 @@ A closed task becomes one line under Closed:
 - Milestone: M1.5 (new)
 - Status: design
 - Iteration: 1/3
-- Workers: researcher in the main checkout (research note 0003 only), then
-  a designer after TASK-0007 lands
-- Base: `05e6109` plus this board update
+- Workers: researcher done (note 0003 landed in `df894eb`); designer next,
+  after TASK-0007 lands
+- Base: `df894eb`
 - Candidate: none
-- Evidence: none
+- Evidence: research note 0003; OI-0007 opened for local network privacy
 - Findings: none
-- Next action: researcher — write research note 0003 on macOS interface
-  binding, interface state, and network identity
+- Next action: designer — after TASK-0007 lands, design M1.5 from note 0003
+  and return the candidate commit for review
 
 Decisions for TASK-0008 from the user (2026-11-25):
 
