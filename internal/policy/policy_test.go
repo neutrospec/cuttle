@@ -44,47 +44,46 @@ func TestPolicyTable(t *testing.T) {
 		RemotePorts:   []uint16{80, 443},
 	})
 	cases := []struct {
-		target    string
-		src       SourceClass
-		rule      string
-		index     int
-		route     string
-		loopback  bool
-		private   bool
-		nameMatch bool
+		target   string
+		src      SourceClass
+		rule     string
+		index    int
+		route    string
+		loopback bool
+		private  bool
 	}{
-		{"localhost:3000", SourceLocal, "loopback", 1, "direct", true, false, true},
-		{"127.0.0.1:8443", SourceLocal, "loopback", 1, "direct", true, false, true},
-		{"[::1]:22", SourceLocal, "loopback", 1, "direct", true, false, true},
+		{"localhost:3000", SourceLocal, "loopback", 1, "direct", true, false},
+		{"127.0.0.1:8443", SourceLocal, "loopback", 1, "direct", true, false},
+		{"[::1]:22", SourceLocal, "loopback", 1, "direct", true, false},
 		// Names never match cidrs; IP literals never match hosts or domains.
-		{"127.0.0.1.nip.example:80", SourceLocal, "default", 0, "direct", false, false, false},
-		{"ads.example.net:443", SourceLocal, "ads", 2, "block", false, false, true},
-		{"x.ads.example.net:443", SourceLocal, "ads", 2, "block", false, false, true},
-		{"badads.example.net:443", SourceLocal, "default", 0, "direct", false, false, false},
-		{"example.net:443", SourceLocal, "default", 0, "direct", false, false, false},
-		{"internal.example:443", SourceLocal, "restricted", 3, "upstream:gateway", false, false, true},
-		{"wiki.internal.example:443", SourceLocal, "restricted", 3, "upstream:gateway", false, false, true},
-		{"a.b.internal.example:8080", SourceLocal, "restricted", 3, "upstream:gateway", false, false, true},
-		{"badinternal.example:443", SourceLocal, "default", 0, "direct", false, false, false},
-		{"exact.example:443", SourceLocal, "exact", 5, "block", false, false, true},
-		{"sub.exact.example:443", SourceLocal, "default", 0, "direct", false, false, false},
-		{"ports.example:22", SourceLocal, "ssh-only", 6, "block", false, false, true},
-		{"ports.example:443", SourceLocal, "default", 0, "direct", false, false, false},
-		{"nas.lan:443", SourceLocal, "lan", 7, "direct", false, true, true},
-		{"10.1.2.3:443", SourceLocal, "net10", 8, "upstream:gateway", false, false, true},
-		{"11.1.2.3:443", SourceLocal, "default", 0, "direct", false, false, false},
-		{"[2001:db8::1]:443", SourceLocal, "v6doc", 9, "block", false, false, true},
-		{"anything.example:8081", SourceLocal, "port-8081", 10, "block", false, false, true},
-		{"192.0.2.1:8081", SourceLocal, "port-8081", 10, "block", false, false, true},
+		{"127.0.0.1.nip.example:80", SourceLocal, "default", 0, "direct", false, false},
+		{"ads.example.net:443", SourceLocal, "ads", 2, "block", false, false},
+		{"x.ads.example.net:443", SourceLocal, "ads", 2, "block", false, false},
+		{"badads.example.net:443", SourceLocal, "default", 0, "direct", false, false},
+		{"example.net:443", SourceLocal, "default", 0, "direct", false, false},
+		{"internal.example:443", SourceLocal, "restricted", 3, "upstream:gateway", false, false},
+		{"wiki.internal.example:443", SourceLocal, "restricted", 3, "upstream:gateway", false, false},
+		{"a.b.internal.example:8080", SourceLocal, "restricted", 3, "upstream:gateway", false, false},
+		{"badinternal.example:443", SourceLocal, "default", 0, "direct", false, false},
+		{"exact.example:443", SourceLocal, "exact", 5, "block", false, false},
+		{"sub.exact.example:443", SourceLocal, "default", 0, "direct", false, false},
+		{"ports.example:22", SourceLocal, "ssh-only", 6, "block", false, false},
+		{"ports.example:443", SourceLocal, "default", 0, "direct", false, false},
+		{"nas.lan:443", SourceLocal, "lan", 7, "direct", false, true},
+		{"10.1.2.3:443", SourceLocal, "net10", 8, "upstream:gateway", false, false},
+		{"11.1.2.3:443", SourceLocal, "default", 0, "direct", false, false},
+		{"[2001:db8::1]:443", SourceLocal, "v6doc", 9, "block", false, false},
+		{"anything.example:8081", SourceLocal, "port-8081", 10, "block", false, false},
+		{"192.0.2.1:8081", SourceLocal, "port-8081", 10, "block", false, false},
 
 		// Remote clients: port policy first, then rules, then the remote
 		// default; direct needs allow_direct; flags never apply.
-		{"wiki.internal.example:22", SourceRemote, "port", 0, "block", false, false, false},
-		{"wiki.internal.example:443", SourceRemote, "restricted", 3, "upstream:gateway", false, false, true},
-		{"unmatched.example:443", SourceRemote, "remote-default", 0, "block", false, false, false},
-		{"public.example:443", SourceRemote, "remote-direct", 0, "block", false, false, false},
-		{"localhost:80", SourceRemote, "remote-direct", 0, "block", false, false, false},
-		{"ads.example.net:80", SourceRemote, "ads", 2, "block", false, false, true},
+		{"wiki.internal.example:22", SourceRemote, "port", 0, "block", false, false},
+		{"wiki.internal.example:443", SourceRemote, "restricted", 3, "upstream:gateway", false, false},
+		{"unmatched.example:443", SourceRemote, "remote-default", 0, "block", false, false},
+		{"public.example:443", SourceRemote, "remote-direct", 0, "block", false, false},
+		{"localhost:80", SourceRemote, "remote-direct", 0, "block", false, false},
+		{"ads.example.net:80", SourceRemote, "ads", 2, "block", false, false},
 	}
 	for _, c := range cases {
 		d := p.Decide(mustConnect(t, c.target), KindConnect, c.src)

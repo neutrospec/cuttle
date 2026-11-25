@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"net/netip"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -519,4 +521,96 @@ func TestWebSocket(t *testing.T) {
 	checkDecision(t, byTarget(t, ds, "connect", "ws.cuttle.test:80"), map[string]string{"outcome": "ok", "status": "200"})
 	checkDecision(t, byTarget(t, ds, "connect", "ws.cuttle.test:443"), map[string]string{"outcome": "ok", "status": "200"})
 	checkDecision(t, byTarget(t, ds, "http", "ws.cuttle.test:80"), map[string]string{"status": "101", "outcome": "ok"})
+}
+
+// TestTunnelIdleTimeout checks the relay's idle limit (design 0002 D5): a
+// tunnel with no bytes in either direction for proxy.idle_timeout closes,
+// and an active one stays open.
+func TestTunnelIdleTimeout(t *testing.T) {
+	cfg := strings.Replace(baseConfig, `default = "direct"`, "default = \"direct\"\nidle_timeout = \"300ms\"", 1)
+	e := newEnv(t, cfg)
+
+	active := e.connectRaw("plain.cuttle.test:80")
+	br := bufio.NewReader(active)
+	for range 4 {
+		io.WriteString(active, "GET /echo HTTP/1.1\r\nHost: plain.cuttle.test\r\n\r\n")
+		res, err := http.ReadResponse(br, nil)
+		if err != nil {
+			t.Fatalf("active tunnel closed early: %v", err)
+		}
+		io.Copy(io.Discard, res.Body)
+		res.Body.Close()
+		time.Sleep(150 * time.Millisecond)
+	}
+
+	idle := e.connectRaw("plain.cuttle.test:80")
+	start := time.Now()
+	idle.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if n, err := idle.Read(make([]byte, 1)); n != 0 || err == nil {
+		t.Fatalf("idle tunnel read %d %v", n, err)
+	}
+	if el := time.Since(start); el < 250*time.Millisecond || el > 2*time.Second {
+		t.Errorf("idle tunnel closed after %v", el)
+	}
+	active.Close()
+	ds := e.waitDecisions(2)
+	for _, d := range ds {
+		checkDecision(t, d, map[string]string{"outcome": "ok", "status": "200"})
+	}
+}
+
+// TestShutdownClosesTunnels checks that Shutdown closes an open tunnel and
+// logs it with outcome shutdown (design 0006 D6).
+func TestShutdownClosesTunnels(t *testing.T) {
+	e := newEnv(t, baseConfig)
+	c := e.connectRaw("plain.cuttle.test:80")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := e.p.Shutdown(ctx); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+	c.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if n, err := c.Read(make([]byte, 1)); n != 0 || err == nil {
+		t.Fatalf("tunnel still open: %d %v", n, err)
+	}
+	checkDecision(t, e.waitDecisions(1)[0], map[string]string{"outcome": "shutdown", "status": "200"})
+	if got := e.p.Live().Get(stats.TunnelsActive); got != 0 {
+		t.Errorf("tunnels_active %d", got)
+	}
+}
+
+// TestDirectFailures checks the design 0002 D6 mapping of direct-route
+// failures for CONNECT and plain HTTP.
+func TestDirectFailures(t *testing.T) {
+	cfg := strings.Replace(baseConfig, `default = "direct"`,
+		"default = \"direct\"\nconnect_timeout = \"300ms\"\nresponse_timeout = \"300ms\"", 1)
+	e := newEnv(t, cfg)
+	e.net.Map("refused.cuttle.test", "203.0.113.40")
+	e.net.Map("hole.cuttle.test", "203.0.113.41")
+	e.net.Blackhole("203.0.113.41")
+
+	for _, c := range []struct {
+		req, status, errType, outcome string
+	}{
+		{"CONNECT refused.cuttle.test:443 HTTP/1.1\r\nHost: x\r\n\r\n", "502", "connection_refused", "refused"},
+		{"CONNECT hole.cuttle.test:443 HTTP/1.1\r\nHost: x\r\n\r\n", "504", "connection_timeout", "timeout"},
+		{"CONNECT nowhere.cuttle.test:443 HTTP/1.1\r\nHost: x\r\n\r\n", "502", "dns_error", "dns_error"},
+		{"GET http://refused.cuttle.test/ HTTP/1.1\r\nHost: refused.cuttle.test\r\n\r\n", "502", "connection_refused", "refused"},
+		{"GET http://hole.cuttle.test/ HTTP/1.1\r\nHost: hole.cuttle.test\r\n\r\n", "504", "connection_timeout", "timeout"},
+		{"GET http://nowhere.cuttle.test/ HTTP/1.1\r\nHost: nowhere.cuttle.test\r\n\r\n", "502", "dns_error", "dns_error"},
+		{"GET http://plain.cuttle.test/slow?ms=3000 HTTP/1.1\r\nHost: plain.cuttle.test\r\n\r\n", "504", "http_response_timeout", "timeout"},
+	} {
+		start := time.Now()
+		res, _ := e.raw(c.req)
+		if strconv.Itoa(res.StatusCode) != c.status || !strings.HasPrefix(res.Header.Get("Proxy-Status"), "cuttle-test; error="+c.errType) {
+			t.Errorf("%s: %d %q", firstLine(c.req), res.StatusCode, res.Header.Get("Proxy-Status"))
+		}
+		if el := time.Since(start); el > 2*time.Second {
+			t.Errorf("%s: took %v", firstLine(c.req), el)
+		}
+	}
+	ds := e.waitDecisions(7)
+	for i, want := range []string{"refused", "timeout", "dns_error", "refused", "timeout", "dns_error", "timeout"} {
+		checkDecision(t, ds[i], map[string]string{"outcome": want, "up": "0", "down": "0"})
+	}
 }

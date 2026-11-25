@@ -123,7 +123,17 @@ func (s *lineScanner) document() {
 			s.skipLine()
 			continue
 		}
+		before := s.pos
 		s.keyValue(table)
+		s.advancedFrom(before)
+	}
+}
+
+// advancedFrom makes sure the scan moved past before, so unexpected input
+// can never make it loop.
+func (s *lineScanner) advancedFrom(before int) {
+	if s.pos == before {
+		s.pos++
 	}
 }
 
@@ -214,7 +224,9 @@ func (s *lineScanner) value(path string) {
 			}
 			elem := path + "[" + strconv.Itoa(i) + "]"
 			s.set(elem, s.line)
+			before := s.pos
 			s.value(elem)
+			s.advancedFrom(before)
 			s.skipSpace(true)
 			if s.peek(0) == ',' {
 				s.pos++
@@ -228,7 +240,9 @@ func (s *lineScanner) value(path string) {
 				s.pos++
 				return
 			}
+			before := s.pos
 			s.keyValue(path)
+			s.advancedFrom(before)
 			s.skipSpace(true)
 			if s.peek(0) == ',' {
 				s.pos++

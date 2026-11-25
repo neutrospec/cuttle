@@ -428,3 +428,41 @@ func TestEnsureStarter(t *testing.T) {
 		t.Errorf("existing file replaced")
 	}
 }
+
+func TestLineIndex(t *testing.T) {
+	src := `# comment
+name = "x" # trailing
+proxy.default = "direct"
+[proxy.remote]
+sources = [
+  "10.0.0.0/8", # first
+  "0.0.0.0/0",
+]
+inline = { a = 1, b = [ { c = "]}" } ] }
+[[rule]]
+name = """multi
+line"""
+action = 'block'
+[[rule]]
+"quoted key" = 1
+`
+	ix := indexLines(src)
+	for path, want := range map[string]int{
+		"name": 2, "proxy": 3, "proxy.default": 3, "proxy.remote": 4,
+		"proxy.remote.sources": 5, "proxy.remote.sources[1]": 6, "proxy.remote.sources[2]": 7,
+		"proxy.remote.inline.a": 9, "proxy.remote.inline.b[1].c": 9,
+		"rule": 10, "rule[1]": 10, "rule[1].name": 11, "rule[1].action": 13,
+		"rule[2]": 14, "rule[2].quoted key": 15,
+	} {
+		if got := ix[path]; got != want {
+			t.Errorf("%s: line %d, want %d", path, got, want)
+		}
+	}
+	if ix.line("rule[1].missing") != 10 || ix.line("absent") != 0 {
+		t.Errorf("fallback lines")
+	}
+	// Input the TOML parser would refuse never makes the scanner loop.
+	for _, bad := range []string{"=", "a = [}", "a = {]", "[", "a = \"unterminated", "]]]"} {
+		indexLines(bad)
+	}
+}
