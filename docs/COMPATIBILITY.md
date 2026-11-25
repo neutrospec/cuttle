@@ -19,11 +19,93 @@ match the direct run in method, target, and body bytes.
 
 | Client | Check | Proxy configuration | Direct HTTPS | Direct HTTP | Upstream HTTPS | WebSocket | Block | Chain through a TLS-inspecting proxy | Non-disclosure | IPv6 literal | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Chrome on macOS, headless | M1 | `--headless=new --use-mock-keychain`, throwaway profile, `--proxy-server=http://127.0.0.1:<port>`, `--proxy-bypass-list="<-loopback>"` | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Not in M1 | — |
-| `/usr/bin/curl` | M1 | `--proxy http://127.0.0.1:<port>`, `-g` | Pending | Pending | Pending | Not in M1 | Pending | Pending | Pending | Not in M1 | — |
+| Chrome on macOS, headless | M1 | `--headless=new --use-mock-keychain`, throwaway profile, `--proxy-server=http://127.0.0.1:<port>`, `--proxy-bypass-list="<-loopback>"` | PASS | PASS | PASS | PASS | PASS | PASS | PASS | Not in M1 | [M1 run](#m1-client-check-run-2026-11-25) |
+| `/usr/bin/curl` | M1 | `--proxy http://127.0.0.1:<port>`, `-g` | PASS | PASS | PASS | NOT RUN, Chrome only | PASS | PASS | PASS | Not in M1 | [M1 run](#m1-client-check-run-2026-11-25) |
 | Chrome on macOS | M3 | `--proxy-server=http://127.0.0.1:3128` with a throwaway profile, or the macOS proxy settings | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | — |
 | Safari on macOS | M3, with approval | System Settings → Network → Proxies: "Web proxy (HTTP)" and "Secure web proxy (HTTPS)" both `127.0.0.1:3128` | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | — |
 | `/usr/bin/curl` | M3 | `--proxy http://127.0.0.1:3128`, or lowercase `http_proxy` and `https_proxy` | Pending | Pending | Pending | Not run | Pending | Pending | Pending | Pending | — |
+
+### M1 client check run, 2026-11-25
+
+TASK-0014 ran the [M1 client check][cc] once, from the repository root,
+against mocks only:
+
+```sh
+go run ./tools/mockenv m1-check -out <evidence directory>
+```
+
+It exited 0 and printed `M1 client check: pass`, so no rerun was needed.
+Every case passed with both clients. WebSocket and the LNA observation run
+with Chrome only: curl's are `NOT RUN`, and Chrome's LNA observation is
+`OBSERVED`. The evidence directory, with each client's session records,
+configurations, decision logs, Chrome DOMs, and `report.txt`, stays outside
+Git.
+
+| Item | Value |
+| --- | --- |
+| Tested commit | `7f246072e0d0256df0ebd439dd816b03f4359581`, tree `22a5a09f4c4c169e465fd5f9c73c6ed09ef80236`. It differs from the TASK-0012 landing `169df68` (tree `607aa63`) only in `docs/TASKS.md`. |
+| Chrome | Google Chrome 158.0.8127.37, headless; it sent `HeadlessChrome/158.0.0.0` in `User-Agent` |
+| macOS | 27.2.1 (26B131) |
+| curl | `curl 8.7.1 (x86_64-apple-darwin26.0) libcurl/8.7.1 (SecureTransport) LibreSSL/3.3.6 zlib/1.2.12 nghttp2/1.69.0` |
+| Cleanup | After the run, `pgrep` found no cuttle, mockenv, or Chrome process of the run, and no new `cuttle-*` directory remained under `/tmp`. |
+
+What the check verified, per case:
+
+- Direct HTTPS and Direct HTTP: the origin's echo in Chrome's DOM and in
+  curl's body; decision `rule=loopback action=direct outcome=ok`.
+- Block: Chrome's DOM was empty; curl printed
+  `curl: (56) CONNECT tunnel failed, response 403` with
+  `%{http_connect}` `403`; decision `outcome=blocked status=403`; no mock
+  received `blocked.cuttle.test`.
+- Upstream: the echo, and the recording upstream's
+  `CONNECT origin.cuttle.test:443` with one
+  `Via: 1.1 cuttle-single (cuttle)`.
+- WebSocket (Chrome): `CONNECT ws.cuttle.test:80` recorded by the
+  recording upstream, the page's message recorded by the origin, and the
+  page status `echo: hello from ws.html`.
+- Chain: the echo of `/chain`; curl trusted only the inspection root; the
+  inspecting egress mock decrypted `GET /chain` with a leaf signed by the
+  inspection root CA, and its `CONNECT` heads carried no `Via` or other
+  disclosure field.
+- Non-disclosure: `check-disclosure` exited 0 for Chrome (4 case targets,
+  48 `egress-direct` and 6 `egress-chain` requests, 0 failures) and for
+  curl (5 case targets, 5 and 5 requests, 0 failures).
+
+#### LNA observation
+
+The page `https://lna.cuttle.test/lna.html`, loaded through
+`cuttle-single`, fetched three literals in `no-cors` mode and printed these
+permission states:
+
+```text
+permission local-network-access => prompt
+permission local-network => prompt
+permission loopback-network => prompt
+```
+
+| Fetch | Page outcome | Decision by `cuttle-single` | Origin received it |
+| --- | --- | --- | --- |
+| `https://10.20.0.5/echo`, private | `response type=opaque` | Yes, `rule=test-literals action=upstream upstream=recording outcome=ok` | Yes, one `GET /echo` for `10.20.0.5` |
+| `http://127.0.0.1:<origin port>/echo`, loopback | `response type=opaque` | Yes, `rule=loopback action=direct outcome=ok` | Yes, one `GET /echo` |
+| `https://203.0.113.10/echo`, public control | `response type=opaque` | Yes, `rule=test-literals action=upstream upstream=recording outcome=ok` | Yes, one `GET /echo` for `203.0.113.10` |
+
+The decision lines, in the order of the table:
+
+```text
+time=2026-11-25T12:56:02.573Z level=INFO msg=decision id=b8f04e48 client=127.0.0.1:58441 source=local kind=connect target=10.20.0.5:443 rule=test-literals action=upstream upstream=recording interface="" outcome=ok status=200 up=2558 down=2938 dur=7ms
+time=2026-11-25T12:56:02.567Z level=INFO msg=decision id=0f55f34e client=127.0.0.1:58442 source=local kind=http target=127.0.0.1:58183 rule=loopback action=direct upstream="" interface="" outcome=ok status=200 up=0 down=642 dur=1ms
+time=2026-11-25T12:56:02.572Z level=INFO msg=decision id=8363bcc5 client=127.0.0.1:58444 source=local kind=connect target=203.0.113.10:443 rule=test-literals action=upstream upstream=recording interface="" outcome=ok status=200 up=2625 down=2941 dur=7ms
+```
+
+Chrome 158 headless sent the private-literal fetch through cuttle with no
+permission request: cuttle logged a decision, the recording upstream
+recorded `CONNECT 10.20.0.5:443`, the origin received the request with
+`Sec-Fetch-Site: cross-site` and `Sec-Fetch-Mode: no-cors`, the page got a
+response, and the permission states stayed `prompt`. The origin recorded
+no `OPTIONS` preflight. This is the observation that assumption A6 of
+[design 0003][a6] and OI-0006 V6 call for. The check has no run without a
+proxy, so it does not show whether this Chrome build would ask for the
+permission on a direct connection.
 
 ## Admin UI
 
@@ -72,6 +154,7 @@ these are inputs to the design, not recorded compatibility checks.
 
 Configuration references: [Chromium proxy support](https://chromium.googlesource.com/chromium/src/+/HEAD/net/docs/proxy.md#manual-proxy-settings), [macOS proxy settings](https://support.apple.com/en-am/guide/mac-help/mchlp2591/27/mac/27), [curl `--proxy`](https://curl.se/docs/manpage.html#-x).
 
+[a6]: design/0003-upstream-chaining-and-exposure.md#assumptions
 [cc]: design/0007-test-environment-and-gates.md#d8-client-checks
 [dc]: design/0008-interface-selection.md#device-check-i20
 [nd]: design/0003-upstream-chaining-and-exposure.md#d5-non-disclosure-toward-an-egress-proxy
