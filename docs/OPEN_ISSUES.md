@@ -288,6 +288,12 @@ Move resolved items to Closed with their resolving commit or evidence.
     rotation failure count is shown by `cuttle status`. Z4 (implementer,
     only if it flakes): relax the lower bound in
     `TestHTTPClientClosesMidBody`.
+  - G1–G2 (from the TASK-0005 final re-check; implementer, next change
+    to `internal/proxy/warn.go`): G1, the comments at `warn.go:35-36` and
+    `:126-127` say "within the interval" where the code and 0003 D12 use a
+    sliding last minute; say "within one interval before it". G2, optional:
+    end the flood before `late()` in one minute of the "sustained flood"
+    case, so it also detects a missing `onTimer` reschedule.
 - Next action: orchestrator — include V1–V12, P1, and W1–W3 in the first M1
   task brief; the producer closes each item with the commit that settles
   it. Include R5 and the C13 remainder of 0002 D7 (socket-exact plain-HTTP
