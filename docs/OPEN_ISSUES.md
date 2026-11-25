@@ -328,6 +328,9 @@ Move resolved items to Closed with their resolving commit or evidence.
     names as `prompt`. A6 does not hold in this run, so the D11 decision is
     returned to the user. The run has no direct comparison, so it does not
     show whether this build would ask without a proxy.
+    Settled on 2026-11-26: the user kept D11 (private literals and this
+    Mac's own address allowed for local clients without a rule) and
+    accepted the risk; 0003 D11 records it and A6 is withdrawn.
   - V7 (implementer): mention Go's 500 header-value cap
     (`DefaultMaxHeaderValueCount`) in 0002 D2 and build the C11 60 KiB head
     from fewer than 500 field lines. Settled in `8af7956` (TASK-0004):
@@ -494,10 +497,10 @@ Move resolved items to Closed with their resolving commit or evidence.
     target. S-R2 (implementer, nit): the check for an instance name or the
     client address in a request target (`tools/mockenv/disclosure.go`) has
     no test case; disabling it leaves `TestCheckDisclosure` passing.
-- Next action: orchestrator — include the open items (V5, V6's
-  observation, V8, V11, V12, P1, W1–W3, Z2, Z4, G1–G2, O-R1, P-R2–P-R7,
-  Q-R1–Q-R8, and S-R1–S-R2) in the briefs of the stages they affect; the
-  producer closes each item with the commit that settles it.
+- Next action: orchestrator — include the open items (V5, V8, V11, V12, P1,
+  W1–W3, Z2, Z4, G1–G2, O-R1, P-R2–P-R7, Q-R1–Q-R8, and S-R1–S-R2) in the
+  briefs of the stages they affect; the producer closes each item with the
+  commit that settles it.
   The M1.4 items, R5 with the C13 remainder, the per-request source
   recheck of 0003 D10 with N5, the bind retry of V1, Z3, W-R1, and W-R2,
   are settled in TASK-0007.

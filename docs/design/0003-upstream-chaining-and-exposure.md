@@ -472,9 +472,14 @@ Why names and literals differ:
 - A private IP literal is a destination the user typed, such as
   `http://192.168.0.1/`, and gives the client the reach it has without a
   proxy. The user decided that such literals are not affected. This Mac's
-  own address typed as a literal is treated the same way. The decision
-  rests on assumption A6: that the browser still guards a web page's
-  fetch of such a literal through cuttle, as it would without a proxy.
+  own address typed as a literal is treated the same way. The browser does
+  not guard a web page's fetch of such a literal through cuttle: in the M1
+  client check, Chrome 158 headless sent a public page's `no-cors` fetch of
+  a private literal through cuttle with no Local Network Access request
+  (A6, [OI-0006][oi] V6). A web page can therefore send requests to LAN
+  devices and to this Mac by address, though it cannot read the
+  responses. On 2026-11-26 the user kept the decision and accepted this
+  risk, so that typed LAN addresses keep working without a rule.
 - Loopback literals still need `allow_loopback`, because `127.0.0.1` and
   `::1` reach services that listen only on loopback, such as the admin UI,
   and a page can name them without any DNS. The starter `loopback` rule
@@ -734,7 +739,7 @@ deployment of D13 ([OI-0001][oi]).
 | A3 | With the macOS application firewall on, the first non-loopback bind shows an allow prompt, possibly again after an upgrade changes the binary. | Bind once with the firewall on, then after `brew upgrade` ([OI-0001][oi]). |
 | A4 | A TLS-inspecting egress proxy's re-signed leaves meet Safari's requirements. | `openssl s_client -proxy` from the gateway machine ([OI-0001][oi]). |
 | A5 | The launchd hard limit on open files allows at least 4,096 descriptors. | `cuttle status` under `brew services` in M3 ([OI-0003][oi]). |
-| A6 | Chrome's Local Network Access still applies when a public page fetches a private IP literal through cuttle, so allowing private literals for local clients without a rule (D11) gives web content no reach it would not have without a proxy. If Chrome sends such a fetch without a permission request, the D11 decision returns to the user. | The LNA observation of the M1 client check ([0007 D8][d7-8], OI-0006 V6). |
+| A6 | Withdrawn on 2026-11-26. It assumed that Chrome's Local Network Access still applies when a public page fetches a private IP literal through cuttle. Chrome 158 headless sent such a fetch with no permission request, and the user kept D11 and accepted the risk. | The LNA observation of the M1 client check ([0007 D8][d7-8], OI-0006 V6, TASK-0014). |
 
 ## Alternatives considered
 
