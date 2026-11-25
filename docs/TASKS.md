@@ -44,15 +44,17 @@ A closed task becomes one line under Closed:
 ### TASK-0005 — M1.2 exposure controls
 
 - Milestone: M1.2
-- Status: implement
+- Status: review
 - Iteration: 1/3
-- Workers: implementer on a T3 worktree branch
-- Base: `1573528` plus this board update
-- Candidate: none
-- Evidence: none
-- Findings: none
-- Next action: implementer — build M1.2 with the T0 and T1 gates and return
-  the candidate commit
+- Workers: implementer done on branch `t3/add-remote-proxy-exposure`;
+  fresh reviewer pending
+- Base: `cbf0b07`
+- Candidate: `c7c6217` (tree `ee88b53`)
+- Evidence: implementer ran `scripts/gate t0` and `t1` on `ee88b53`, both
+  pass; an earlier T1 run on `d9bfee7` failed on a test timing bug, fixed
+- Findings: none yet; implementer lists 6 design questions
+- Next action: reviewer — independent review of `cbf0b07..c7c6217` with a
+  gate rerun
 
 Decisions for TASK-0005 (2026-11-25):
 
