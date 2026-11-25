@@ -41,6 +41,32 @@ A closed task becomes one line under Closed:
 
 ## Active
 
+### TASK-0015 — M3.1 Homebrew formula and service
+
+- Milestone: M3.1
+- Status: implement
+- Iteration: 1/3
+- Workers: infra on a T3 worktree branch
+- Base: this board update
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: infra — add the licence, module path, `cuttle version`,
+  formula, and publish scan, run the OI-0003 checks and 0006 P8–P12 with a
+  throwaway local tap, and return the candidate
+
+Decisions for TASK-0015 (2026-11-26):
+
+- The user chose the public repository `neutrospec/cuttle`, the existing
+  tap `neutrospec/homebrew-tap`, and the MIT licence (OI-0004).
+- The user approved the service checks under the conditions in OI-0003.
+  The checks point every `XDG_*` directory of the service at scratch
+  directories through `cuttle.env`, so the user's own cuttle files are
+  never created or changed.
+- The formula's source of truth lives in this repository; the
+  orchestrator copies it to the tap and pushes only after the user
+  confirms.
+
 ## Closed
 
 The history was rewritten on 2026-11-25 (TASK-0003) to remove local

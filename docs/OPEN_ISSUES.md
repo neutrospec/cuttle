@@ -81,9 +81,13 @@ Move resolved items to Closed with their resolving commit or evidence.
 - Iterations used: none; recorded in TASK-0001 iteration 1.
 - Responsible step: test, with infra for the tap tooling.
 - Status: open.
-- Blocking reason: The checks load launchd jobs and install formulae, which
-  needs user approval.
-- Next action: tester — with approval and a throwaway formula, record
+- Approval (user, 2026-11-26): the M3.1 checks may install a throwaway
+  local tap and the cuttle formula, and load and unload the user-level
+  agent with `brew services`, including `kill -9` relaunch, provided
+  everything is stopped, uninstalled, and cleaned up afterwards, nothing
+  else holds `127.0.0.1:3128` during the checks, and the user's own cuttle
+  configuration and data are only read.
+- Next action: infra — in TASK-0015, with a throwaway formula, record
   `SIGTERM` and `ExitTimeOut` timing, the `.env` override, uninstall
   leftovers, loopback TCP in `brew test`, the modernc.org/sqlite build under
   Homebrew, and the open-file limit of the agent, before the M3.1 formula
@@ -96,12 +100,16 @@ Move resolved items to Closed with their resolving commit or evidence.
 - Iterations used: none; recorded in TASK-0001 iteration 1.
 - Responsible step: user decision, then infra.
 - Status: open.
-- Blocking reason: The repository has no remote. The GitHub owner of the
-  repository and the tap, public or private hosting, and the licence are
-  undecided. A private repository needs an authenticated download strategy
-  in the formula.
-- Next action: orchestrator — ask the user for the owner, visibility, and
-  licence before M3.1 starts. Publication follows these rules, because the
+- Blocking reason: The repository has no remote yet.
+- Decisions (user, 2026-11-26): the repository is the public GitHub
+  repository `neutrospec/cuttle`, the formula goes into the user's existing
+  public tap `neutrospec/homebrew-tap` as `Formula/cuttle.rb`, and the
+  licence is MIT. K1: the user accepts the home-relative checkout path in
+  all six commits, so they are not rewritten. Creating the repository and
+  every push still need the user's confirmation at that time.
+- Next action: infra — prepare publication in TASK-0015 (licence, module
+  path, formula, and the K2–K4 scan fixes); the orchestrator publishes
+  after the user confirms. Publication follows these rules, because the
   TASK-0003 history rewrite left pre-rewrite history in local refs and
   files:
   1. Before the first push, run `git config --get-regexp '^remote\.'` and
