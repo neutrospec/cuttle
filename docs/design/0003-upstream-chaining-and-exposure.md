@@ -7,42 +7,45 @@ Together with [0002](0002-proxy-core-and-routing.md) it supersedes
 
 ## Context
 
-cuttle runs at home and at the office. The office Mac keeps a WireGuard VPN
-to a home server or router. Home cuttle hands office-only sites to office
-cuttle, which hands them to the corporate proxy. The corporate proxy accepts
-plain HTTP proxy connections without authentication and re-signs TLS with a
-private root CA. The user requires that a request reaching it leave no trace
-of having passed through a proxy. The office listener is reachable over the
-VPN, so it also needs exposure controls that a loopback-only proxy does not.
+cuttle instances can be chained over a private link. An edge instance, the
+one clients point at, hands restricted destinations to a gateway instance
+inside another network, which hands them to that network's egress proxy.
+The egress proxy accepts plain HTTP proxy connections without
+authentication and may be a TLS-inspecting proxy that re-signs TLS with its
+inspection root CA. The user requires that a request reaching it disclose
+no intermediary. The gateway's listener is reachable over the private link,
+so it also needs exposure controls that a loopback-only proxy does not.
+Terms are defined in the [glossary](../GLOSSARY.md).
 
-This record defines upstreams and their trace modes, `Via` handling and
-loop detection between cuttle instances, the no-trace rule, failure
-reporting, timeouts, the unreachable-upstream hold, listeners, source and
-destination checks, and the home → office → corporate configuration.
-Evidence is in [research 0002][r2]. The no-trace requirement supersedes that
-research's recommendation to send `Via` to the corporate proxy
-([research 0002 §3][r2-3], open question 6).
+This record defines upstreams and their disclosure modes, `Via` handling
+and loop detection between cuttle instances, the non-disclosure rule,
+failure reporting, timeouts, the unreachable-upstream hold, listeners,
+source and destination checks, and the edge → gateway → egress
+configuration. Evidence is in [research 0002][r2]. The non-disclosure
+requirement supersedes that research's recommendation to send `Via` to the
+egress proxy ([research 0002 §3][r2-3], open question 6).
 
 ## Decisions
 
-### D1. Upstreams and trace modes
+### D1. Upstreams and disclosure modes
 
 - An upstream is a named plain-HTTP proxy at `host:port`. cuttle speaks
   HTTP/1.1 to it without TLS and without credentials, and never answers or
   relays `407`.
-- Every upstream states its trace mode in `trace`, which is required:
+- Every upstream states its disclosure mode in `disclosure`, which is
+  required:
 
 | Mode | Use for | Effect on requests sent to it |
 | --- | --- | --- |
 | `via` | Another cuttle instance | The client's fields pass, and one cuttle `Via` entry is added for loop detection (D2) |
-| `none` | The corporate proxy, or any proxy that must not see a trace of a proxy | The trace filter removes every trace field, the client's own included, and nothing that reveals a hop is added (D5) |
+| `none` | An egress proxy, or any proxy that must not see an intermediary | The disclosure filter removes every disclosure field, the client's own included, and nothing that reveals a hop is added (D5) |
 
-- `trace` has no default because either wrong default fails: `via` toward
-  the corporate proxy leaves a trace, and `none` toward another cuttle hides
-  the chain from loop detection.
-- Apart from the trace fields, both modes forward the same way, with the
-  standard handling of [0002 D5][d2-5]. `direct` routes apply the same
-  trace filter as `none`.
+- `disclosure` has no default because either wrong default fails: `via`
+  toward an egress proxy discloses an intermediary, and `none` toward
+  another cuttle hides the chain from loop detection.
+- Apart from the disclosure fields, both modes forward the same way, with
+  the standard handling of [0002 D5][d2-5]. `direct` routes apply the same
+  disclosure filter as `none`.
 - cuttle resolves an upstream's own host name through the `Network` seam
   ([0002 Interfaces][d2-if]). The destination checks of D11 do not apply to
   upstream addresses, which are often loopback or private.
@@ -62,18 +65,18 @@ research's recommendation to send `Via` to the corporate proxy
   `1.1 <name> (cuttle)`, where `<name>` has the instance-name syntax. RFC
   9110 §7.6.3 allows a comment after `received-by`; `(cuttle)` marks the
   member as cuttle's own.
-- **Adding (`trace = "via"`).** cuttle appends one cuttle entry as a new
-  `Via` field value. `Via` members that the client or earlier hops sent
+- **Adding (`disclosure = "via"`).** cuttle appends one cuttle entry as a
+  new `Via` field value. `Via` members that the client or earlier hops sent
   stay, in their order.
-- **Removing (`trace = "none"` and every `direct` route).** The trace
-  filter of D5 removes every `Via` field, cuttle's entries and the client's
-  own alike.
+- **Removing (`disclosure = "none"` and every `direct` route).** The
+  disclosure filter of D5 removes every `Via` field, cuttle's entries and
+  the client's own alike.
 - **Loop detection.** On every request, before any filtering, cuttle takes
   the `received-by` token of every `Via` member, the client's and cuttle's
   alike, and compares it with its own name without regard to case. A match
   fails the request with `502 proxy_loop_detected` unless the policy blocks
-  it ([0002 D4][d2-4] step 6). A home → office → home misroute stops in one
-  hop; in the research harness a loop stopped after 2 `CONNECT` requests
+  it ([0002 D4][d2-4] step 6). An edge → gateway → edge misroute stops in
+  one hop; in the research harness a loop stopped after 2 `CONNECT` requests
   with the check and ran to 40 without it ([research 0002 §3][r2-3]).
 - A `none` hop adds no entry, so a loop through a `none` hop toward another
   cuttle is invisible. `none` is therefore only for proxies that are not
@@ -83,7 +86,7 @@ research's recommendation to send `Via` to the corporate proxy
 Instance names: the top-level `name` is required, matches
 `^[a-z][a-z0-9-]{0,62}$`, and must be unique among chained instances. The
 starter configuration generates `cuttle-<6 random hex digits>`; the
-deployment uses `cuttle-home` and `cuttle-office`.
+deployment in D13 uses `cuttle-edge` and `cuttle-gateway`.
 
 ### D3. CONNECT through an upstream
 
@@ -100,8 +103,8 @@ deployment uses `cuttle-home` and `cuttle-office`.
      the fields it names, `Proxy-Connection`, `Keep-Alive`,
      `Proxy-Authenticate`, `Proxy-Authorization`, `TE`, `Trailer`,
      `Transfer-Encoding`, `Upgrade`);
-   - for `trace = "none"`, the D5 trace filter applied to those fields; for
-     `trace = "via"`, cuttle's `Via` entry added (D2).
+   - for `disclosure = "none"`, the D5 disclosure filter applied to those
+     fields; for `disclosure = "via"`, cuttle's `Via` entry added (D2).
 
    Nothing else is written. `http.Header.Write` writes the fields in sorted
    order.
@@ -115,7 +118,7 @@ deployment uses `cuttle-home` and `cuttle-office`.
 5. On anything else, answer the client per D6 and close both connections.
 
 Every hop answers its client only after its own upstream answered, so the
-home client receives `200` only after the whole chain did. Chrome accepts
+original client receives `200` only after the whole chain did. Chrome accepts
 only an exact `200`, while curl accepts any 2xx
 ([research 0002 §6][r2-6]).
 
@@ -123,47 +126,48 @@ only an exact `200`, while curl accepts any 2xx
 
 - `ReverseProxy` forwards the request with the upstream's transport, which
   writes the client's raw absolute-form target ([0002 D5][d2-5],
-  [research 0002 §2][r2-2]). `Rewrite` applies the trace rule for the
+  [research 0002 §2][r2-2]). `Rewrite` applies the disclosure rule for the
   upstream's mode: the D5 filter for `none`, cuttle's `Via` entry for
   `via`.
 - The transport pools connections to the upstream across clients
   ([0002 D5][d2-5]). Its dial function applies the hold (D8).
 - Responses pass through standard handling and keep their status. Only a
   `407` becomes `502` with `received-status=407`. Any other non-2xx
-  response, such as a corporate block page or an upstream cuttle's own
+  response, such as an egress proxy's block page or an upstream cuttle's own
   `502`, `503`, or `504` with its `Proxy-Status`, reaches the client as the
   upstream sent it; cuttle adds no `Proxy-Status` member to it.
 - Absolute-form WebSocket works through an upstream: `ReverseProxy`
   splices the connections after the upstream's `101`.
 
-### D5. No trace toward the corporate upstream
+### D5. Non-disclosure toward an egress proxy
 
-Principle: toward a `trace = "none"` upstream, a request carries no trace of
-proxying. The corporate proxy sees what it would see if the client used it
+Principle: toward a `disclosure = "none"` upstream, a request discloses no
+intermediary. The egress proxy sees what it would see if the client used it
 directly, apart from the limits below. The same rule applies on every
 `direct` route toward origins.
 
-Trace fields are `Via`, `Forwarded`, every field whose name starts with
-`X-Forwarded-`, `X-Real-IP`, `Client-IP`, `True-Client-IP`, `X-Client-IP`,
-`X-Cluster-Client-IP`, `X-Originating-IP`, `CF-Connecting-IP`,
-`Fastly-Client-IP`, and `Proxy-Status`. One function in `internal/proxy`,
-the trace filter, deletes them all from a header set. It is called from one
-place for each path: the plain-HTTP `Rewrite` and the `CONNECT` head writer
-(D3), on `direct` and `trace = "none"` routes. It removes the client's own
-copies as well, because any of these fields reaching the corporate proxy
-would show proxying, whoever added it. On `trace = "via"` routes the filter
-does not run: the client's fields pass and cuttle adds its own `Via` entry,
-because the last hop before the corporate proxy filters them anyway.
+Disclosure fields are `Via`, `Forwarded`, every field whose name starts
+with `X-Forwarded-`, `X-Real-IP`, `Client-IP`, `True-Client-IP`,
+`X-Client-IP`, `X-Cluster-Client-IP`, `X-Originating-IP`,
+`CF-Connecting-IP`, `Fastly-Client-IP`, and `Proxy-Status`. One function in
+`internal/proxy`, the disclosure filter, deletes them all from a header
+set. It is called from one place for each path: the plain-HTTP `Rewrite`
+and the `CONNECT` head writer (D3), on `direct` and `disclosure = "none"`
+routes. It removes the client's own copies as well, because any of these
+fields reaching the egress proxy would disclose an intermediary, whoever
+added it. On `disclosure = "via"` routes the filter does not run: the
+client's fields pass and cuttle adds its own `Via` entry, because the last
+hop before the egress proxy filters them anyway.
 
-The list above is the minimum. Each other way a proxy can leave a trace is
-decided:
+The list above is the minimum. Each other way a proxy can disclose itself
+is decided:
 
-| Possible trace | Decision |
+| Possible disclosure | Decision |
 | --- | --- |
-| Trace fields | Removed by the trace filter on `direct` and `none` routes; never added by cuttle except its own `Via` entry on `via` routes |
+| Disclosure fields | Removed by the disclosure filter on `direct` and `none` routes; never added by cuttle except its own `Via` entry on `via` routes |
 | cuttle-specific headers | None exist |
 | cuttle instance names in any value | Appear only in cuttle `Via` entries, which the filter removes, and in responses to clients |
-| The home client's address | Never added to any field; client-sent address fields are trace fields |
+| The original client address | Never added to any field; client-sent address fields are disclosure fields |
 | `User-Agent` | Only the client's own. If the client sent none, none is sent: `ReverseProxy` suppresses Go's default, and the `CONNECT` head carries only client fields ([0002 D5][d2-5]) |
 | Request target | The client's raw target, `CONNECT` and plain HTTP alike ([0002 D5][d2-5]) |
 | `Accept-Encoding` and body encoding | Not added; bodies are not decoded (`DisableCompression`) |
@@ -180,15 +184,15 @@ framing Go chooses. Body bytes and the client's content encodings are kept.
 
 Limits:
 
-- The client is who it is. A curl client at home still looks like curl, in
-  its `User-Agent` and in its TLS ClientHello inside the tunnel. The TLS
-  inside a tunnel belongs to the client, so Chrome's own handshake reaches
-  the corporate proxy unchanged.
-- The source address is the office Mac's. The corporate proxy attributes
-  all traffic from office cuttle, including every home-originated request,
-  to the employee's office machine.
+- The client is who it is. A curl client of the edge instance still looks
+  like curl, in its `User-Agent` and in its TLS ClientHello inside the
+  tunnel. The TLS inside a tunnel belongs to the client, so Chrome's own
+  handshake reaches the egress proxy unchanged.
+- The source address is the gateway machine's. The egress proxy attributes
+  all traffic from the gateway instance, including every request relayed
+  from an edge instance, to the gateway machine.
 - Connection reuse, timing, and the TCP/IP stack are cuttle's and the
-  office Mac's. Anything beyond the request contents is out of scope.
+  gateway machine's. Anything beyond the request contents is out of scope.
 
 ### D6. Upstream failures and Proxy-Status
 
@@ -214,21 +218,21 @@ Limits:
 - Status mapping and `Proxy-Status` chaining apply to `CONNECT` answers
   and to failures to reach the upstream or read its response, on either
   path. A plain-HTTP response other than `407` is a whole response that
-  cuttle relays: home relays office's `502`, `503`, or `504` unchanged,
-  with office's `Proxy-Status` member only.
+  cuttle relays: the edge instance relays the gateway's `502`, `503`, or
+  `504` unchanged, with the gateway's `Proxy-Status` member only.
 - When an upstream's non-2xx `CONNECT` answer carries `Proxy-Status`,
   cuttle copies those members, up to 1 KiB of field value, and appends its
   own member last. RFC 9209 lists the member closest to the origin first
-  ([RFC 9209 §2][rfc9209]). Example after the corporate proxy refuses:
+  ([RFC 9209 §2][rfc9209]). Example after the egress proxy refuses:
 
   ```text
-  Proxy-Status: cuttle-office; received-status=403; next-hop="corp",
-                cuttle-home; received-status=502; next-hop="office"
+  Proxy-Status: cuttle-gateway; received-status=403; next-hop="egress",
+                cuttle-edge; received-status=502; next-hop="gateway"
   ```
 
   This is one field line on the wire, sent toward the client. In the
-  research chain tests, `home` relayed `502` with `received-status` in the
-  same way ([research 0002 §1][r2-1]).
+  research chain tests, the first hop relayed `502` with `received-status`
+  in the same way ([research 0002 §1][r2-1]).
 
 ### D7. Timeouts
 
@@ -246,20 +250,20 @@ Limits:
 Chain budget: an upstream that is itself a cuttle instance must get a
 `response_timeout` longer than that instance's slowest answer, which is its
 longest connect timeout plus response timeout over the routes it may use,
-plus 10 s. Then a timeout at the office reaches the home client as office's
-`504` before home's own timer fires: for `CONNECT`, home answers `504` with
-`received-status=504` and both members; for plain HTTP, home relays office's
-`504` unchanged with office's member only (D6). Otherwise home reports its
-own `504` while
-office still succeeds and holds an orphaned tunnel
-([research 0002 §1][r2-1]). With defaults at the office (10 s + 60 s), home
-uses `response_timeout = "80s"` for its `office` upstream. cuttle cannot see
+plus 10 s. Then a timeout at the gateway reaches the original client as the
+gateway's `504` before the edge's own timer fires: for `CONNECT`, the edge
+answers `504` with `received-status=504` and both members; for plain HTTP,
+the edge relays the gateway's `504` unchanged with the gateway's member
+only (D6). Otherwise the edge reports its own `504` while the gateway still
+succeeds and holds an orphaned tunnel ([research 0002 §1][r2-1]). With
+defaults at the gateway (10 s + 60 s), the edge uses
+`response_timeout = "80s"` for its `gateway` upstream. cuttle cannot see
 another instance's settings, so the deployment guide states this rule.
 
 ### D8. Unreachable upstream hold
 
-When the VPN to the office is down, packets to office cuttle are often
-dropped rather than refused, so each request would wait the full
+When the private link to a gateway instance is down, packets to it are
+often dropped rather than refused, so each request would wait the full
 `connect_timeout`. A browser opens several connections per page and retries,
 so the user would wait repeatedly for the same answer. cuttle therefore
 remembers briefly that an upstream cannot be reached and fails at once.
@@ -290,7 +294,7 @@ by another upstream.
 - **Reload.** An upstream whose settings are unchanged keeps its state; a
   changed or new upstream starts `up`.
 - **Logs and counters.** The change to `down` logs one warning:
-  `msg="upstream unreachable" upstream=office address=10.8.0.6:3128
+  `msg="upstream unreachable" upstream=gateway address=10.8.0.6:3128
   error=connection_timeout hold=5s`. Recovery logs one `info` line with the
   time spent down and the number of requests failed fast. Each held request
   still gets its own decision line, with outcome `unavailable`.
@@ -300,21 +304,22 @@ by another upstream.
   list each upstream's state, since when, and the last error. Statistics
   count held requests as failures ([0005 D1][d5-1]).
 
-In a chain each hop holds only its own upstream. If office cannot reach the
-corporate proxy, office answers `503` at once. For `CONNECT`, home answers
-`502` with `received-status=503` and both members; for plain HTTP, home
-relays office's `503` unchanged (D6).
+In a chain each hop holds only its own upstream. If the gateway cannot
+reach the egress proxy, the gateway answers `503` at once. For `CONNECT`,
+the edge answers `502` with `received-status=503` and both members; for
+plain HTTP, the edge relays the gateway's `503` unchanged (D6).
 
 ### D9. Listeners
 
 - `proxy.listen` is a list of `IP:port` literals. Host names and the
   wildcard addresses `0.0.0.0` and `::` are configuration errors. A wildcard
-  on an office laptop would expose an unauthenticated proxy on the
-  corporate LAN ([research 0002 §7][r2-7]).
+  on a gateway machine would expose an unauthenticated proxy on that
+  machine's LAN ([research 0002 §7][r2-7]).
 - A loopback listener that fails to bind stops startup with exit status 1.
 - A non-loopback listener requires a non-empty `proxy.remote.sources`. If it
-  fails to bind, for example because the VPN is down at login, cuttle logs
-  a warning and retries every 30 s while the other listeners serve.
+  fails to bind, for example because the private link is down at login,
+  cuttle logs a warning and retries every 30 s while the other listeners
+  serve.
   `cuttle status` shows the listener as `retrying` with the error.
 - Listener changes take effect at the next start
   ([0004 D6][d4-6]).
@@ -340,9 +345,10 @@ relays office's `503` unchanged (D6).
   limits it to public addresses. `proxy.remote.default = "direct"` is a
   configuration error unless `allow_direct` is true.
 
-Home needs only the office's upstream route. A remote `direct` route would
-give the home side the office Mac's network position, including its
-loopback admin UI and other local services ([research 0002 §7][r2-7]).
+An edge instance needs only the gateway's upstream route. A remote `direct`
+route would give the edge side the gateway machine's network position,
+including its loopback admin UI and other local services
+([research 0002 §7][r2-7]).
 
 ### D11. Destination address policy for direct routes
 
@@ -432,54 +438,65 @@ allow_private = true
   `cuttle status` reports the effective limit. Assumption A5 covers
   launchd's limits.
 
-### D13. Home, office, and corporate deployment
+### D13. Edge, gateway, and egress deployment
+
+An edge instance sends restricted destinations over a private link to a
+gateway instance, which sends them through its network's egress proxy. A
+private link is any network path between the two sides, such as a VPN,
+WireGuard, Tailscale, or an SSH tunnel. In the cases below, one end of the
+link is a server or router on the edge machine's LAN, and the other end is
+the gateway machine.
 
 ```text
-home browser or curl
-  -> home cuttle 127.0.0.1:3128 (name cuttle-home)
-     office-only domains -> upstream "office" 10.8.0.6:3128, trace = "via"
-  -> WireGuard (home server or router <-> office Mac)
-  -> office cuttle 10.8.0.6:3128 (name cuttle-office)
-     office-only domains -> upstream "corp" proxy.corp.example:8080,
-                            trace = "none"
-  -> corporate proxy (plain HTTP; re-signs TLS with a private root)
+client (browser or curl) on the edge machine
+  -> edge instance 127.0.0.1:3128 (name cuttle-edge)
+     restricted domains -> upstream "gateway" 10.8.0.6:3128,
+                           disclosure = "via"
+  -> private link (edge-side server or router <-> gateway machine)
+  -> gateway instance 10.8.0.6:3128 (name cuttle-gateway)
+     restricted domains -> upstream "egress" proxy.internal.example:8080,
+                           disclosure = "none"
+  -> egress proxy (plain HTTP; may re-sign TLS with an inspection root CA)
   -> origin
 ```
 
-The addresses are placeholders: `10.8.0.6` is the office Mac's WireGuard
-address. The corporate proxy receives no trace of proxying (D5) and
-attributes all of this traffic to the employee's office machine.
+The addresses are placeholders: `10.8.0.6` is the gateway machine's
+private-link address. The egress proxy receives requests that disclose no
+intermediary (D5), and it attributes all of this traffic to the gateway
+machine. Operators must make sure that the network's policy allows
+relaying requests from other machines through the gateway machine.
 
-Which source address office cuttle sees depends on the home server:
+Which source address the gateway instance sees depends on the edge-side
+server or router:
 
-| Case | Source seen by office cuttle | `proxy.remote.sources` | Consequence |
+| Case | Source seen by the gateway instance | `proxy.remote.sources` | Consequence |
 | --- | --- | --- | --- |
-| Routed: the server forwards home LAN traffic into the tunnel unchanged | The home Mac's own LAN address, such as `192.168.1.20` | That address as `/32` | Only that Mac is admitted. Keep its address fixed, for example with a DHCP reservation. Inference: the office Mac's WireGuard peer entry must list the home LAN in `AllowedIPs`, or replies will not return. |
-| NAT: the server masquerades home LAN traffic | The server's tunnel address, such as `10.8.0.1`, for every home device | That address as `/32` | Every device on the home LAN can use office cuttle's remote routes, which reach only the corporate proxy for office-only domains, as the employee. Restrict this at the home server's firewall or switch to routing. |
+| Routed: the server forwards edge LAN traffic into the link unchanged | The edge machine's own LAN address, such as `192.168.1.20` | That address as `/32` | Only that machine is admitted. Keep its address fixed, for example with a DHCP reservation. Inference: the gateway side of the link must route the edge LAN back into the link, or replies will not return; with WireGuard, for example, the gateway machine's peer entry lists the edge LAN in `AllowedIPs`. |
+| NAT: the server masquerades edge LAN traffic | The server's link address, such as `10.8.0.1`, for every device on the edge LAN | That address as `/32` | Every device on the edge LAN can use the gateway instance's remote routes, which reach only the egress proxy for restricted destinations, attributed to the gateway machine. Restrict this at the server's firewall or switch to routing. |
 
-The observation that tells them apart: start office cuttle with a
-placeholder `sources = ["192.0.2.1/32"]`, send one request from the home
-Mac through home cuttle, for example
-`curl -x http://127.0.0.1:3128 https://wiki.corp.example/`, and read the
-office log's rejected-source warning. A `source=` with the home Mac's LAN
-address means routed; the WireGuard server's tunnel address means NAT. A
-second home device shows the same address only under NAT. Then set
-`sources` and run `cuttle reload`.
+The observation that tells them apart: start the gateway instance with a
+placeholder `sources = ["192.0.2.1/32"]`, send one request from the edge
+machine through the edge instance, for example
+`curl -x http://127.0.0.1:3128 https://wiki.internal.example/`, and read
+the gateway log's rejected-source warning. A `source=` with the edge
+machine's LAN address means routed; the server's link address means NAT. A
+second device on the edge LAN shows the same address only under NAT. Then
+set `sources` and run `cuttle reload`.
 
-Home `~/.config/cuttle/config.toml`:
+Edge `~/.config/cuttle/config.toml`:
 
 ```toml
-name = "cuttle-home"
+name = "cuttle-edge"
 
 [proxy]
 listen = ["127.0.0.1:3128"]
 default = "direct"
 
 [[upstream]]
-name = "office"
+name = "gateway"
 address = "10.8.0.6:3128"
-trace = "via"             # cuttle to cuttle: Via for loop detection
-response_timeout = "80s"  # office's corp connect + response + 10 s
+disclosure = "via"        # cuttle to cuttle: Via for loop detection
+response_timeout = "80s"  # gateway's egress connect + response + 10 s
 
 [[rule]]
 name = "loopback"
@@ -489,28 +506,28 @@ action = "direct"
 allow_loopback = true
 
 [[rule]]
-name = "office-only"
-domains = ["corp.example", "intranet.example.net"]
-action = "upstream:office"
+name = "restricted"
+domains = ["internal.example", "intranet.example.net"]
+action = "upstream:gateway"
 ```
 
-Office `~/.config/cuttle/config.toml`:
+Gateway `~/.config/cuttle/config.toml`:
 
 ```toml
-name = "cuttle-office"
+name = "cuttle-gateway"
 
 [proxy]
 listen = ["127.0.0.1:3128", "10.8.0.6:3128"]
-default = "upstream:corp"  # local office clients use the corporate proxy
+default = "upstream:egress"  # local gateway clients use the egress proxy
 
 [proxy.remote]
 sources = ["192.168.1.20/32"]  # routed case; for NAT, the server, e.g. 10.8.0.1/32
 default = "block"
 
 [[upstream]]
-name = "corp"
-address = "proxy.corp.example:8080"
-trace = "none"  # no trace of proxying reaches the corporate proxy
+name = "egress"
+address = "proxy.internal.example:8080"
+disclosure = "none"  # requests reach the egress proxy with no intermediary
 
 [[rule]]
 name = "loopback"
@@ -520,34 +537,54 @@ action = "direct"
 allow_loopback = true
 
 [[rule]]
-name = "office-only"  # the only route open to the home instance
-domains = ["corp.example", "intranet.example.net"]
-action = "upstream:corp"
+name = "restricted"  # the only route open to the edge instance
+domains = ["internal.example", "intranet.example.net"]
+action = "upstream:egress"
 ```
 
-Trust. cuttle needs no certificate or CA ([research 0002 §4][r2-4]). The
-home client must trust the corporate root for office-only sites:
+Trust. cuttle needs no certificate or CA ([research 0002 §4][r2-4]). When
+the egress proxy is TLS-inspecting, clients of the edge instance must trust
+its inspection root CA for restricted destinations:
 
 - Chrome and Safari on macOS: add the root to the login keychain and set
   "Secure Sockets Layer (SSL)" to "Always Trust". Chrome's verifier uses
   keychain trust for locally added roots. This has not been observed
   through the chain ([OI-0005][oi]).
-- `/usr/bin/curl`: pass `--cacert corp-root.pem` or set `CURL_CA_BUNDLE`.
-  Whether its default path honors keychain trust is unknown
-  ([OI-0005][oi]).
+- `/usr/bin/curl`: pass `--cacert inspection-root.pem` or set
+  `CURL_CA_BUNDLE`. Whether its default path honors keychain trust is
+  unknown ([OI-0005][oi]).
 - Safari also requires the re-signed leaves to have a SAN, the serverAuth
   EKU, and at most 825 days of validity ([OI-0001][oi]).
 
 The operator accepts these consequences:
 
-- The trusted corporate root can vouch for any name on that Mac, not only
-  for routed sites.
-- The corporation sees decrypted requests, cookies, and credentials for
-  routed sites, and attributes them to the employee's office machine.
+- The trusted inspection root CA can vouch for any name on the client's
+  machine, not only for routed sites.
+- The egress proxy's operator sees decrypted requests, cookies, and
+  credentials for routed sites, and attributes them to the gateway machine.
 - Client-certificate authentication and apps that pin keys fail on that
-  path, as they do inside the office.
-- Chrome may still look up office-only names with the home resolver
-  ([research 0002 §5][r2-5]).
+  path, as they do inside that network.
+- Chrome may still look up restricted names with the edge machine's
+  resolver ([research 0002 §5][r2-5]).
+
+#### Example: reaching an office network from home
+
+The maintainer's own setup is one instance of this deployment:
+
+| General term | In this example |
+| --- | --- |
+| Edge instance | cuttle on a Mac at home |
+| Gateway instance | cuttle on a Mac at the office |
+| Private link | A WireGuard VPN between a home server or router and the office Mac |
+| Egress proxy | The corporate proxy: plain HTTP without authentication, TLS-inspecting |
+| Inspection root CA | The corporate root, which clients at home must trust |
+| Restricted destinations | Office-only sites, such as the intranet |
+| Original client | Chrome, Safari, or curl on the home Mac |
+
+The configurations above apply with this setup's names and addresses.
+Whether the home server routes or masquerades home LAN traffic, and
+assumptions A1–A4 about the corporate proxy and the VPN, are checked on
+this setup in [OI-0001][oi].
 
 ## Acceptance criteria
 
@@ -561,14 +598,14 @@ unless marked T0.
 | U3 | Upstream `403`, `407`, and `502` reach the client as `502` with `received-status`; `504` as `504`; no `Proxy-Authenticate` is relayed; the test network records zero direct dials. Checked with Go (`OnProxyConnectResponse`) and curl. | `TestUpstreamStatusMapping` |
 | U4 | A refused upstream gives `502 connection_refused`; one that accepts and never answers gives `504 http_response_timeout` within `response_timeout` + 1 s; neither makes a direct dial. | `TestUpstreamRefusedAndTimeout` |
 | U5 | Plain HTTP through a `via` upstream arrives with the client's raw absolute-form target, including `http://h/a{b}|c?x=1;y=2&z=%zz`, one cuttle `Via` entry, and the client's body bytes; an upstream `407` becomes `502`; a `403` page is relayed unchanged. An absolute-form WebSocket upgrade through the upstream completes an echo round trip. | `TestUpstreamHTTP` |
-| U6 | Home (`via`) → office (`none`) → intercepting mock: the mock's recorded `CONNECT` head has no trace field (D5). A client trusting the generated corporate root gets `200` and a leaf for the requested name issued by that root, and the mock's decrypted request has the expected `Host` and path. A client trusting only the origin CA fails verification while both instances log `ok` tunnels. | `TestChainIntercepting` |
-| U7 | When the intercepting mock refuses a name, the home client gets `502` and a `Proxy-Status` with the office member before the home member. | `TestChainRefusal` |
-| U8 | Home routes `loop.cuttle.test` to office and office routes it back to home, both with `trace = "via"`: the client gets `502` with `error=proxy_loop_detected`, after exactly 2 upstream `CONNECT` requests in total. The same holds for plain HTTP. | `TestChainLoop` |
+| U6 | Edge (`via`) → gateway (`none`) → inspecting egress mock: the mock's recorded `CONNECT` head has no disclosure field (D5). A client trusting the generated inspection root CA gets `200` and a leaf for the requested name issued by that root, and the mock's decrypted request has the expected `Host` and path. A client trusting only the origin CA fails verification while both instances log `ok` tunnels. | `TestChainInspecting` |
+| U7 | When the inspecting egress mock refuses a name, the original client gets `502` and a `Proxy-Status` with the gateway member before the edge member. | `TestChainRefusal` |
+| U8 | The edge routes `loop.cuttle.test` to the gateway and the gateway routes it back to the edge, both with `disclosure = "via"`: the client gets `502` with `error=proxy_loop_detected`, after exactly 2 upstream `CONNECT` requests in total. The same holds for plain HTTP. | `TestChainLoop` |
 | U9 | An upstream equal to a listener address fails validation (T0). In-process tests pass their own listeners, and an upstream name that the test network resolves to the listener's address fails at dial time with `502 proxy_loop_detected`; validation cannot see that case. | `TestConfigSelfUpstream`, `TestUpstreamSelfDial` |
-| U10 | With office's corp `response_timeout` at 300 ms and home's office `response_timeout` at 2 s, a silent corporate mock yields at the home client, for `CONNECT`, `504` with `received-status=504` and the office member before the home member, and for plain HTTP, office's `504` unchanged with office's member only. | `TestChainTimeoutPropagates` |
+| U10 | With the gateway's `egress` `response_timeout` at 300 ms and the edge's `gateway` `response_timeout` at 2 s, a silent egress mock yields at the original client, for `CONNECT`, `504` with `received-status=504` and the gateway member before the edge member, and for plain HTTP, the gateway's `504` unchanged with the gateway's member only. | `TestChainTimeoutPropagates` |
 | U11 | With an injected clock, `connect_timeout` 300 ms, and `unreachable_hold` 1 s on a blackholed upstream: the first request gets `504 connection_timeout` after one dial; four more within the hold get `503 destination_unavailable` without a dial, and `upstream_state` is `down`; while a probe is in flight after the hold, a concurrent request gets `503` and only one dial is recorded; once the address routes to the recording upstream, the probe succeeds, the state returns to `up`, and one recovery line is logged. A silent upstream and an upstream answering `502` are never held. A plain-HTTP request to a held upstream also gets `503`. With `unreachable_hold = "0s"`, every request dials. | `TestUpstreamUnreachableHold` |
-| U12 | No trace: a home client with a distinctive source address sends a `CONNECT` and plain-HTTP requests (a `POST` with a chunked body, and `GET` targets `http://h/a{b}|c?x=1;y=2&z=%zz` and `http://h/q?b=2&a=1;c=3`) through home (`via`) → office (`none`) → recording mock. The client also sends `Via: 1.1 lab-gw` and `X-Real-IP`, and one request has no `User-Agent`. The mock receives no field or value that cuttle added: every field it receives, apart from `Content-Length`, `Transfer-Encoding`, and `Trailer`, was sent by the client with the same value; no trace field arrives, the client's own included; no value contains `cuttle-home`, `cuttle-office`, or the home client's address; and method, target, and body bytes equal the client's. `OPTIONS` and `TRACE` with `Max-Forwards: 0` arrive with the value unchanged and are answered by the mock. | `TestNoTraceChain` |
-| N1 | Validation rejects a wildcard or host-name listener, a non-loopback listener without `proxy.remote.sources`, `proxy.remote.default = "direct"` without `allow_direct`, and an upstream without `trace`; `cuttle check` warns about `0.0.0.0/0` or `::/0` in `sources`. | T0 `TestConfigExposure` |
+| U12 | Non-disclosure: an original client with a distinctive source address sends a `CONNECT` and plain-HTTP requests (a `POST` with a chunked body, and `GET` targets `http://h/a{b}|c?x=1;y=2&z=%zz` and `http://h/q?b=2&a=1;c=3`) through edge (`via`) → gateway (`none`) → recording mock. The client also sends `Via: 1.1 lab-gw` and `X-Real-IP`, and one request has no `User-Agent`. The mock receives no field or value that cuttle added: every field it receives, apart from `Content-Length`, `Transfer-Encoding`, and `Trailer`, was sent by the client with the same value; no disclosure field arrives, the client's own included; no value contains `cuttle-edge`, `cuttle-gateway`, or the original client address; and method, target, and body bytes equal the client's. `OPTIONS` and `TRACE` with `Max-Forwards: 0` arrive with the value unchanged and are answered by the mock. | `TestNoDisclosureChain` |
+| N1 | Validation rejects a wildcard or host-name listener, a non-loopback listener without `proxy.remote.sources`, `proxy.remote.default = "direct"` without `allow_direct`, and an upstream without `disclosure`; `cuttle check` warns about `0.0.0.0/0` or `::/0` in `sources`. | T0 `TestConfigExposure` |
 | N2 | A connection from a source outside the allowlist is closed with no byte read or written, increments `connections_rejected_total{reason="source"}`, logs the source address, and produces no decision. | `TestRemoteSourceRejected` |
 | N3 | A remote client gets the upstream rule's route, `403` with rule `remote-default` for unmatched names, `403` with rule `remote-direct` for a `direct` rule, and `403` with rule `port` for port 22. With `allow_direct`, it reaches a public test address and gets `502 destination_ip_prohibited` for private, loopback, and `self` addresses even through rules with `allow_private` or `allow_loopback`. | `TestRemotePolicy` |
 | N4 | A local client's direct request for a name resolving to `127.0.0.1`, `192.0.2.50` (`self`), `169.254.1.1`, `fe80::1`, or `0.0.0.0` gets `502 destination_ip_prohibited` with zero dials. A name resolving to `10.20.0.5` is refused without `allow_private` and dialed with it; the literals `10.20.0.5` and `192.0.2.50` are dialed without any rule flag. `localhost:3000` and `127.0.0.1:8443` reach loopback mocks through the starter `loopback` rule. | `TestDirectAddressPolicy` |
@@ -576,23 +613,24 @@ unless marked T0.
 | N6 | Connections over `max_connections` or `max_connections_per_source` are closed after accept and counted with `reason="limit"`. | `TestConnectionLimits` |
 | N7 | A non-loopback listener on an address absent from the host (`192.0.2.1`) shows `retrying` in `cuttle status` while the loopback listener serves. | `TestListenerBindRetry` |
 
-The real corporate proxy and VPN are checked in M3 ([OI-0001][oi]).
+A real egress proxy and private link are checked in M3 on the example
+deployment of D13 ([OI-0001][oi]).
 
 ## Assumptions
 
 | ID | Assumption | Smallest check |
 | --- | --- | --- |
-| A1 | The corporate proxy accepts requests that carry no trace of proxying, with standard header handling, as it accepts office Chrome's direct requests. This replaces the earlier assumption that it accepts `Via`. | From home through the chain, load office-only sites that office Chrome loads directly ([OI-0001][oi]). |
-| A2 | A listener bound to the WireGuard address keeps accepting after the tunnel reconnects with the same address. | Bind office cuttle, restart the tunnel, and connect from home ([OI-0001][oi]). |
+| A1 | The egress proxy accepts requests that disclose no intermediary, with standard header handling, as it accepts direct requests from Chrome on the gateway machine. This replaces the earlier assumption that it accepts `Via`. | From the edge machine through the chain, load restricted destinations that Chrome on the gateway machine loads directly ([OI-0001][oi]). |
+| A2 | A listener bound to the private-link address keeps accepting after the link reconnects with the same address. | Bind the gateway instance, restart the link, and connect from the edge machine ([OI-0001][oi]). |
 | A3 | With the macOS application firewall on, the first non-loopback bind shows an allow prompt, possibly again after an upgrade changes the binary. | Bind once with the firewall on, then after `brew upgrade` ([OI-0001][oi]). |
-| A4 | The corporate proxy's re-signed leaves meet Safari's requirements. | `openssl s_client -proxy` from the office Mac ([OI-0001][oi]). |
+| A4 | A TLS-inspecting egress proxy's re-signed leaves meet Safari's requirements. | `openssl s_client -proxy` from the gateway machine ([OI-0001][oi]). |
 | A5 | The launchd hard limit on open files allows at least 4,096 descriptors. | `cuttle status` under `brew services` in M3 ([OI-0003][oi]). |
 
 ## Alternatives considered
 
-- **`Via` toward the corporate proxy with an opt-out.** Research 0002
-  recommended it; the user's no-trace requirement makes `trace = "none"`
-  the documented setting instead.
+- **`Via` toward the egress proxy with an opt-out.** Research 0002
+  recommended it; the user's non-disclosure requirement makes
+  `disclosure = "none"` the documented setting instead.
 - **Forwarding request heads byte for byte.** Considered in this iteration
   and withdrawn: the user confirmed that header case, order, and standard
   hop-by-hop handling are fine, and it needed a custom front end.
@@ -605,9 +643,9 @@ The real corporate proxy and VPN are checked in M3 ([OI-0001][oi]).
   like cuttle's own policy, and a relayed `407` would prompt for proxy
   credentials ([research 0002 §6][r2-6]).
 - **A wildcard listener with a source allowlist.** It survives address
-  changes, but advertises an open port on the corporate LAN.
+  changes, but advertises an open port on the gateway machine's LAN.
 - **Remote `direct` by default.** Not needed for the chain, and it exposes
-  the office Mac's network position.
+  the gateway machine's network position.
 - **Checking the socket address in `net.Dialer.ControlContext`.** Equivalent
   protection, but it keeps Go's resolver on the dial path, which tests could
   not replace without a fake DNS server.

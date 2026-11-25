@@ -1,5 +1,10 @@
 # 0001 — Homebrew tap, launchd service, XDG paths, and Go SQLite for `cuttle`
 
+> **Terminology.** This note keeps its original wording. Current project
+> terms are in the [glossary](../GLOSSARY.md); its
+> [mapping table](../GLOSSARY.md#mapping-from-earlier-wording) translates
+> the wording of earlier notes and commits.
+
 - Task: TASK-0001 (milestone M1; packaging and storage inputs for the
   revised design).
 - Date: 2026-11-25.

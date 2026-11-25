@@ -286,7 +286,7 @@ timeouts.
 
 | ID | Criterion | Check |
 | --- | --- | --- |
-| S1 | After a scripted mix of direct `CONNECT` to two hosts, plain HTTP through upstream `office`, and blocked requests, `host_hour` rows match the expected counts and bytes and agree with the live counters. | `TestStatsRowsMatchTraffic` |
+| S1 | After a scripted mix of direct `CONNECT` to two hosts, plain HTTP through upstream `gateway`, and blocked requests, `host_hour` rows match the expected counts and bytes and agree with the live counters. | `TestStatsRowsMatchTraffic` |
 | S2 | While another connection holds `BEGIN EXCLUSIVE` on the database, 100 proxied requests complete before the lock is released; the pending batch is written afterwards. | `TestStatsNeverBlocksForwarding` |
 | S3 | A tunnel open across an hour boundary splits its bytes between the two hours within one flush interval of data. | `TestStatsHourAttribution` |
 | S4 | Rows older than the retention are deleted; hosts beyond `max_hosts_per_hour` and keys beyond 20,000 pending fold into `*`. | `TestStatsRetentionAndFolding` |
@@ -300,7 +300,7 @@ timeouts.
 | A5 | A `POST` with `Sec-Fetch-Site: cross-site`, without the CSRF token, or a login without the `cuttle_login` cookie gets `403`. | `TestAdminCSRF` |
 | A6 | A session ends after 30 idle minutes, after `cuttle admin passwd` changes the file, and after logout. | `TestAdminSessionEnd` |
 | A7 | Every admin response carries the D5 security headers. | `TestAdminHeaders` |
-| A8 | After S1's traffic, the query for `upstream:office`, `direct`, and `block` over `24h` returns exactly the expected hosts, and `1h` excludes rows from earlier hours. `/domains` renders those rows, and `/live` lists an open tunnel. | `TestStatsDomainsQuery`, `TestAdminPages` |
+| A8 | After S1's traffic, the query for `upstream:gateway`, `direct`, and `block` over `24h` returns exactly the expected hosts, and `1h` excludes rows from earlier hours. `/domains` renders those rows, and `/live` lists an open tunnel. | `TestStatsDomainsQuery`, `TestAdminPages` |
 | A9 | A valid save replaces the file (0600, `.bak` written), reloads, and an open tunnel survives; invalid text gets `422` with line numbers and leaves the file; a stale `base` gets `409` and leaves the file; a `proxy.listen` change shows `restart_required`. | `TestAdminSettings` |
 | A10 | Headless Chrome with a throwaway profile and `--use-mock-keychain` logs in at `http://127.0.0.1:<port>/` and renders the overview. No window opens. | T2-lite at M2 close, [0007 D7][d7-7] |
 

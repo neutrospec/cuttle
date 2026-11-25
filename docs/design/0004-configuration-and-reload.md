@@ -93,7 +93,7 @@ Local clients have no port policy.
 | --- | --- | --- | --- | --- |
 | `name` | string | required | reload | `^[a-z][a-z0-9-]{0,31}$`, unique |
 | `address` | `host:port` | required | reload | Plain-HTTP proxy address |
-| `trace` | string | required | reload | `via` for another cuttle instance; `none` for the corporate proxy or any proxy that must see no trace of proxying ([0003 D1][d3-1]) |
+| `disclosure` | string | required | reload | `via` for another cuttle instance; `none` for an egress proxy or any proxy that must not see an intermediary ([0003 D1][d3-1]) |
 | `connect_timeout` | duration | `"10s"` | reload | 100 ms–10 min |
 | `response_timeout` | duration | `"60s"` | reload | Response head for `CONNECT` and plain HTTP, 100 ms–10 min |
 | `unreachable_hold` | duration | `"5s"` | reload | Fail fast after a connect failure, 100 ms–5 min; `"0s"` disables ([0003 D8][d3-8]) |
@@ -141,8 +141,8 @@ it, the line.
 Errors:
 
 - TOML syntax errors, unknown keys, wrong types, and values out of range.
-- A missing `name`, `proxy.default`, rule `action`, or upstream `trace`,
-  or a `trace` other than `via` or `none`.
+- A missing `name`, `proxy.default`, rule `action`, or upstream
+  `disclosure`, or a `disclosure` other than `via` or `none`.
 - Duplicate upstream or rule names, or an action naming an unknown
   upstream. The rule names `default`, `remote-default`, `port`, and
   `remote-direct` are reserved for decisions that no rule made.
@@ -208,14 +208,14 @@ allow_loopback = true
 
 # Another cuttle instance as an upstream:
 # [[upstream]]
-# name = "office"
+# name = "gateway"
 # address = "10.8.0.6:3128"
-# trace = "via"      # "none" for a corporate proxy
+# disclosure = "via"  # "none" for an egress proxy
 #
 # [[rule]]
-# name = "office-only"
-# domains = ["corp.example"]
-# action = "upstream:office"
+# name = "restricted"
+# domains = ["internal.example"]
+# action = "upstream:gateway"
 ```
 
 With the starter default `direct` on a loopback listener, a local client
@@ -244,7 +244,7 @@ Triggers: `SIGHUP`, `cuttle reload` through the control socket
 2. Build a new immutable policy snapshot: compiled rules, remote settings,
    upstream table, timeouts, and name.
 3. Keep the transport and reachability state of each upstream whose
-   `address`, `trace`, and timeouts are unchanged. Create new ones for the
+   `address`, `disclosure`, and timeouts are unchanged. Create new ones for the
    rest, close the idle connections of the replaced transports, and create
    new direct transports for the snapshot.
 4. Swap the snapshot pointer atomically. Apply `log.level` and `[stats]`
@@ -313,7 +313,7 @@ The target always exists, holding the old or the new content.
 [d2-3]: 0002-proxy-core-and-routing.md#d3-authority-normalization
 [d2-4]: 0002-proxy-core-and-routing.md#d4-rules-and-evaluation-order
 [d2-5]: 0002-proxy-core-and-routing.md#d5-actions-and-forwarding
-[d3-1]: 0003-upstream-chaining-and-exposure.md#d1-upstreams-and-trace-modes
+[d3-1]: 0003-upstream-chaining-and-exposure.md#d1-upstreams-and-disclosure-modes
 [d3-2]: 0003-upstream-chaining-and-exposure.md#d2-via-entries-and-loop-detection
 [d3-8]: 0003-upstream-chaining-and-exposure.md#d8-unreachable-upstream-hold
 [d3-9]: 0003-upstream-chaining-and-exposure.md#d9-listeners

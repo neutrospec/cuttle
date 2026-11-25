@@ -16,10 +16,10 @@ ordered rules on host name, domain, IP prefix, and port:
 
 - Tunnels stay end-to-end TLS; cuttle never decrypts traffic and caches
   nothing.
-- Chains such as home cuttle → office cuttle → corporate proxy are supported,
-  with loop detection and source and destination controls for listeners
-  reachable over a VPN. Requests reach a corporate proxy without any trace
-  of proxying.
+- Chains such as edge instance → gateway instance → egress proxy are
+  supported, with loop detection and source and destination controls for
+  listeners reachable over a private link. Requests toward an egress proxy
+  disclose no intermediary.
 - Live counters, a decision log, hourly per-domain statistics in SQLite, and
   a password-protected dashboard and settings page on loopback show where
   traffic went.
@@ -31,5 +31,6 @@ The project is in the design stage. See:
 - [Roadmap and milestones](docs/ROADMAP.md)
 - [Design records](docs/design/README.md), starting with
   [0002 — Proxy core and routing](docs/design/0002-proxy-core-and-routing.md)
+- [Glossary](docs/GLOSSARY.md) of project terms
 - [Development workflow and agent roles](AGENTS.md)
 - [Documentation index](docs/README.md)
