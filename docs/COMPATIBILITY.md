@@ -33,6 +33,23 @@ match the direct run in method, target, and body bytes.
 | Chrome on macOS | M3 | Pending | Pending | Pending | — |
 | Safari on macOS | M3, with approval | Pending | Pending | Pending | — |
 
+## Interfaces
+
+The M1.5 device check of [design 0008][dc] runs on the user's Mac with the
+user present. Rows record outcomes only: no MAC address, IP address,
+network name, or serial number. Step numbers refer to the check.
+
+| Check | Steps | Built-in Wi-Fi | Ethernet adapters | Phones over USB | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| Kind, media, and port name shown by `cuttle interfaces` | 1 | Pending | Pending | Pending | — |
+| Distinct BSD names and MACs for devices of one kind | 1 | Not applicable | Pending | Pending | — |
+| MAC and BSD name kept across replugging, port change, and reboot | 2, 3 | Not applicable | Pending | Pending | — |
+| Same-model replacement takes over a BSD name; the MAC match stays `absent` | 4 | Not applicable | Optional | Not run | — |
+| Notices and time to offline on cable pull, detach, and sharing off | 6 | Pending | Pending | Pending | — |
+| Flow leaves through the chosen interface | 7 | Pending | Pending | Pending | — |
+| `link_down` skip and pinned `503` | 8, 9 | Not applicable | Pending | Pending | — |
+| Phone without cellular data: failover reason and demotion | 10 | Not applicable | Not applicable | Pending | — |
+
 ## Known client behavior
 
 From [research 0002](research/0002-proxy-chaining-and-interception.md);
@@ -53,5 +70,6 @@ these are inputs to the design, not recorded compatibility checks.
 Configuration references: [Chromium proxy support](https://chromium.googlesource.com/chromium/src/+/HEAD/net/docs/proxy.md#manual-proxy-settings), [macOS proxy settings](https://support.apple.com/en-am/guide/mac-help/mchlp2591/27/mac/27), [curl `--proxy`](https://curl.se/docs/manpage.html#-x).
 
 [cc]: design/0007-test-environment-and-gates.md#d8-client-checks
+[dc]: design/0008-interface-selection.md#device-check-i18
 [nd]: design/0003-upstream-chaining-and-exposure.md#d5-non-disclosure-toward-an-egress-proxy
 [oi-2]: OPEN_ISSUES.md#oi-0002--safari-and-cfnetwork-behavior-unverified

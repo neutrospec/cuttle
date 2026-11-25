@@ -15,5 +15,6 @@ to [OPEN_ISSUES.md](../OPEN_ISSUES.md) when it blocks the current scope.
 | [0005](0005-statistics-and-admin.md) | SQLite statistics, admin listener, password, sessions, CSRF, dashboard, settings page | Proposed |
 | [0006](0006-packaging-paths-and-lifecycle.md) | XDG paths, permissions, CLI, control socket, first run, signals, logging, Homebrew formula and service | Proposed |
 | [0007](0007-test-environment-and-gates.md) | Test layers, mocks, name-resolution control, chain and loop setups, safety rules, T0–T3 gates, M1 and M3 client checks | Proposed |
+| [0008](0008-interface-selection.md) | Interface definitions and matching, online state without probe traffic, change notices, interface lists, bound dials, failover and demotion, upstream binding, DNS limits, status, `cuttle interfaces`, per-interface counters, device check | Proposed |
 
 Read 0002 first; the others refer to its interfaces and response table.
