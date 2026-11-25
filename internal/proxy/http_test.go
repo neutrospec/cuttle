@@ -672,3 +672,39 @@ func mustURL(s string) *url.URL {
 	}
 	return u
 }
+
+// TestHTTPClientClosesMidBody checks the client_closed branch of a
+// plain-HTTP response (design 0002 Failure behavior): the client reads the
+// head and part of a large body, then resets the connection. The decision
+// logs client_closed with the status sent, and down lies between what the
+// client read and the body size; the bytes still in flight are not pinned.
+func TestHTTPClientClosesMidBody(t *testing.T) {
+	e := newEnv(t, baseConfig)
+	const size = 32 << 20 // far more than loopback socket buffers hold
+	c := e.dial()
+	fmt.Fprintf(c, "GET http://plain.cuttle.test/bytes?n=%d HTTP/1.1\r\nHost: plain.cuttle.test\r\n\r\n", size)
+	res, err := http.ReadResponse(bufio.NewReader(c), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != 200 || res.ContentLength != size {
+		t.Fatalf("status %d length %d", res.StatusCode, res.ContentLength)
+	}
+	read, err := io.ReadFull(res.Body, make([]byte, 64<<10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.(*net.TCPConn).SetLinger(0)
+	c.Close()
+
+	d := e.waitDecisions(1)[0]
+	checkDecision(t, d, map[string]string{"kind": "http", "target": "plain.cuttle.test:80", "action": "direct",
+		"outcome": "client_closed", "status": "200", "up": "0"})
+	down, err := strconv.Atoi(d["down"])
+	if err != nil || down < read || down > size {
+		t.Errorf("down=%q, want between %d and %d", d["down"], read, size)
+	}
+	if got := e.p.Live().Get(stats.OutcomesTotal, "outcome", "client_closed"); got != 1 {
+		t.Errorf("outcomes_total{outcome=client_closed} = %d", got)
+	}
+}

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"squid/internal/authority"
+	"squid/internal/stats"
 	"squid/internal/testenv"
 )
 
@@ -106,7 +107,8 @@ func newUnitProxy(t *testing.T, n *testenv.Net, logs io.Writer) *Proxy {
 
 // TestRequestWithoutSourceClass checks that a request on a connection that
 // did not come through the classifying listener fails closed: it gets 500,
-// is never routed as local, and causes no lookup or dial.
+// is never routed as local, causes no lookup or dial, and is logged and
+// counted as outcome internal with source unknown.
 func TestRequestWithoutSourceClass(t *testing.T) {
 	n := testenv.NewNet()
 	n.Map("plain.cuttle.test", "203.0.113.10")
@@ -125,8 +127,22 @@ func TestRequestWithoutSourceClass(t *testing.T) {
 	if ev := n.Events(); len(ev) != 0 {
 		t.Errorf("network events %v", ev)
 	}
-	if len(logs.decisions()) != 0 || !strings.Contains(logs.String(), "without a source class") {
+	if !strings.Contains(logs.String(), "without a source class") {
 		t.Errorf("log %q", logs.String())
+	}
+	ds := logs.decisions()
+	if len(ds) != 2 {
+		t.Fatalf("decision lines %v", ds)
+	}
+	for i, kind := range []string{"connect", "http"} {
+		checkDecision(t, ds[i], map[string]string{"kind": kind, "source": "unknown", "target": "", "rule": "", "action": "",
+			"outcome": "internal", "status": "500", "error": "proxy_internal_error", "detail": "unknown source", "up": "0", "down": "0"})
+	}
+	if got := p.Live().Get(stats.OutcomesTotal, "outcome", "internal"); got != 2 {
+		t.Errorf("outcomes_total{outcome=internal} = %d", got)
+	}
+	if got := p.Live().Get(stats.DecisionsTotal, "kind", "connect", "action", "none") + p.Live().Get(stats.DecisionsTotal, "kind", "http", "action", "none"); got != 2 {
+		t.Errorf("decisions_total{action=none} = %d", got)
 	}
 }
 
@@ -142,7 +158,9 @@ func TestWarnedSourcesBounded(t *testing.T) {
 		t.Errorf("warnings for one source %d", got)
 	}
 	for i := range 5000 {
-		p.warnSource(netip.AddrFrom4([4]byte{10, 9, byte(i >> 8), byte(i)}))
+		// 10.20.0.0/16 is the private destination range of the test address
+		// plan (design 0007 D3).
+		p.warnSource(netip.AddrFrom4([4]byte{10, 20, byte(i >> 8), byte(i)}))
 		p.mu.Lock()
 		size := len(p.warned)
 		p.mu.Unlock()

@@ -26,10 +26,12 @@ const (
 // .1. A single write larger than MaxBytes goes into a file of its own.
 //
 // A failed rotation never stops logging: when a rename fails the writer
-// keeps appending to the current file and tries again after another
-// MaxBytes; when the file cannot be reopened, that write is lost and the
-// next write tries again. Each failure increments Failures, and the first
-// failure of a streak is reported once to Errors.
+// keeps appending to the current file, which then grows past MaxBytes, and
+// tries again after another MaxBytes; when the file cannot be reopened, that
+// write is lost and the next write tries again. Each failure increments
+// Failures, and the first failure of a run of failures is reported once to
+// Errors. A current file deleted by someone else is not a failure: the next
+// rotation opens a new one.
 type Writer struct {
 	// Errors receives one line for the first failure after a success. It is
 	// os.Stderr from Open.
@@ -122,8 +124,13 @@ func (w *Writer) Write(p []byte) (int, error) {
 
 // rotate shifts the rotated files and starts a new current file. When the
 // current file cannot be renamed it stays open, and the next attempt waits
-// for another MaxBytes.
+// for another MaxBytes. A current file that someone else deleted counts as
+// rotated away: the rotated files stay as they are, and a new current file
+// is opened, so writes never keep growing a deleted file.
 func (w *Writer) rotate() error {
+	if _, err := os.Lstat(w.path); errors.Is(err, fs.ErrNotExist) {
+		return w.reopen(nil)
+	}
 	var shiftErr error
 	for i := w.keep - 1; i >= 1; i-- {
 		err := w.rename(w.path+"."+strconv.Itoa(i), w.path+"."+strconv.Itoa(i+1))
@@ -131,19 +138,26 @@ func (w *Writer) rotate() error {
 			shiftErr = err
 		}
 	}
-	if err := w.rename(w.path, w.path+".1"); err != nil {
+	// ErrNotExist here means the file was deleted after the check above.
+	if err := w.rename(w.path, w.path+".1"); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		w.retryAt = w.size + w.max
 		if shiftErr != nil {
 			return shiftErr
 		}
 		return err
 	}
+	return w.reopen(shiftErr)
+}
+
+// reopen closes the current file and opens a new one at the path. It returns
+// the open error, or else prev.
+func (w *Writer) reopen(prev error) error {
 	w.f.Close()
 	w.f = nil
 	if err := w.open(); err != nil {
 		return err
 	}
-	return shiftErr
+	return prev
 }
 
 // Close closes the current file.

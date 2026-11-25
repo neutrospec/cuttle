@@ -2,6 +2,8 @@ package logx
 
 import (
 	"bytes"
+	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -137,5 +139,82 @@ func TestWriterReopensAfterOpenFailure(t *testing.T) {
 	}
 	if got := countLines(t, dir); got != 29 {
 		t.Errorf("lines kept %d, want 29", got)
+	}
+}
+
+// TestWriterRecreatesDeletedLog checks that a log file deleted by someone
+// else is recreated at the next rotation instead of growing unseen: the
+// missing current file counts as already rotated away.
+func TestWriterRecreatesDeletedLog(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cuttle.log")
+	w, err := Open(path, 1000, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	var errs bytes.Buffer
+	w.Errors = &errs
+	line := func(i int) []byte { return []byte(fmt.Sprintf("line-%03d %s\n", i, strings.Repeat("z", 89))) }
+	for i := range 5 {
+		w.Write(line(i))
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	// Past MaxBytes: the writer rotates, finds no current file, and opens a
+	// new one.
+	for i := 5; i < 25; i++ {
+		if _, err := w.Write(line(i)); err != nil {
+			t.Fatalf("write %d: %v", i, err)
+		}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("log not recreated: %v", err)
+	}
+	if !strings.Contains(string(data), "line-024 ") {
+		t.Errorf("recreated log lacks the newest line:\n%s", data)
+	}
+	if w.Failures() != 0 || errs.Len() != 0 {
+		t.Errorf("failures %d, errors %q", w.Failures(), errs.String())
+	}
+}
+
+// TestWriterRenameNotExist covers the race in which the current file
+// vanishes between the existence check and the rename: ErrNotExist from that
+// rename counts as rotated away, not as a failure.
+func TestWriterRenameNotExist(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cuttle.log")
+	w, err := Open(path, 1000, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	var errs bytes.Buffer
+	w.Errors = &errs
+	raced := false
+	w.rename = func(oldpath, newpath string) error {
+		if oldpath == path && !raced {
+			raced = true
+			if err := os.Remove(path); err != nil {
+				return err
+			}
+			return &os.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: fs.ErrNotExist}
+		}
+		return os.Rename(oldpath, newpath)
+	}
+	for i := range 15 {
+		if _, err := w.Write([]byte(fmt.Sprintf("line-%03d %s\n", i, strings.Repeat("r", 89)))); err != nil {
+			t.Fatalf("write %d: %v", i, err)
+		}
+	}
+	data, err := os.ReadFile(path)
+	if !raced || err != nil || !strings.Contains(string(data), "line-014 ") {
+		t.Fatalf("raced=%v err=%v data=%q", raced, err, data)
+	}
+	if w.Failures() != 0 || errs.Len() != 0 {
+		t.Errorf("failures %d, errors %q", w.Failures(), errs.String())
 	}
 }

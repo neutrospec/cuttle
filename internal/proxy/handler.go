@@ -42,8 +42,11 @@ type exchange struct {
 	start  time.Time
 	client string
 	source policy.SourceClass
-	kind   policy.Kind
-	snap   *snapshot
+	// unclassified marks a request on a connection that the listener did
+	// not classify; its decision line says source=unknown.
+	unclassified bool
+	kind         policy.Kind
+	snap         *snapshot
 
 	target  string // normalized authority, empty when the target was refused
 	http    authority.HTTPTarget
@@ -80,23 +83,26 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		client: r.RemoteAddr,
 		snap:   p.snap.Load(),
 	}
+	ex.kind = policy.KindHTTP
+	if r.Method == http.MethodConnect {
+		ex.kind = policy.KindConnect
+	}
 	tc, ok := r.Context().Value(connKey{}).(*trackedConn)
 	if !ok {
 		// Every served connection comes through listener.Accept, which
 		// classifies its source. Without a class the request is refused,
-		// never treated as local.
+		// never treated as local, and logged as an internal error.
+		ex.unclassified = true
 		p.log.Warn("request on a connection without a source class; refused", "client", r.RemoteAddr)
-		p.writeGenerated(w, http.StatusInternalServerError,
-			ex.snap.cfg.Name+"; error=proxy_internal_error; details=\"unknown source\"", "internal error: unknown source")
+		p.reply(w, ex, http.StatusInternalServerError, "proxy_internal_error", "unknown source",
+			"internal error: unknown source", OutcomeInternal)
 		return
 	}
 	ex.source = tc.source
-	if r.Method == http.MethodConnect {
-		ex.kind = policy.KindConnect
+	if ex.kind == policy.KindConnect {
 		p.serveConnect(w, r, ex)
 		return
 	}
-	ex.kind = policy.KindHTTP
 	p.serveHTTP(w, r, ex)
 }
 
@@ -247,7 +253,7 @@ func (p *Proxy) finish(ex *exchange) {
 	attrs := []slog.Attr{
 		slog.String("id", ex.id),
 		slog.String("client", ex.client),
-		slog.String("source", ex.source.String()),
+		slog.String("source", sourceLabel(ex)),
 		slog.String("kind", ex.kind.String()),
 		slog.String("target", ex.target),
 		slog.String("rule", ex.d.Rule),
@@ -277,4 +283,11 @@ func (p *Proxy) addBytes(ex *exchange, direction string, n int) {
 		ex.down.Add(int64(n))
 	}
 	p.live.Add(int64(n), stats.BytesTotal, "action", ex.d.Action.String(), "direction", direction)
+}
+
+func sourceLabel(ex *exchange) string {
+	if ex.unclassified {
+		return "unknown"
+	}
+	return ex.source.String()
 }

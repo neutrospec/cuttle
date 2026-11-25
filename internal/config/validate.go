@@ -65,6 +65,17 @@ type validator struct {
 	file string
 	idx  lineIndex
 	r    *Report
+	// listenIdx holds, for each accepted proxy listener, its index in
+	// proxy.listen as written. It is empty when proxy.listen is absent.
+	listenIdx []int
+}
+
+// listenPath names the proxy.listen element of accepted listener i.
+func (v *validator) listenPath(i int) string {
+	if i < len(v.listenIdx) {
+		return elem("proxy.listen", v.listenIdx[i])
+	}
+	return "proxy.listen"
 }
 
 func sub(base, key string) string {
@@ -198,12 +209,19 @@ func (v *validator) array(m map[string]any, base, key string) ([]any, bool) {
 	return a, ok
 }
 
-func (v *validator) strings(m map[string]any, base, key string) ([]string, bool) {
+// strElem is one string element of an array with its index in the file, so
+// messages name the element the user wrote even after others were skipped.
+type strElem struct {
+	i int
+	s string
+}
+
+func (v *validator) strings(m map[string]any, base, key string) ([]strElem, bool) {
 	a, ok := v.array(m, base, key)
 	if !ok {
 		return nil, false
 	}
-	out := make([]string, 0, len(a))
+	out := make([]strElem, 0, len(a))
 	good := true
 	for i, x := range a {
 		s, ok := x.(string)
@@ -212,7 +230,7 @@ func (v *validator) strings(m map[string]any, base, key string) ([]string, bool)
 			good = false
 			continue
 		}
-		out = append(out, s)
+		out = append(out, strElem{i, s})
 	}
 	return out, good
 }
@@ -293,7 +311,8 @@ func (v *validator) route(m map[string]any, base, key string, upstreams map[stri
 func (v *validator) cidrs(m map[string]any, base, key string) []netip.Prefix {
 	list, _ := v.strings(m, base, key)
 	out := make([]netip.Prefix, 0, len(list))
-	for i, s := range list {
+	for _, e := range list {
+		i, s := e.i, e.s
 		p, err := netip.ParsePrefix(s)
 		if err != nil {
 			if a, aerr := netip.ParseAddr(s); aerr == nil {
@@ -422,13 +441,18 @@ func (v *validator) proxy(raw map[string]any, c *Config, upstreams map[string]bo
 	}
 	v.known(pm, "proxy", "listen", "default", "connect_timeout", "response_timeout", "idle_timeout", "max_connections", "remote")
 
-	if list, ok := v.strings(pm, "proxy", "listen"); ok {
+	if raw, present := pm["listen"]; present {
+		// Check every string element, even when another one has the wrong
+		// type, so each message names the element as written.
+		list, _ := v.strings(pm, "proxy", "listen")
 		p.Listen = nil
-		if len(list) == 0 {
+		if a, ok := raw.([]any); ok && len(a) == 0 {
 			v.errf("proxy.listen", "needs at least one IP:port listener")
 		}
-		for i, s := range list {
-			path := elem("proxy.listen", i)
+		v.listenIdx = nil
+		for _, e := range list {
+			s := e.s
+			path := elem("proxy.listen", e.i)
 			ap, err := netip.ParseAddrPort(s)
 			switch {
 			case err != nil:
@@ -443,6 +467,7 @@ func (v *validator) proxy(raw map[string]any, c *Config, upstreams map[string]bo
 				v.errf(path, "duplicate listener %q", s)
 			default:
 				p.Listen = append(p.Listen, unmapAP(ap))
+				v.listenIdx = append(v.listenIdx, e.i)
 			}
 		}
 	}
@@ -488,7 +513,7 @@ func (v *validator) proxy(raw map[string]any, c *Config, upstreams map[string]bo
 
 	for i, ap := range p.Listen {
 		if !ap.Addr().IsLoopback() && len(p.Remote.Sources) == 0 {
-			v.errf(elem("proxy.listen", i), "non-loopback listener %s needs proxy.remote.sources", ap)
+			v.errf(v.listenPath(i), "non-loopback listener %s needs proxy.remote.sources", ap)
 		}
 	}
 }
@@ -528,17 +553,19 @@ func (v *validator) rules(raw map[string]any, c *Config, upstreams map[string]bo
 		}
 		_, hasCIDRs := rm["cidrs"]
 		hosts, _ := v.strings(rm, base, "hosts")
-		for j, h := range hosts {
+		for _, e := range hosts {
+			h := e.s
 			if err := authority.CheckPattern(h); err != nil {
-				v.errf(elem(sub(base, "hosts"), j), "%q: %s", h, err.(*authority.Error).Reason)
+				v.errf(elem(sub(base, "hosts"), e.i), "%q: %s", h, err.(*authority.Error).Reason)
 				continue
 			}
 			r.Hosts = append(r.Hosts, h)
 		}
 		domains, _ := v.strings(rm, base, "domains")
-		for j, d := range domains {
+		for _, e := range domains {
+			d := e.s
 			if err := authority.CheckPattern(d); err != nil {
-				v.errf(elem(sub(base, "domains"), j), "%q: %s", d, err.(*authority.Error).Reason)
+				v.errf(elem(sub(base, "domains"), e.i), "%q: %s", d, err.(*authority.Error).Reason)
 				continue
 			}
 			r.Domains = append(r.Domains, d)
@@ -607,7 +634,7 @@ func (v *validator) admin(raw map[string]any, c *Config) {
 		if explicit {
 			v.errf("admin.listen", "%s equals a proxy listener", l)
 		} else {
-			v.errf(elem("proxy.listen", i), "%s equals the default admin.listen; listen elsewhere or set admin.listen", l)
+			v.errf(v.listenPath(i), "%s equals the default admin.listen; listen elsewhere or set admin.listen", l)
 		}
 	}
 }
