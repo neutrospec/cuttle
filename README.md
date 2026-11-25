@@ -86,7 +86,7 @@ brew uninstall cuttle
 brew services cleanup
 rm -rf ~/.config/cuttle ~/.local/share/cuttle ~/.local/state/cuttle
 rm -f "$(brew --prefix)/var/log/cuttle.log"
-# and the cuttle.env file above, if you created one
+# with non-default XDG_* values, their cuttle directories and cuttle.env
 ```
 
 Stop the service before uninstalling: `brew uninstall` leaves it running

@@ -177,12 +177,18 @@ Move resolved items to Closed with their resolving commit or evidence.
      from the main checkout's root. It checks that the remote serves only
      `HEAD`, `refs/heads/main`, and tags, makes a fresh mirror clone in a
      temporary directory that it removes on exit, and counts the matches
-     of `CUTTLE_PUBLISH_SCAN_PATTERNS` in the file contents of every
-     commit, binary files included; the commit messages without the
-     author and committer lines; the tag messages; the tip tree; every
-     file and directory name; and the ref names. Every count must be 0. It
-     also checks that the distinct author, committer, and tagger
-     identities are exactly `CUTTLE_PUBLISH_IDENTITIES`. Both values are
+     of `CUTTLE_PUBLISH_SCAN_PATTERNS` in every blob of the clone (the
+     files of every commit, symbolic link targets, binary files, and blobs
+     that only a tag points to); the commit messages without the author
+     and committer lines; the name and message of every tag object, inner
+     tags of nested tags included; the tip tree; every file and directory
+     name, also in trees that a tag points to; and the ref names. Every
+     check uses `/usr/bin/grep -a -i -E` in the C locale, so the pattern
+     means the same everywhere; UTF-16 text and compressed content are
+     not decoded. Every count must be 0. It also checks that the distinct
+     author, committer, and tagger identities are exactly
+     `CUTTLE_PUBLISH_IDENTITIES`. It ignores `GIT_DIR` and the other
+     variables that would point git at another repository. Both values are
      local, so they live in the untracked root `.env` (see
      [`.env.example`](../.env.example)), and the script reads only those
      two variables from it. `--show` prints the matching lines. Exit
@@ -218,7 +224,13 @@ Move resolved items to Closed with their resolving commit or evidence.
     `rev-list --objects` prints each object once, under the first path it
     meets, so a file whose content equals an earlier file's goes unseen,
     which the positive control showed. The script lists every commit's
-    tree with `git ls-tree -r -t` instead.
+    tree with `git ls-tree -r -t` instead. The TASK-0015 review (F1, F2,
+    F4, F5) then found that `git grep` skips symbolic link targets and
+    reads `\b` and similar escapes differently from `grep`, that a
+    `GIT_DIR` in the environment redirected the scan, and that blobs and
+    inner tags reachable only through tags went unscanned; the script now
+    reads every blob and tag object with one `grep`, and positive
+    controls cover each case.
   - K3 (infra): run the block in a subshell, stop if the clone or `cd`
     fails, check that the pattern compiles and is not empty, read only the
     one variable instead of `set -a`, and clean up with

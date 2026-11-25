@@ -6,25 +6,36 @@
 #
 # The script checks that the remote serves only HEAD, refs/heads/main, and
 # tags, then makes a fresh mirror clone of everything the remote serves in
-# a temporary directory and counts the matches of the scan pattern in:
+# a temporary directory and counts the matching lines in:
 #
-#   contents      the files of every commit, binary files included
+#   contents      every blob in the clone: the files of every commit,
+#                 symbolic link targets, binary files, and blobs that only
+#                 a tag points to
 #   messages      every commit message, without the author and committer
 #                 lines
-#   tag messages  every annotated tag's message
-#   tip tree      the files of HEAD
-#   path names    every file and directory name in every commit
-#   ref names     every branch and tag name
+#   tag messages  the name and message of every tag object, inner tags of
+#                 nested tags included, without the tagger line
+#   tip tree      the files of HEAD, symbolic links included
+#   path names    every file and directory name in every commit, and in
+#                 every tree that a tag points to
+#   ref names     every ref name
 #
 # Every count must be 0. It also checks that the distinct author, committer,
 # and tagger identities, as "Name <email>", are exactly the allowed set.
+#
+# Every check uses one regular expression engine, /usr/bin/grep -a -i -E in
+# the C locale, which also validates the pattern, so an escape such as \b or
+# \< means the same everywhere. Matching works on bytes as stored: UTF-16
+# text, compressed or encoded content (gzip, zip, images, PDF streams), and
+# Git LFS objects behind their pointer files are not decoded.
 #
 # Point it at the remote, or before a push at a scratch bare repository
 # that holds only what the push will send. Never point it at the working
 # repository's path: a path serves every local ref, private ones included.
 #
-# --show prints the matching lines and object paths as well; without it the
-# output holds counts only.
+# --show prints the matching lines as well, each blob's lines after its
+# object ID (`git log --all --find-object=<id>` finds where it occurs);
+# without it the output holds counts only.
 #
 # Inputs, read from the environment or else from the single variable of
 # that name in the untracked .env at the repository root (see .env.example):
@@ -36,9 +47,23 @@
 #
 # Exit status: 0 when every check passes, 1 when a check finds something,
 # and 2 for a usage or setup error, such as an empty or invalid pattern, or
-# a failed clone. The script never stops with a pass after an error: grep and
-# git grep must exit 0 (match) or 1 (no match), and anything else stops it.
+# a failed clone. The script never stops with a pass after an error: grep
+# must exit 0 (match) or 1 (no match), and anything else stops it.
 set -eu
+
+# Variables that point git at another repository or object store, such as
+# GIT_DIR, would make every command below read something other than the
+# clone. Drop them; GIT_DIR is set to the clone once it exists.
+unset GIT_DIR GIT_WORK_TREE GIT_IMPLICIT_WORK_TREE GIT_COMMON_DIR \
+	GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES \
+	GIT_GRAFT_FILE GIT_REPLACE_REF_BASE GIT_NO_REPLACE_OBJECTS \
+	GIT_SHALLOW_FILE GIT_NAMESPACE GIT_PREFIX GIT_CONFIG \
+	GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT GIT_CEILING_DIRECTORIES \
+	GIT_DISCOVERY_ACROSS_FILESYSTEM
+
+export LC_ALL=C
+grep=/usr/bin/grep
+[ -x "$grep" ] || grep=grep
 
 usage() {
 	echo "usage: scripts/publish-scan [--show] <remote-url-or-path>" >&2
@@ -79,9 +104,10 @@ p=$(setting CUTTLE_PUBLISH_SCAN_PATTERNS)
 ids=$(setting CUTTLE_PUBLISH_IDENTITIES)
 [ -n "$ids" ] || die "CUTTLE_PUBLISH_IDENTITIES is empty or unset"
 
-# The pattern must compile for grep; status 2 means it does not.
+# The pattern must compile for the same grep that matches; status 2 means
+# it does not.
 rc=0
-printf '' | grep -i -E -e "$p" >/dev/null 2>&1 || rc=$?
+printf '' | "$grep" -a -i -E -e "$p" >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 1 ] || die "CUTTLE_PUBLISH_SCAN_PATTERNS is not a valid extended regular expression"
 
 d=$(mktemp -d)
@@ -108,8 +134,19 @@ report() {
 # match FILE OUT appends the lines of FILE that match the pattern to OUT.
 match() {
 	rc=0
-	grep -i -E -e "$p" "$1" >>"$2" || rc=$?
+	"$grep" -a -i -E -e "$p" "$1" >>"$2" || rc=$?
 	[ "$rc" -le 1 ] || die "grep failed with status $rc"
+}
+
+# blob OID LABEL OUT appends the matching lines of blob OID to OUT, each
+# after LABEL.
+blob() {
+	git cat-file blob "$1" >"$d/blob" || die "git cat-file failed for $1"
+	: >"$d/hit"
+	match "$d/blob" "$d/hit"
+	if [ -s "$d/hit" ]; then
+		L=$2 awk '{ print ENVIRON["L"] ": " $0 }' "$d/hit" >>"$3" || die "awk failed"
+	fi
 }
 
 # Refs the remote serves: only HEAD, refs/heads/main, and tags.
@@ -136,44 +173,66 @@ fi
 # local path behave like a remote, which sends only reachable objects.
 git clone --quiet --mirror --no-local -- "$src" "$d/clone" || die "git clone failed for $src"
 cd "$d/clone" || die "cannot enter the clone"
+export GIT_DIR="$d/clone" GIT_NO_REPLACE_OBJECTS=1
 
 git rev-list --all >"$d/revs" || die "git rev-list failed"
 [ -s "$d/revs" ] || die "the clone has no commits"
+git cat-file --batch-all-objects --batch-check='%(objectname) %(objecttype)' >"$d/objects" ||
+	die "git cat-file --batch-all-objects failed"
 
-# File contents of every commit, without -I, so binary files count.
+# Every blob, read raw, so that symbolic link targets, binary files, and
+# blobs reachable only through a tag count.
 : >"$d/contents"
-while read -r r; do
-	rc=0
-	git grep -i -E -e "$p" "$r" -- >>"$d/contents" || rc=$?
-	[ "$rc" -le 1 ] || die "git grep failed with status $rc at $r"
-done <"$d/revs"
+while read -r oid type; do
+	[ "$type" = blob ] || continue
+	blob "$oid" "$oid" "$d/contents"
+done <"$d/objects"
 report contents "$d/contents"
 
-git log --no-use-mailmap --all --format=%B >"$d/log" || die "git log failed"
+git log --no-use-mailmap --no-show-signature --all --format=%B >"$d/log" || die "git log failed"
 : >"$d/messages"
 match "$d/log" "$d/messages"
 report messages "$d/messages"
 
-git for-each-ref --format='%(contents)' refs/tags >"$d/tags" || die "git for-each-ref failed"
+# Every tag object: its name and message, and its tagger for the identity
+# check. A tag that points to a tree adds that tree to the path names.
+cp "$d/revs" "$d/roots"
+: >"$d/tag-text"
+: >"$d/ids-raw"
+while read -r oid type; do
+	[ "$type" = tag ] || continue
+	git cat-file tag "$oid" >"$d/tag" || die "git cat-file failed for $oid"
+	awk 'body { print; next } /^$/ { body = 1; next } /^tag / { print substr($0, 5) }' \
+		"$d/tag" >>"$d/tag-text" || die "awk failed"
+	sed -n -e '/^$/q' -e '/^tagger /{' -e 's/^tagger //' \
+		-e 's/ [0-9][0-9]* [-+][0-9][0-9][0-9][0-9]$//' -e p -e '}' \
+		"$d/tag" >>"$d/ids-raw" || die "sed failed"
+	if [ "$(sed -n -e '/^$/q' -e 's/^type //p' "$d/tag")" = tree ]; then
+		sed -n -e '/^$/q' -e 's/^object //p' "$d/tag" >>"$d/roots"
+	fi
+done <"$d/objects"
 : >"$d/tag-messages"
-match "$d/tags" "$d/tag-messages"
+match "$d/tag-text" "$d/tag-messages"
 report "tag messages" "$d/tag-messages"
 
+git ls-tree -r --full-tree --format='%(objecttype) %(objectname) %(path)' HEAD \
+	>"$d/tip-tree" || die "git ls-tree failed at HEAD"
 : >"$d/tip"
-rc=0
-git grep -i -E -e "$p" HEAD -- >>"$d/tip" || rc=$?
-[ "$rc" -le 1 ] || die "git grep failed with status $rc at HEAD"
+while read -r type oid path; do
+	[ "$type" = blob ] || continue
+	blob "$oid" "HEAD:$path" "$d/tip"
+done <"$d/tip-tree"
 report "tip tree" "$d/tip"
 
-# Path names of every commit's tree, directories included. git rev-list
+# Path names of every root's tree, directories included. git rev-list
 # --objects is not enough: it prints each object once, under the first path
 # it meets, so a file whose content equals an earlier file's goes unseen.
 : >"$d/names"
 while read -r r; do
 	git -c core.quotePath=false ls-tree -r -t --full-tree --name-only "$r" >>"$d/names" ||
 		die "git ls-tree failed at $r"
-done <"$d/revs"
-LC_ALL=C sort -u "$d/names" >"$d/names-unique" || die "sort failed"
+done <"$d/roots"
+sort -u "$d/names" >"$d/names-unique" || die "sort failed"
 : >"$d/path-names"
 match "$d/names-unique" "$d/path-names"
 report "path names" "$d/path-names"
@@ -184,17 +243,15 @@ match "$d/refnames" "$d/ref-names"
 report "ref names" "$d/ref-names"
 
 # Identities: author, committer, and tagger, exactly the allowed set.
-git log --no-use-mailmap --all --format='%an <%ae>%n%cn <%ce>' >"$d/ids-raw" ||
-	die "git log failed"
-git for-each-ref --format='%(if)%(taggername)%(then)%(taggername) %(taggeremail)%(end)' \
-	refs/tags >>"$d/ids-raw" || die "git for-each-ref failed"
-grep -v '^$' "$d/ids-raw" | LC_ALL=C sort -u >"$d/ids-found" || true
+git log --no-use-mailmap --no-show-signature --all --format='%an <%ae>%n%cn <%ce>' \
+	>>"$d/ids-raw" || die "git log failed"
+"$grep" -v '^$' "$d/ids-raw" | sort -u >"$d/ids-found" || true
 printf '%s\n' "$ids" | tr ';' '\n' |
 	sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' |
-	grep -v '^$' | LC_ALL=C sort -u >"$d/ids-allowed" || true
+	"$grep" -v '^$' | sort -u >"$d/ids-allowed" || true
 [ -s "$d/ids-allowed" ] || die "CUTTLE_PUBLISH_IDENTITIES lists no identity"
-LC_ALL=C comm -23 "$d/ids-found" "$d/ids-allowed" >"$d/ids-unexpected"
-LC_ALL=C comm -13 "$d/ids-found" "$d/ids-allowed" >"$d/ids-missing"
+comm -23 "$d/ids-found" "$d/ids-allowed" >"$d/ids-unexpected"
+comm -13 "$d/ids-found" "$d/ids-allowed" >"$d/ids-missing"
 nu=$(wc -l <"$d/ids-unexpected" | tr -d ' ')
 nm=$(wc -l <"$d/ids-missing" | tr -d ' ')
 if [ "$nu" -eq 0 ] && [ "$nm" -eq 0 ]; then

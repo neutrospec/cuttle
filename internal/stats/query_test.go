@@ -35,7 +35,7 @@ func TestStatsWindows(t *testing.T) {
 		}
 		return d.Unix()
 	}
-	east := time.FixedZone("UTC+9", 9*3600)
+	east := time.FixedZone("UTC+3", 3*3600)
 	half := time.FixedZone("UTC+5:30", 5*3600+1800)
 	for _, c := range []struct {
 		name, from, to string
