@@ -403,6 +403,16 @@ Move resolved items to Closed with their resolving commit or evidence.
     a private directory without a socket; the `upgrade` helper sits above
     the `TestUpgradedConnections` doc comment; and serve takes `s.reloadMu`
     before it logs `stopped`, which `TestStopWaitsForReload` checks.
+  - O-R1 and gate items (from the TASK-0009 re-check): O-R1 (design,
+    implementer): the MAC redaction in validation messages also hides
+    12-hex-digit labels, `xxxx.xxxx.xxxx` hex names, six-pair dashed labels,
+    instance names such as `cuttle-0123456789ab`, and IPv6 addresses
+    written with six leading two-digit groups. The operator is trusted
+    (AGENTS.md), so narrow or drop the redaction and record the rule in
+    0008 D6. Gate (infra): the cgo step's `go list` returns nothing when
+    `CGO_ENABLED=0` is set in the environment; run it as `CGO_ENABLED=1 go
+    list -deps -f '{{if .CgoFiles}}{{.ImportPath}}{{end}}' ./cmd/cuttle` in
+    `scripts/gate` and 0007 D7.
 - Next action: orchestrator — include the open items (V4–V6, V8, V11,
   V12, P1, W1–W3, Z2, Z4, G1–G2, and M-R2) in the briefs of the stages
   they affect; the producer closes each item with the commit that settles
