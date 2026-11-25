@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
-	"os"
 	"strings"
 	"text/tabwriter"
 
@@ -205,9 +203,7 @@ func cmdPaths(args []string, lookup env, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "cuttle:", err)
 		return exitFailure
 	}
-	if _, err := os.Stat(p.Password.Path); errors.Is(err, fs.ErrNotExist) {
-		p.Password.Source += "; missing"
-	}
+	p = p.WithPresence()
 	if *asJSON {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
@@ -215,13 +211,8 @@ func cmdPaths(args []string, lookup env, stdout, stderr io.Writer) int {
 		return exitOK
 	}
 	w := tabwriter.NewWriter(stdout, 0, 8, 2, ' ', 0)
-	for _, row := range []struct {
-		name string
-		item paths.Item
-	}{
-		{"config", p.Config}, {"password", p.Password}, {"stats", p.Stats}, {"log", p.Log}, {"control", p.Control},
-	} {
-		fmt.Fprintf(w, "%s\t%s\t%s\n", row.name, row.item.Path, row.item.Source)
+	for _, it := range p.Items() {
+		fmt.Fprintf(w, "%s\t%s\t%s\n", it.Name, it.Path, it.Source)
 	}
 	w.Flush()
 	return exitOK

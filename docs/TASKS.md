@@ -45,17 +45,58 @@ A closed task becomes one line under Closed:
 
 - Milestone: M1.5 (new)
 - Status: design
+- Iteration: 2/3
+- Workers: designer on branch `t3/interface-selection-design`; iteration 1
+  reviewer done
+- Base: `c7ef543`; the designer merges current `main` (M1.4 landed) into
+  the branch
+- Candidate: `12c6fd0` (tree `b473181`), returned for revision
+- Evidence: iteration 1 review "revise": pin and restrict hold, destination
+  checks hold, platform constants verified
+- Findings: open I-R1-I-R3 (major), I-R4-I-R14 (minor), I-R15-I-R20
+  (nits); user decisions below
+- Next action: designer — merge main, revise 0008, apply the changes to
+  records 0002-0007, README, and OPEN_ISSUES, then a fresh review
+
+Decisions for TASK-0008 from the user (2026-11-25):
+
+- New requirement (translated): because network cost differs, cuttle
+  chooses among several network interfaces. Example: with NICs A, B, and C
+  in priority order, use B only when A is not online, then C. Some
+  destinations, such as large system updates, may be pinned to B even when
+  A is online. This applies to `direct` routes, not only to upstreams.
+- Placement: a new stage M1.5 after M1.4, before M1 close, so that the M2
+  statistics can show traffic per interface.
+- "Online" means the link is up with a usable address; a fast connect
+  failure moves to the next interface. No periodic probe traffic.
+- The user's interfaces are one Wi-Fi interface joined to one fixed
+  network, two Ethernet interfaces, and two USB-tethered phones. Interfaces
+  of the same kind must be distinguishable; no hotspot joins over Wi-Fi.
+- cuttle supports macOS only, so darwin-only mechanisms are acceptable; cgo
+  remains a cost to weigh against pure-Go options.
+- Iteration 2 (user): a 3 s connect timeout fails over to the next
+  interface; after a later interface connects, the failed one goes last
+  in every list for 30 s (global demotion, accepting its cost effect); a
+  primary interface with a live link but a dead uplink fails names at DNS,
+  which stays a documented limitation with per-interface DNS under Later;
+  per-destination interface needs on upstream routes use two `[[upstream]]`
+  entries with the same address.
+
+### TASK-0008 — M1.5 interface selection: research and design
+
+- Milestone: M1.5 (new)
+- Status: review
 - Iteration: 1/3
-- Workers: researcher done (note 0003 landed in `df894eb`); designer on a
-  T3 worktree branch, limited to a new record 0008, the ROADMAP M1.5 row,
-  the design index, and the glossary, so it does not collide with
-  TASK-0007
-- Base: `bb36ea5` plus this board update
-- Candidate: none
-- Evidence: research note 0003; OI-0007 opened for local network privacy
-- Findings: none
-- Next action: designer — write design record 0008 and the M1.5 roadmap row
-  and return the candidate commit for review
+- Workers: designer done on branch `t3/interface-selection-design`; fresh
+  reviewer pending
+- Base: `c7ef543`
+- Candidate: `12c6fd0` (tree `b473181`): record 0008, ROADMAP M1.5, design
+  index, glossary, compatibility rows
+- Evidence: designer docs checks passed; orchestrator link check passed on
+  the candidate tree
+- Findings: none yet; 26 changes to other records and 2 open-issue items
+  listed in 0008 for the orchestrator to apply after TASK-0007 lands
+- Next action: reviewer — independent review of `c7ef543..12c6fd0`
 
 Decisions for TASK-0008 from the user (2026-11-25):
 
@@ -77,18 +118,17 @@ Decisions for TASK-0008 from the user (2026-11-25):
 ### TASK-0007 — M1.4 live operation
 
 - Milestone: M1.4
-- Status: implement
+- Status: review
 - Iteration: 2/3
-- Workers: implementer on branch `t3/m1-live-operation`; iteration 1
-  reviewer done
+- Workers: implementer done on branch `t3/m1-live-operation`; fresh
+  re-check pending
 - Base: `05e6109`
-- Candidate: `dd84277` (tree `816b96f`), approved with minor fixes
-- Evidence: reviewer reran T0, T1, and `-race -count=5` (pass); byte
-  counting held in every probed edge case
-- Findings: open L-R1 (shutdown can log `stopped` and close the log before
-  every `shutdown` line, medium), L-R2-L-R6 (low), L-R7 (nit)
-- Next action: implementer — fix L-R1-L-R7, rerun T0 and T1, then a fresh
-  re-check
+- Candidate: `4e72171` (tree `b1febdc`) on top of `dd84277`
+- Evidence: implementer ran `scripts/gate t0`, `t1`, and `-race -count=3`
+  on proxy, cuttle, and control for `b1febdc`, all pass; each fix proven by
+  a mutation
+- Findings: L-R1-L-R7 reported fixed, pending re-check
+- Next action: reviewer — fresh re-check of `dd84277..4e72171`
 
 Decisions for TASK-0007 (2026-11-25):
 
@@ -104,6 +144,10 @@ Decisions for TASK-0007 (2026-11-25):
   `TMPDIR` location with a source note; if that is also too long, `serve`
   logs one clear error and runs without the socket, and `cuttle paths` and
   `cuttle status` report the cause.
+- After TASK-0007 lands (orchestrator, docs): reword the two remaining
+  "corporate" rows in the 0003 D13 example table (egress proxy, inspection
+  root CA) in general terms, per the user's request to drop the in-house
+  framing.
 
 ## Closed
 
@@ -113,6 +157,9 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0007 — M1.4 live operation — landed `106ecd7`, gates: T0 T1 @
+  `be7aceb`; reviewed tree `b1febdc` (iteration 2 of 3); follow-ups
+  M-R1–M-R4 in OI-0006
 - TASK-0006 — M1.3 upstreams and chaining — landed `f53073d`, gates: T0 T1 @
   `6739d92`; reviewed tree `ad5772e` (iteration 3 of 3); follow-ups W-R1–W-R2
   in OI-0006

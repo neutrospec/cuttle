@@ -29,9 +29,13 @@ commands:
   explain [--config PATH] [--remote] TARGET show how the configuration routes TARGET
                                             (host:port, http://URL, or https://URL)
   paths [--json]                            print resolved paths
+  status [--json]                           show the running service's listeners,
+                                            upstreams, counters, and tunnels
+  reload                                    ask the running service to reload
+                                            its configuration
   version                                   print the version
 
-reload, status, and admin passwd arrive in later versions.
+admin passwd arrives in a later version.
 `
 
 func main() {
@@ -58,6 +62,10 @@ func run(args []string, lookup env, stdout, stderr io.Writer) int {
 		return cmdExplain(rest, lookup, stdout, stderr)
 	case "paths":
 		return cmdPaths(rest, lookup, stdout, stderr)
+	case "status":
+		return cmdStatus(rest, lookup, stdout, stderr)
+	case "reload":
+		return cmdReload(rest, lookup, stdout, stderr)
 	case "version", "--version", "-version":
 		if len(rest) != 0 {
 			fmt.Fprint(stderr, usage)
@@ -65,9 +73,6 @@ func run(args []string, lookup env, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintf(stdout, "cuttle %s (%s)\n", version, runtime.Version())
 		return exitOK
-	case "reload", "status":
-		fmt.Fprintf(stderr, "cuttle: %s needs the control socket, which this version does not have yet\n", cmd)
-		return exitFailure
 	case "admin":
 		fmt.Fprintln(stderr, "cuttle: the admin UI and cuttle admin passwd arrive in a later version")
 		return exitFailure

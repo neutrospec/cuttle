@@ -78,6 +78,24 @@ func TestBinaryHelperIsolation(t *testing.T) {
 		})
 	}
 
+	t.Run("environment overrides", func(t *testing.T) {
+		s := fresh(t)
+		inside := filepath.Join(s.Root, "alt-state")
+		if err := s.check([]string{"status"}, map[string]string{"XDG_STATE_HOME": inside}); err != nil {
+			t.Errorf("override inside the sandbox refused: %v", err)
+		}
+		for name, over := range map[string]map[string]string{
+			"state outside":       {"XDG_STATE_HOME": filepath.Join(os.Getenv("HOME"), ".local", "state")},
+			"config outside":      {"XDG_CONFIG_HOME": "/usr/local/etc"},
+			"HOME not allowed":    {"HOME": inside},
+			"runtime not allowed": {"XDG_RUNTIME_DIR": inside},
+		} {
+			if err := s.check([]string{"status"}, over); err == nil {
+				t.Errorf("%s: accepted %v", name, over)
+			}
+		}
+	})
+
 	t.Run("config outside the sandbox", func(t *testing.T) {
 		s := fresh(t)
 		if err := s.Check([]string{"check", "--config", filepath.Join(os.Getenv("HOME"), ".config", "cuttle", "config.toml")}); err == nil {

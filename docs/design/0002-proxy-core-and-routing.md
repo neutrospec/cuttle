@@ -209,7 +209,15 @@ order an operator reads is the order cuttle applies. `cuttle explain`
   ([research 0002 §6][r2-6]). cuttle adds no `Via` to responses.
 - **Upgrades.** `ReverseProxy` splices the connections after a `101`, so
   absolute-form WebSocket works on every route. Chrome tunnels `ws://`
-  with `CONNECT` to port 80 instead ([research 0002 §2][r2-2]).
+  with `CONNECT` to port 80 instead ([research 0002 §2][r2-2]). A
+  connection upgraded after a `101` is tracked like a tunnel: the tunnel
+  idle limit below applies to it, shutdown closes it with outcome
+  `shutdown` ([0006 D6][d6-6]), and status lists it with kind `upgrade`.
+  Known limit: bytes that a client sends after its upgrade request and
+  before the `101` arrives stay in the server's read buffer, and
+  `ReverseProxy` never forwards them (`handleUpgradeResponse`, Go
+  1.27.4). They are lost and not counted. WebSocket clients wait for the
+  `101` before they send.
 
 Request target. Left alone, Go would change it: `ReverseProxy` re-encodes
 a query that contains `;` or an invalid `%` escape before calling `Rewrite`
@@ -333,14 +341,29 @@ its atomic counters as each write completes, so active tunnels contribute
 before they close.
 
 A byte counts when a socket write accepted it, never while it is still
-buffered: `down` never includes bytes still in cuttle's buffers. Tunnels
-add the result of each write. Plain-HTTP responses are flushed after each
-body write and counted only when the flush succeeds; a failed write or
-flush counts nothing for that call. Plain-HTTP `up` still counts the
-request body bytes the transport read from the client, and after a `101`
-cuttle counts the bytes it reads from and writes to the client connection.
-Socket-level counting of uploads and the exact totals after a `101` are
-left for C13 at M1.4.
+buffered: neither `up` nor `down` includes bytes still in cuttle's or Go's
+buffers. Tunnels add the result of each write. Plain-HTTP responses are
+flushed after each body write and counted only when the flush succeeds; a
+failed write or flush counts nothing for that call.
+
+Plain-HTTP `up` is counted on the outbound connection. cuttle wraps each
+connection that the direct or an upstream transport dials, and a client
+trace (`httptrace.ClientTrace.GotConn`) assigns the connection, new or
+pooled, to the exchange whose request the transport writes on it next;
+Go's transport returns a connection to its pool only after the previous
+request was written. Each socket write then adds the request body bytes
+it carried. A meter follows the framing that Go's transport writes itself
+(`Content-Length` or chunked, never the client's own fields), so the
+request head, chunk sizes, line ends, and trailer are not counted. After a
+`101`, every byte written to that connection is the client's upgraded
+stream and counts as `up`, and every byte written to the client
+connection counts as `down`. The decision line of an upgraded connection
+waits, at most 1 s, for socket writes still in progress on either
+connection; `ReverseProxy` has closed the client connection by then, so
+the totals are exact. Known limit: when a next hop answers before it has
+read the whole request body, the transport may keep writing the body
+after the response ended, and the decision line then lacks those bytes
+while `bytes_total` includes them.
 
 Live counters are in memory, start at zero with the process, and are read
 through the control socket (`cuttle status`, [0006 D4][d6-4]) and the admin
@@ -365,8 +388,11 @@ closes on accept counts only in `connections_rejected_total`
 
 Labels are bounded: hosts never appear in counters. Per-host data lives in
 the log and in statistics ([0005](0005-statistics-and-admin.md)). The status
-response also lists active tunnels with authority, route, source, age, and
-bytes, capped at 500 entries.
+response also lists active tunnels and upgraded connections with
+authority, kind (`connect` or `upgrade`), route, source, age, and bytes,
+capped at 500 entries, oldest first. `tunnels_active` counts `CONNECT`
+tunnels only; an upgraded connection stays in `http_requests_active`
+until it ends.
 
 ### D8. Decision log
 
@@ -518,6 +544,7 @@ All checks are T1 tests run with the mocks in
 [d5-9]: 0005-statistics-and-admin.md#d9-dashboard
 [d6-3]: 0006-packaging-paths-and-lifecycle.md#d3-command-line
 [d6-4]: 0006-packaging-paths-and-lifecycle.md#d4-control-socket
+[d6-6]: 0006-packaging-paths-and-lifecycle.md#d6-signals-and-shutdown
 [d6-7]: 0006-packaging-paths-and-lifecycle.md#d7-logging-and-rotation
 [d7-4]: 0007-test-environment-and-gates.md#d4-instances-chains-and-loops
 [oi]: ../OPEN_ISSUES.md

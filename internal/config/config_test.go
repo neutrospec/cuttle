@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -588,6 +589,39 @@ func TestConfigSelfUpstream(t *testing.T) {
 		}
 		if found != c.self || (cfg == nil) != c.self {
 			t.Errorf("%s: self %v, errors:\n%s", c.address, found, issues(r.Errors))
+		}
+	}
+}
+
+// TestRestartRequired checks design 0004 D6 step 5: only proxy.listen and
+// admin.listen are restart-only, each is listed when its value differs
+// from the running one, and other changes list nothing.
+func TestRestartRequired(t *testing.T) {
+	parse := func(listen, admin, rest string) *Config {
+		t.Helper()
+		text := "name = \"cuttle-test\"\n[proxy]\nlisten = [" + listen + "]\ndefault = \"direct\"\n[admin]\nlisten = \"" + admin + "\"\n" + rest
+		cfg, r := Parse([]byte(text), "test.toml")
+		if cfg == nil {
+			t.Fatalf("config: %v", r.Err())
+		}
+		return cfg
+	}
+	running := parse(`"127.0.0.1:41000"`, "127.0.0.1:41001", "")
+	for _, c := range []struct {
+		name string
+		next *Config
+		want []string
+	}{
+		{"unchanged", parse(`"127.0.0.1:41000"`, "127.0.0.1:41001", ""), []string{}},
+		{"rules only", parse(`"127.0.0.1:41000"`, "127.0.0.1:41001", "[[rule]]\nname = \"x\"\nhosts = [\"x.example\"]\naction = \"block\"\n"), []string{}},
+		{"proxy.listen", parse(`"127.0.0.1:41002"`, "127.0.0.1:41001", ""), []string{"proxy.listen"}},
+		{"proxy.listen added", parse(`"127.0.0.1:41000", "[::1]:41000"`, "127.0.0.1:41001", ""), []string{"proxy.listen"}},
+		{"admin.listen", parse(`"127.0.0.1:41000"`, "127.0.0.1:41003", ""), []string{"admin.listen"}},
+		{"admin.listen off", parse(`"127.0.0.1:41000"`, "", ""), []string{"admin.listen"}},
+		{"both", parse(`"127.0.0.1:41002"`, "", ""), []string{"proxy.listen", "admin.listen"}},
+	} {
+		if got := RestartRequired(running, c.next); !slices.Equal(got, c.want) || got == nil {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
 		}
 	}
 }
