@@ -184,8 +184,12 @@ Errors:
   definition name, `mac`, or `device`, the name `other`, a list naming an
   unknown or repeated interface, an empty `interfaces` list in a rule or an
   upstream, `interfaces` on a rule whose action is not `direct`, and the
-  interface timeouts out of range. Messages about a `mac` name its key path
-  and line and never repeat its value.
+  interface timeouts out of range. No message about an `[[interface]]` key
+  or an `interfaces` list repeats the value it is about. A TOML syntax
+  error whose `LastKey` is `interface`, starts with `interface.`, or ends
+  with `interfaces` is reported with its position and the fixed text
+  `TOML syntax: invalid value; put it in double quotes` instead of the
+  parser's message, which would quote part of an unquoted MAC.
 
 Upstream addresses need not be distinct; only upstream names must be
 unique. Two `[[upstream]]` entries with one address and different
@@ -300,7 +304,8 @@ Triggers: `SIGHUP`, `cuttle reload` through the control socket
    table, timeouts, name, interface definitions, and interface lists.
 3. Keep the transport and reachability state of each upstream whose
    settings, `address`, `disclosure`, the timeouts, `unreachable_hold`,
-   and `interfaces`, are unchanged under the same name. Create new ones
+   `interfaces`, and the `mac`, `device`, and `kind` of each definition
+   that list names, are unchanged under the same name. Create new ones
    for the rest, close the idle connections of the replaced transports,
    and create new direct transports for the snapshot
    ([0003 D8][d3-8]).

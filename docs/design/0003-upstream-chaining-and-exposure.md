@@ -334,10 +334,10 @@ by another upstream.
   without a dial, ends as `up` when it relays a response, and otherwise
   leaves the upstream due for another probe. cuttle sends no background
   probes (D5).
-- **Reload.** An upstream whose settings, its `interfaces` list
-  included, are unchanged keeps its state and its transport with the
-  pooled connections; a changed or new upstream starts `up` with a new
-  transport. A replaced or removed upstream still
+- **Reload.** An upstream whose settings, its `interfaces` list and the
+  definitions that list names included, are unchanged keeps its state and
+  its transport with the pooled connections; a changed or new upstream
+  starts `up` with a new transport. A replaced or removed upstream still
   serves the requests and tunnels that already use it, but its state no
   longer changes or reaches the gauges, and its idle connections close. A
   removed upstream's `upstream_state` gauges are deleted.

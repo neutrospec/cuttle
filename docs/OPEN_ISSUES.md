@@ -208,8 +208,8 @@ Move resolved items to Closed with their resolving commit or evidence.
 ### OI-0008 — Interface behavior on the user's devices
 
 - Origin: research 0003 [open questions][r3-oq] 1–6 and 9; design 0008
-  [assumptions][d8-a] F1–F5, F7, and F8; TASK-0008 iteration 2 review
-  (I-R2, I-R3).
+  [assumptions][d8-a] F1–F5, F7, and F8; the review of TASK-0008
+  iteration 1 (I-R2, I-R3).
 - Affected milestones: M1.5 and M1 close.
 - Iterations used: 2 of 3 in TASK-0008, for the design; the check itself
   has not run.

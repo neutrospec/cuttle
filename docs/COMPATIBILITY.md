@@ -47,8 +47,8 @@ Step numbers refer to the check.
 | MAC and BSD name kept across replugging, port change, and reboot | 2, 3 | Not applicable | Pending | Pending | — |
 | Same-model replacement takes over a BSD name; the MAC match stays `absent` | 4 | Not applicable | Optional | Not run | — |
 | Time to a state change on cable pull, unplug, sharing off, and Wi-Fi off; index after replugging | 5 | Pending | Pending | Pending | — |
-| First listed interface carries the flow | 6, 8 | Not applicable | Pending | Not applicable | — |
-| Bound flow leaves through a non-primary interface | 9, 10 | Not applicable | Pending | Pending | — |
+| First listed interface carries the flow, by address and byte count | 6, 8 | Not applicable | Pending | Not applicable | — |
+| Bound flow leaves through a non-primary interface, by address and byte count | 9, 10 | Not applicable | Pending | Pending | — |
 | `link_down` skip, and `503 no_interface` for a pinned interface that is gone | 7, 10 | Not applicable | Pending | Pending | — |
 | Phone without cellular data: failover reason and demotion | 11 | Not applicable | Not applicable | Pending | — |
 | Dead uplink behind the primary: `dns_error` for names, failover for an address | 12 | Not applicable | Optional | Not applicable | — |

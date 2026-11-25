@@ -386,7 +386,6 @@ overview and live pages ([0005 D9][d5-9]).
 | `upstream_state` | `upstream`, `state` = `up`, `down`, `probing`; a 0/1 gauge that is 1 for the upstream's current state and 0 for the others. The state's start time and the last error are reported with the status ([0003 D8][d3-8]) |
 | `interface_state` | `interface`, `state` = `online`, `demoted`, `offline`; a 0/1 gauge like `upstream_state` ([0008 D15][d8-15]) |
 | `interface_bytes_total` | `interface`, `direction` = `up`, `down`; the bytes of each decision whose `interface` field is not empty |
-| `interface_dials_total` | `interface`, `result` = `ok`, `unreachable`, `timeout`, `refused`, `error`; one count per interface tried by a bound dial |
 | `stats_write_errors_total`, `stats_folded_total` | — (M2, [0005 D4][d5-4]) |
 
 `connections_total` and `connections_active` count only accepted
@@ -451,10 +450,10 @@ header values, bodies, or TLS contents.
 // Tests replace it (0007 D3).
 type Network interface {
     LookupNetIP(ctx context.Context, host string) ([]netip.Addr, error)
-    // b binds the dial to one interface; the zero value follows system
+    // b binds the dial to one interface; the zero Binding follows system
     // routing (0008 D7).
     DialContext(ctx context.Context, addr netip.AddrPort,
-        b netx.Binding) (net.Conn, error)
+        b Binding) (net.Conn, error)
 }
 
 type Decision struct {

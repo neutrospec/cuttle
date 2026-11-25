@@ -74,6 +74,10 @@ macOS network service order to match `proxy.interfaces`. When that primary
 interface keeps its link but loses its internet connection, names fail to
 resolve before cuttle can move to another interface
 ([0008 D13](docs/design/0008-interface-selection.md#d13-name-resolution)).
+With `proxy.interfaces` or a rule list set, `direct` connections to public
+addresses leave through the listed interface and bypass full-tunnel and
+split-tunnel VPN routes; private addresses keep system routing
+([0008 D7](docs/design/0008-interface-selection.md#d7-dial-plan)).
 
 Try it from a checkout:
 
