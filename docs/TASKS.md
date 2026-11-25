@@ -44,15 +44,16 @@ A closed task becomes one line under Closed:
 ### TASK-0010 — M2.1 statistics
 
 - Milestone: M2.1
-- Status: implement
+- Status: review
 - Iteration: 1/3
-- Workers: implementer on a T3 worktree branch, in parallel with TASK-0011
-- Base: this board update
-- Candidate: none
-- Evidence: none
-- Findings: none
-- Next action: implementer — build M2.1 (0005 S1–S7) with T0 and T1 and
-  return the candidate commit
+- Workers: implementer done on branch `t3/implement-hourly-statistics`;
+  fresh reviewer pending
+- Base: `f94f8e7`
+- Candidate: `866aced` (tree `2d0b06c`)
+- Evidence: implementer ran `scripts/gate t0` and `t1` on `2d0b06c`, both
+  pass; mutation proofs for S2, S3, and S7 each fail their test
+- Findings: none yet
+- Next action: reviewer — risk-based review of `f94f8e7..866aced`
 
 Decisions for TASK-0010 (2026-11-25):
 
