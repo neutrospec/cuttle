@@ -664,8 +664,8 @@ The maintainer's own setup is one instance of this deployment:
 | Edge instance | cuttle on a Mac at home |
 | Gateway instance | cuttle on a Mac at the office |
 | Private link | A WireGuard VPN between a home server or router and the office Mac |
-| Egress proxy | The corporate proxy: plain HTTP without authentication, TLS-inspecting |
-| Inspection root CA | The corporate root, which clients at home must trust |
+| Egress proxy | The office network's outbound proxy: plain HTTP without authentication, TLS-inspecting |
+| Inspection root CA | The egress proxy's signing root, which clients at home must trust |
 | Restricted destinations | Office-only sites, such as the intranet |
 | Original client | Chrome, Safari, or curl on the home Mac |
 
