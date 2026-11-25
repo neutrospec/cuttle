@@ -44,18 +44,16 @@ A closed task becomes one line under Closed:
 ### TASK-0005 — M1.2 exposure controls
 
 - Milestone: M1.2
-- Status: implement
+- Status: review
 - Iteration: 3/3
-- Workers: implementer on branch `t3/add-remote-proxy-exposure`; iteration
-  2 reviewer done
+- Workers: implementer done on branch `t3/add-remote-proxy-exposure`;
+  fresh final re-check pending
 - Base: `cbf0b07`
-- Candidate: `4aea9fa` (tree `483e2d8`), approved with minor fixes
-- Evidence: reviewer reran T0, T1, and `-race -count=5` on the proxy
-  package (pass); E1-E7 and the decisions resolved
-- Findings: open F1 (warning tests miss the rollover summary path and wait
-  in real time), F2 (summary count definition), F3, F4 (nits)
-- Next action: implementer — fix F1-F4, rerun T0 and T1, then a fresh
-  final re-check
+- Candidate: `b75010c` (tree `a9c8992`) on top of `4aea9fa`
+- Evidence: implementer ran `scripts/gate t0`, `t1`, and `-race -count=3`
+  on the proxy package for `a9c8992`, all pass
+- Findings: F1-F4 reported fixed, pending the final re-check
+- Next action: reviewer — fresh final re-check of `4aea9fa..b75010c`
 
 Decisions for TASK-0005 (2026-11-25):
 
