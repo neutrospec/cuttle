@@ -44,15 +44,19 @@ A closed task becomes one line under Closed:
 ### TASK-0003 — Remove local information from the tree and history
 
 - Milestone: none (prepares publication)
-- Status: implement
+- Status: review
 - Iteration: 1/3
-- Workers: infra, in the main checkout with no other writer
-- Base: `745b4e4` plus this board update
-- Candidate: none
-- Evidence: the current tree has no local information (orchestrator scan)
-- Findings: none
-- Next action: infra — add `.gitignore` and `.env.example`, back up and
-  rewrite the branch history, and report the old-to-new commit map
+- Workers: infra done in the main checkout; fresh reviewer pending
+- Base: `745b4e4` (rewritten ID)
+- Candidate: `main` at `f6ddf9d` (tree `f31a100`); rewrite tip `bd0d6f7`
+  (tree `59d2a07`, identical before and after the rewrite)
+- Evidence: infra checks (tree identity, per-version replacement check,
+  history scan, structure, docs) passed; orchestrator spot-check found no
+  local pattern in any commit on `main`; backup bundle and commit map are
+  kept outside the repository
+- Findings: none yet
+- Next action: reviewer — independent read-only verification of the rewrite
+  and the `.env` setup
 
 Decisions for TASK-0003 from the user (2026-11-25):
 
