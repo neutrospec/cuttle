@@ -44,20 +44,17 @@ A closed task becomes one line under Closed:
 ### TASK-0003 — Remove local information from the tree and history
 
 - Milestone: none (prepares publication)
-- Status: implement
+- Status: review
 - Iteration: 2/3
-- Workers: infra in the main checkout; iteration 1 reviewer done
+- Workers: infra done in the main checkout; fresh re-check pending
 - Base: `745b4e4` (rewritten ID)
-- Candidate: `main` at `f6ddf9d` (tree `f31a100`); rewrite tip `bd0d6f7`
-  (tree `59d2a07`, identical before and after the rewrite)
-- Evidence: infra checks (tree identity, per-version replacement check,
-  history scan, structure, docs) passed; orchestrator spot-check found no
-  local pattern in any commit on `main`; backup bundle and commit map are
-  kept outside the repository
-- Findings: iteration 1 review "approve with minor fixes": H3 and H8 fixed
-  on the board; H4, H7, H9 open (infra and docs); H1, H2, H5, H6 accepted
-  by the user
-- Next action: infra — fix H4, H7, and H9, then a fresh re-check
+- Candidate: `main` with fixes `de59bc6` (H4, H7, H9) and the orchestrator
+  notes `3dccaa7` (H3, H8) and the scan-pattern note after `de59bc6`
+- Evidence: infra checks on `2b4e6ec` passed (links, whitespace,
+  `check-ignore` samples, local-pattern scan)
+- Findings: H3, H4, H7, H8, H9 reported fixed, pending re-check; H1, H2,
+  H5, H6 accepted by the user
+- Next action: reviewer — fresh re-check of `f6ddf9d..HEAD`
 
 Decisions for TASK-0003 from the user (2026-11-25):
 
