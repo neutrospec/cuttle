@@ -112,6 +112,63 @@ Move resolved items to Closed with their resolving commit or evidence.
   SPKI flag and in Safari, and run `/usr/bin/curl` without CA options;
   record the results for the deployment guide.
 
+### OI-0006 — Design follow-ups from the TASK-0001 final review
+
+- Origin: TASK-0001 iteration 3 review of candidate `3d33f59`, verdict
+  "approve with minor fixes", findings V1–V12. Landed in `ec577ec`.
+- Affected milestones: M1.2, M1.3, and M1 close; V5 also M3.2.
+- Iterations used: 3 of 3, so the fixes move to the first M1 task instead of
+  another design loop.
+- Responsible step: design for wording and criteria, implementer for tests.
+- Status: open.
+- Blocking reason: None of the findings blocks approval, but each must be
+  settled before the stage it affects closes.
+- Items:
+  - V1 (design): 0003 N3 asserts an upstream route in M1.2, which is
+    delivered in M1.3; limit N3 to decisions M1.2 can show. Move the
+    roadmap's non-loopback bind retry sentence from M1.2 to M1.4.
+  - V2 (implementer): add checks that client-sent `Forwarded` and
+    `X-Forwarded-*` fields pass unchanged on `trace = "via"` routes, on the
+    CONNECT head and the plain-HTTP copy-back (U1, U5). Add an `HTTP_PROXY`
+    environment check to C3 or drop the 0002 D5 claim that every row has a
+    check.
+  - V3 (design, implementer): check the unreachable hold in the handler
+    before `ReverseProxy`, as for CONNECT, and close idle pooled connections
+    when an upstream goes down (0003 D4, D8, U11).
+  - V4 (implementer, before M1 close): isolate headless Chrome's background
+    requests in the M1 client check. mockenv configs use
+    `default = "block"` with rules only for `cuttle.test` and loopback,
+    recording upstreams answer 403 outside `cuttle.test`, `check-trace`
+    compares only the case targets and fails on an unmatched one, and the
+    Block evidence names `blocked.cuttle.test`.
+  - V5 (design): Go rejects the bracketless IPv6 CONNECT before any handler,
+    so the M3 IPv6 row points the client at the recording mock directly, as
+    research 0002 did. Tracked with OI-0002.
+  - V6 (user decision, 2026-11-25): private IP literals and this Mac's own
+    address stay allowed for local clients without a rule. Record in 0003
+    D11 that this is an assumption, and add to the M1 headless Chrome check
+    whether a public-origin page's fetch of a private literal through cuttle
+    still triggers Chrome's Local Network Access permission. If it does not,
+    return the decision to the user.
+  - V7 (implementer): mention Go's 500 header-value cap
+    (`DefaultMaxHeaderValueCount`) in 0002 D2 and build the C11 60 KiB head
+    from fewer than 500 field lines.
+  - V8 (design, docs): wording fixes in 0002 l.218 (`RequestURI` prefixes
+    `scheme:` for `//` opaque values), 0003 l.150–152 and l.596, OI-0001
+    step 2, the 0007 D7 `check-trace` flags, the 0007 D8 chain evidence,
+    0005 A10 "T2-lite", the COMPATIBILITY curl M3 WebSocket cell, and ragged
+    wraps in 0003.
+  - V9 (implementer): C4 sends the direct request before the block request,
+    because cuttle's own responses close the connection.
+  - V10 (implementer): add a `/status?code=` endpoint to the mock origin for
+    C10; mockenv refuses 407 on it.
+  - V11 (docs): add Consequences sections to records 0003–0007 or relax the
+    convention in the design README.
+  - V12 (design): note `proxy.remote.ports` in the 0003 D13 deployment notes
+    for office-only sites on ports other than 80 and 443.
+- Next action: orchestrator — include V1–V12 in the first M1 task brief;
+  the producer closes each item with the commit that settles it.
+
 ## Closed
 
 [d3-13]: design/0003-upstream-chaining-and-exposure.md#d13-home-office-and-corporate-deployment
