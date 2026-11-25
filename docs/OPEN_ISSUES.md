@@ -117,7 +117,9 @@ Move resolved items to Closed with their resolving commit or evidence.
      or the bundle.
   5. After pushing, check that `git ls-remote` lists only `refs/heads/main`
      and tags, and re-run the TASK-0003 history scan on a fresh clone of
-     the remote.
+     the remote. The scan patterns include local values, so they live in
+     the untracked `.env` (for example `CUTTLE_PUBLISH_SCAN_PATTERNS`), not
+     in a tracked file.
   6. Delete or securely store the bundle and the commit map once the user
      approves.
 
