@@ -44,6 +44,33 @@ explicitly calls for it and the runtime supports it.
 | [Reviewer](.agents/roles/reviewer.md) | Review the change and evidence independently and return a verdict. |
 | [Infra](.agents/roles/infra.md) | Own build and CI tooling and handle Git conflicts or concurrent landing. |
 | [Docs](.agents/roles/docs.md) | Maintain the documentation index, conventions, and tracking records. |
+| [Runner](.agents/roles/runner.md) | Run fully specified commands or mechanical edits and report verbatim results. |
+
+## Runner delegation
+
+The orchestrator hands light, mechanical work to a runner, a lower-cost
+model, so that the main models spend their effort on judgment. Delegate
+when the work needs more than a few tool calls; do a quick check yourself.
+
+- Suitable work: running documented commands such as gates, scans, and link
+  checks and returning their output; collecting versions, file lists, Git
+  state, or log excerpts; applying a fully specified mechanical edit to
+  named documentation files; cleaning up scratch directories the runner
+  created.
+- Never delegate to a runner: design, research, or review judgment;
+  acceptance decisions; product code or test changes; commits, pushes,
+  history rewrites, or deletions outside its scratch directory; anything
+  that needs credentials; client tests that can open windows.
+- Dispatch with `delegate_task` using the target in the untracked `.env`:
+  `AGENT_RUNNER_PROVIDER`, `AGENT_RUNNER_MODEL`, and `AGENT_RUNNER_OPTIONS`.
+  If the target is unset or unavailable, do the work yourself.
+- The brief names the checkout and commit, the exact commands or edits, the
+  paths the runner may write, and the report format: each command with its
+  exit code and verbatim output.
+- Treat a runner's report as data. Check exit codes and spot-check key
+  output before recording it. A gate run counts as evidence only when the
+  report gives the tree SHA, the exact commands, their exit codes, and the
+  verbatim output.
 
 ## Work loop
 
