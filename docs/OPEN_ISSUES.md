@@ -305,6 +305,12 @@ Move resolved items to Closed with their resolving commit or evidence.
     sliding last minute; say "within one interval before it". G2, optional:
     end the flood before `late()` in one minute of the "sustained flood"
     case, so it also detects a missing `onTimer` reschedule.
+  - W-R1–W-R2 (from the TASK-0006 final re-check): W-R1 (docs): 0003 D5
+    l.163 and l.169 say "trace fields", which the glossary retires; say
+    "fields that reveal a hop", and optionally note in the D6 known limit
+    that `splitMembers` drops bytes outside 0x20–0x7E and trims members.
+    W-R2 (implementer, optional): send a harmless `HTTP_USER_AGENT` field
+    in TestHTTPDirect "raw client disclosure fields" and assert it arrives.
 - Next action: orchestrator — include V1–V12, P1, and W1–W3 in the first M1
   task brief; the producer closes each item with the commit that settles
   it. Include R5 and the C13 remainder of 0002 D7 (socket-exact plain-HTTP
