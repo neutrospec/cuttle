@@ -44,18 +44,17 @@ A closed task becomes one line under Closed:
 ### TASK-0003 — Remove local information from the tree and history
 
 - Milestone: none (prepares publication)
-- Status: implement
+- Status: review
 - Iteration: 3/3
-- Workers: infra in the main checkout; iteration 2 reviewer done
+- Workers: infra done in the main checkout; fresh final re-check pending
 - Base: `745b4e4` (rewritten ID)
-- Candidate: `02a2781` (tree `29ccdc2`), containing the fixes `de59bc6`
-  (tree `2b4e6ec`), `3dccaa7`, and `0cbc9aa`; returned for revision
-- Evidence: iteration 2 re-check passed checks 1-5 except J1; H3, H4, H7,
-  H8, H9 resolved
-- Findings: J1, J4, J6 fixed on the board by the orchestrator; J2, J3, J5
-  open (infra)
-- Next action: infra — fix J2, J3, J5 and create the local `.env`, then a
-  fresh final re-check
+- Candidate: `ff51d00` (tree `8fe2aef`) with the board fixes in `8e0cec7`
+- Evidence: infra checks on `8fe2aef` passed (links, whitespace,
+  `check-ignore` samples, publication scan with 0 hits on `main` and on a
+  stand-in remote, negative control); the local `.env` is ignored and
+  untracked
+- Findings: J1-J6 reported fixed, pending the final re-check
+- Next action: reviewer — fresh final re-check of `02a2781..ff51d00`
 
 Decisions for TASK-0003 from the user (2026-11-25):
 
