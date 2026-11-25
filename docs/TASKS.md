@@ -44,19 +44,19 @@ A closed task becomes one line under Closed:
 ### TASK-0001 — Revise goals and design for chaining, admin, packaging, and mocks
 
 - Milestone: M1
-- Status: design
+- Status: review
 - Iteration: 3/3
-- Workers: designer in T3 worktree
+- Workers: designer done in T3 worktree
   `<worktree>`, branch
-  `t3/cuttle-proxy-design`; iteration 2 reviewer done
+  `t3/cuttle-proxy-design`; fresh final reviewer pending
 - Base: `7c35afa`
-- Candidate: `e0a94a0` (tree `856a306`), returned for revision
-- Evidence: docs checks on `856a306` passed; iteration 2 review "revise";
-  R1-R8 and R10 resolved, R9 partly (see S3)
-- Findings: open S1 (plain-HTTP target not preserved, major), S2-S7
-  (minor), S8-S12 (nits); all owned by design
-- Next action: designer — revise for S1-S12 and the iteration 3 decisions,
-  then return a new commit for a fresh final review
+- Candidate: `3d33f59` (tree `1f62d55`); history `aa1978c`, `56fd4b7`,
+  `e0a94a0`, `3d33f59`
+- Evidence: docs checks on `1f62d55` passed; iteration 2 review "revise"
+- Findings: S1-S12 and Q1-Q3 reported as addressed by the designer, pending
+  verification
+- Next action: reviewer — fresh final review of `e0a94a0..3d33f59` and the
+  full candidate
 
 Decisions for TASK-0001 from the user and orchestrator (2026-11-25):
 
