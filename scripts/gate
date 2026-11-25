@@ -8,9 +8,9 @@
 #
 # Each command is echoed before it runs. The script stops at the first
 # failing command and exits non-zero. Output that must be empty is captured
-# with a plain assignment first, because an assignment takes the exit status
-# of its command substitution and so fails the gate under set -e, while a
-# failure inside test -z "$(...)" or on the left of && would not.
+# first, with a plain assignment or into a file, so that a failing command
+# fails the gate under set -e; a failure inside test -z "$(...)" or on the
+# left of && would not.
 set -eu
 
 cd "$(dirname "$0")/.."
@@ -26,8 +26,10 @@ t0() {
 	go test -short -count=1 ./...
 	out=$(git ls-files '*.pem' '*.key' '*.crt' '*.p12')
 	test -z "$out"
-	out=$(go list -deps ./cmd/cuttle)
-	test -z "$(printf '%s\n' "$out" | grep -E 'internal/testenv|x/net/websocket')"
+	deps=$(mktemp)
+	trap 'rm -f "$deps"' EXIT
+	go list -deps ./cmd/cuttle >"$deps"
+	test -z "$(grep -E 'internal/testenv|x/net/websocket' "$deps")"
 	{ set +x; } 2>/dev/null
 }
 

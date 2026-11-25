@@ -79,7 +79,9 @@ control   /var/folders/<id>/T/cuttle/control.sock     TMPDIR
 | `cuttle version`, `cuttle --version` | Print the version and Go version |
 
 - Exit status 0 means success, 1 failure, and 2 a usage error. Warnings
-  from `cuttle check` leave the status at 0.
+  from `cuttle check` leave the status at 0. `cuttle check` reports a file
+  that `cuttle serve` would refuse under D2, writable by group or others or
+  owned by another user, as an error.
 - `explain` reads the file, not the running service. `TARGET` is
   `host:port` for a tunnel, or an `http://` or `https://` URL, which maps to
   a plain-HTTP request or a tunnel to port 443. Example:

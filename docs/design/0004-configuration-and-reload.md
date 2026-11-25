@@ -70,7 +70,7 @@ Top level:
 | --- | --- | --- | --- | --- |
 | `listen` | array of `IP:port` | `["127.0.0.1:3128"]` | restart | Proxy listeners ([0003 D9][d3-9]) |
 | `default` | action | required | reload | Action for local clients when no rule matches |
-| `connect_timeout` | duration | `"10s"` | reload | Direct TCP connect, 100 ms–10 min |
+| `connect_timeout` | duration | `"10s"` | reload | Direct name lookup and TCP connect together, 100 ms–10 min |
 | `response_timeout` | duration | `"60s"` | reload | Direct plain-HTTP response head, 100 ms–10 min |
 | `idle_timeout` | duration | `"1h"` | reload | Tunnel idle limit; `"0s"` disables |
 | `max_connections` | integer | `1024` | reload | Client connection cap, 16–65536 |
@@ -146,8 +146,9 @@ Errors:
 - Duplicate upstream or rule names, or an action naming an unknown
   upstream. The rule names `default`, `remote-default`, `port`, and
   `remote-direct` are reserved for decisions that no rule made.
-- A rule with none of `hosts`, `domains`, `cidrs`, or `ports`. A catch-all
-  belongs in `default`.
+- A rule with none of `hosts`, `domains`, `cidrs`, or `ports`, judged by
+  the entries the lists hold, and any of these keys set to an empty list,
+  which would otherwise widen the rule. A catch-all belongs in `default`.
 - A pattern that is not a lowercase ASCII name in the D3 syntax of
   [0002][d2-3], such as `*.example.com`, `.example.com`, a U-label, or an IP
   address in `hosts` or `domains`. The message suggests the correct field
@@ -157,8 +158,8 @@ Errors:
   `direct`.
 - The exposure errors of [0003 D9][d3-9] and [D10][d3-10].
 - An upstream address equal to a listener ([0003 D1][d3-1]).
-- An `admin.listen` that is not a loopback literal, or that equals a proxy
-  listener.
+- An `admin.listen` that is not a loopback literal, or whose effective
+  value, the default `127.0.0.1:3129` included, equals a proxy listener.
 
 Warnings, printed by `cuttle check` and the settings page:
 

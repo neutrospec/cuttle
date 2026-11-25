@@ -160,14 +160,23 @@ T0, from the repository root:
 
 ```sh
 go version
-test -z "$(gofmt -l .)"
+out=$(gofmt -l .)
+test -z "$out"
 go mod tidy -diff
 go vet ./...
 go build ./...
 go test -short -count=1 ./...
-test -z "$(git ls-files '*.pem' '*.key' '*.crt' '*.p12')"
-test -z "$(go list -deps ./cmd/cuttle | grep -E 'internal/testenv|x/net/websocket')"
+out=$(git ls-files '*.pem' '*.key' '*.crt' '*.p12')
+test -z "$out"
+deps=$(mktemp)
+go list -deps ./cmd/cuttle >"$deps"
+test -z "$(grep -E 'internal/testenv|x/net/websocket' "$deps")"
 ```
+
+Output that must be empty is captured first, by an assignment or into a
+file that the script removes on exit: under `set -e` both fail with their
+command, while a failure inside `test -z "$(...)"` or on the left of `&&`
+would not stop the gate.
 
 T1:
 
@@ -273,7 +282,7 @@ macOS versions, the tested commit, and evidence links.
 | E3 | Git tracks no key or certificate file. | T0 command above |
 | E4 | `tools/mockenv` rejects any `407` mode. | T1 `TestMockenvRefuses407` |
 | E5 | The full T1 run completes within its 10-minute timeout. | T1 command above |
-| E6 | The binary-test helper refuses to start cuttle unless `HOME`, every `XDG_*` directory, and `XDG_RUNTIME_DIR` are test-owned temporary directories, `proxy.listen` avoids 3128 and 3129, and `admin.listen` is `""` or a port the test chose. | T0 `TestBinaryHelperIsolation` |
+| E6 | The binary-test helper refuses to start cuttle unless `HOME`, every `XDG_*` directory, and `XDG_RUNTIME_DIR` are test-owned temporary directories, and, for `cuttle serve`, the only command that binds, the configuration exists, `proxy.listen` avoids 3128 and 3129, and `admin.listen` is `""` or a port the test chose. Commands that bind nothing may read the unchanged starter file, as K2's `cuttle check` does. | T0 `TestBinaryHelperIsolation` |
 | E7 | `mockenv check-disclosure` reports and fails on a planted disclosure field, a value with an instance name or the client address, a changed target, and a changed body, and passes on identical records. | T1 `TestCheckDisclosure` |
 
 ## Alternatives considered
