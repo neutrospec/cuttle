@@ -67,16 +67,18 @@ Decisions for TASK-0013 (2026-11-25):
 ### TASK-0012 — M1 close: mockenv and the client check tooling
 
 - Milestone: M1 close
-- Status: implement
+- Status: review
 - Iteration: 1/3
-- Workers: implementer on a T3 worktree branch, alongside TASK-0010 and
-  TASK-0011
-- Base: this board update
-- Candidate: none
-- Evidence: none
-- Findings: none
-- Next action: implementer — build `tools/mockenv` and `check-disclosure`
-  (0007 E1–E7, D8) with T0 and T1, and return the candidate commit
+- Workers: implementer done on branch `t3/mockenv-client-check`; fresh
+  reviewer pending
+- Base: `5d47322`
+- Candidate: `3753185` (tree `ae46bcd`)
+- Evidence: implementer ran `scripts/gate t0` and `t1` on `ae46bcd`, both
+  pass; three headless Chrome smoke runs of `mockenv m1-check`, the last
+  one passing every case; early V6 observation: Chrome sent a private
+  literal through cuttle with no Local Network Access request
+- Findings: none yet
+- Next action: reviewer — risk-based review of `5d47322..3753185`
 
 Decisions for TASK-0012 (2026-11-25):
 
