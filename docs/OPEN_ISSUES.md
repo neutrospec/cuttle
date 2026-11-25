@@ -230,7 +230,10 @@ Move resolved items to Closed with their resolving commit or evidence.
   after M1.5 is implemented, including the optional dead-uplink step if the
   user can cut the router's uplink, and record the results in the
   compatibility matrix. If phone MACs prove unstable (F2), the identity
-  question returns to the user before M1 closes.
+  question returns to the user before M1 closes. In steps 8–10, record an
+  idle baseline `Ibytes` delta over the same time as the downloads, or use
+  a larger download, so background traffic cannot satisfy the byte check
+  (K-R5 from the TASK-0008 final re-check).
 
 ### OI-0006 — Design follow-ups from the TASK-0001 final review
 
