@@ -41,6 +41,29 @@ A closed task becomes one line under Closed:
 
 ## Active
 
+### TASK-0013 — M2.3 dashboard and M2.4 settings
+
+- Milestone: M2.3 and M2.4
+- Status: implement
+- Iteration: 1/3
+- Workers: implementer on a T3 worktree branch, alongside TASK-0012
+- Base: this board update
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: implementer — build the dashboard and the settings page
+  (0005 A8–A10) with T0 and T1 and return the candidate commit
+
+Decisions for TASK-0013 (2026-11-25):
+
+- One task covers M2.3 and M2.4, so the admin page is usable sooner.
+- Also in scope: OI-0006 P-R2 (admin listener state in status), Q-R5 (the
+  last statistics write error visible), and O-R1 (narrow the MAC
+  redaction, since the operator is trusted and the settings page shows
+  validation messages).
+- A10 runs headless Chrome with a throwaway profile and the mock keychain,
+  as approved for the M1 client check.
+
 ### TASK-0012 — M1 close: mockenv and the client check tooling
 
 - Milestone: M1 close
