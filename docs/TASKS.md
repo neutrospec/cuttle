@@ -44,15 +44,17 @@ A closed task becomes one line under Closed:
 ### TASK-0004 — M1.1 direct and block for local clients
 
 - Milestone: M1.1
-- Status: implement
+- Status: review
 - Iteration: 1/3
-- Workers: implementer on a T3 worktree branch
-- Base: `287a81f` plus this board update
-- Candidate: none
-- Evidence: none
-- Findings: none
-- Next action: implementer — build M1.1 with the T0 and T1 gates and return
-  the candidate commit
+- Workers: implementer done on branch `t3/direct-block-local-clients`;
+  fresh reviewer pending
+- Base: `8612a74`
+- Candidate: `3cc612a` (tree `65514d8`); history `8af7956`, `3cc612a`
+- Evidence: implementer ran `scripts/gate t0` and `t1` on `65514d8`, both
+  pass (macOS 27.2.1, go1.27.4, `/usr/bin/curl` 8.7.1)
+- Findings: none yet; implementer lists 10 design questions or deviations
+- Next action: reviewer — independent review of `8612a74..3cc612a` with a
+  gate rerun
 
 Decisions for TASK-0004 (2026-11-25):
 
