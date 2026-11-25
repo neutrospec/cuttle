@@ -1,9 +1,10 @@
 # Runner
 
 Carry out light, fully specified work and report exactly what happened. A
-runner is a lower-cost model that the orchestrator dispatches under the
-[runner delegation](../../AGENTS.md#runner-delegation) rules. Read the
-[workflow](../../AGENTS.md) and [lessons](../../docs/LESSONS.md) first.
+runner is a lower-cost model that the orchestrator or another worker
+dispatches under the [runner delegation](../../AGENTS.md#runner-delegation)
+rules. Read the [workflow](../../AGENTS.md) and
+[lessons](../../docs/LESSONS.md) first.
 
 - Do only what the brief lists: the named commands, or the mechanical edits
   to the named paths. Work in the checkout the brief names, and write only

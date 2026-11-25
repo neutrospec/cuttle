@@ -33,7 +33,8 @@ change. The producer owns implementation, tests, review fixes, and landing
 within the authorized scope. The orchestrator delegates product code changes
 and obtains an independent review. Each worker follows the named role and
 file ownership in its brief. A worker delegates further only when its task
-explicitly calls for it and the runtime supports it.
+explicitly calls for it and the runtime supports it. Every brief allows
+[runner delegation](#runner-delegation) unless it says otherwise.
 
 | Role | Responsibility |
 | --- | --- |
@@ -48,9 +49,10 @@ explicitly calls for it and the runtime supports it.
 
 ## Runner delegation
 
-The orchestrator hands light, mechanical work to a runner, a lower-cost
-model, so that the main models spend their effort on judgment. Delegate
-when the work needs more than a few tool calls; do a quick check yourself.
+Any agent, the orchestrator or a worker, hands light, mechanical work to a
+runner, a lower-cost model, so that the main models spend their effort on
+judgment. Delegate when the work needs more than a few tool calls; do a
+quick check yourself.
 
 - Suitable work: running documented commands such as gates, scans, and link
   checks and returning their output; collecting versions, file lists, Git
@@ -60,17 +62,29 @@ when the work needs more than a few tool calls; do a quick check yourself.
 - Never delegate to a runner: design, research, or review judgment;
   acceptance decisions; product code or test changes; commits, pushes,
   history rewrites, or deletions outside its scratch directory; anything
-  that needs credentials; client tests that can open windows.
-- Dispatch with `delegate_task` using the target in the untracked `.env`:
-  `AGENT_RUNNER_PROVIDER`, `AGENT_RUNNER_MODEL`, and `AGENT_RUNNER_OPTIONS`.
+  that needs credentials; client tests that can open windows. A reviewer
+  may use a runner only to execute commands, never to judge.
+- The runner target lives in one place, the untracked `.env` in the main
+  checkout: `AGENT_RUNNER_PROVIDER`, `AGENT_RUNNER_MODEL`, and
+  `AGENT_RUNNER_OPTIONS`. Worktrees do not contain `.env`, so the
+  orchestrator copies the current target into a "Runner" line in every
+  brief. Workers use the target from their brief and never read `.env`.
+- To change the target, the user names the new model. The orchestrator
+  confirms it is available with `orchestrator_capabilities`, updates `.env`,
+  runs a short read-only smoke task, and uses the new target in later
+  briefs. Running workers keep their target until they are re-briefed. The
+  user may also name a different runner for a single job; the brief then
+  carries that target instead.
+- Dispatch with `delegate_task` and that target, as a separate child task.
   If the target is unset or unavailable, do the work yourself.
-- The brief names the checkout and commit, the exact commands or edits, the
-  paths the runner may write, and the report format: each command with its
-  exit code and verbatim output.
-- Treat a runner's report as data. Check exit codes and spot-check key
-  output before recording it. A gate run counts as evidence only when the
-  report gives the tree SHA, the exact commands, their exit codes, and the
-  verbatim output.
+- The runner brief names the checkout and commit, the exact commands or
+  edits, the paths the runner may write, the instruction to read
+  docs/LESSONS.md first, and the report format: each command with its exit
+  code and verbatim output.
+- The agent that delegates owns the result. Treat a runner's report as
+  data: check exit codes and spot-check key output before using it. A gate
+  run counts as evidence only when the report gives the tree SHA, the exact
+  commands, their exit codes, and the verbatim output.
 
 ## Work loop
 
