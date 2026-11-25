@@ -44,18 +44,23 @@ A closed task becomes one line under Closed:
 ### TASK-0015 — M3.1 Homebrew formula and service
 
 - Milestone: M3.1
-- Status: review
-- Iteration: 1/3
-- Workers: infra done on branch `t3/homebrew-formula-service`; fresh
-  reviewer running
+- Status: implement
+- Iteration: 2/3
+- Workers: infra on branch `t3/homebrew-formula-service` (fix round)
 - Base: `587f645`
-- Candidate: `c4b6c12` (tree `8ece173`)
-- Evidence: infra ran `scripts/gate t0` and `t1` on `8ece173`, both pass;
-  with a throwaway local tap, `brew install`, `brew test`, `brew audit
-  --strict`, and the service checks P9–P12 and 0003 A5 pass, and cleanup
-  was verified; the final P8 with the real tag follows publication
-- Findings: none yet
-- Next action: reviewer — risk-based review of `587f645..c4b6c12`
+- Candidate: `c4b6c12` (tree `8ece173`), returned for fixes
+- Evidence: infra and the reviewer ran `scripts/gate t0` and `t1` on
+  `8ece173`, both pass; with a throwaway local tap, `brew install`, `brew
+  test`, `brew audit --strict`, and the service checks P9–P12 and 0003 A5
+  pass, and cleanup was verified; the final P8 with the real tag follows
+  publication
+- Findings: F1 and F2 (medium, privacy, implementer): `publish-scan`
+  misses symlink blobs and reads escapes in contents with a different
+  regex engine; F4 and F5 (minor) ride along; P1 (pre-existing): a stats
+  test uses the local time zone, which the real scan flags; F6–F9 go to
+  OI-0006 at landing
+- Next action: infra — fix F1, F2, F4, F5, F6, and P1 and return the new
+  candidate for a re-check of the fixes
 
 Decisions for TASK-0015 (2026-11-26):
 

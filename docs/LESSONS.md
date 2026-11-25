@@ -211,3 +211,16 @@ removes entries. Append new entries at the end, oldest first.
   invalid run. Match expected messages against the test's own failure
   text, and for subtests use the underscore form, as in
   `TestCheckDisclosure/disclosure_field_outside_the_case_targets`.
+
+### 2026-11-26 — reviewer — identity controls in a shell harness
+
+- Task: TASK-0015, positive controls for `scripts/publish-scan`'s
+  identity check, written as POSIX `sh` functions in a scratch harness.
+- Attempts: 2 for two controls.
+- What failed: `GIT_AUTHOR_NAME=Bob as_alice git commit …` did not make
+  Bob the author, because `as_alice` set `GIT_AUTHOR_*` as a prefix on its
+  own `git` command, and that inner prefix overrides the caller's. The
+  control looked like a missed identity (the scan exited 0).
+- What to do instead: Set the identity variables directly on each `git`
+  command of a control, and check the planted value with `git log
+  --format='%an <%ae>'` before counting a pass as a miss.
