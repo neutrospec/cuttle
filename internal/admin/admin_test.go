@@ -606,6 +606,20 @@ func TestAdminLoginBackoffParallel(t *testing.T) {
 	}
 }
 
+// alterToken returns tok with one character changed, which always differs
+// from tok. It changes a middle character: the last character of a
+// base64url token can carry fewer than 6 bits, so replacing it with a fixed
+// character sometimes leaves the token unchanged.
+func alterToken(tok string) string {
+	b := []byte(tok)
+	if b[10] == 'A' {
+		b[10] = 'B'
+	} else {
+		b[10] = 'A'
+	}
+	return string(b)
+}
+
 // TestAdminCSRF checks A5: a POST with Sec-Fetch-Site: cross-site or a
 // foreign Origin, a POST without or with a wrong CSRF token, and a login
 // without a matching, unexpired cuttle_login cookie get 403, and none of
@@ -634,7 +648,7 @@ func TestAdminCSRF(t *testing.T) {
 		header: http.Header{"Sec-Fetch-Site": nil, "Origin": {"http://evil.example"}}})
 	logout("no token", req{form: url.Values{}})
 	logout("no token, no fetch metadata", req{form: url.Values{}, header: http.Header{"Sec-Fetch-Site": nil, "Origin": nil}})
-	logout("wrong token", req{form: url.Values{"csrf": {csrf[:len(csrf)-1] + "A"}}})
+	logout("wrong token", req{form: url.Values{"csrf": {alterToken(csrf)}}})
 	logout("truncated token", req{form: url.Values{"csrf": {csrf[:20]}}})
 	logout("another session's token", req{form: url.Values{"csrf": {otherCSRF}}})
 	res := b.do(req{method: http.MethodPost, path: "/logout?csrf=" + url.QueryEscape(csrf), form: url.Values{}})
@@ -675,9 +689,8 @@ func TestAdminCSRF(t *testing.T) {
 	login("no form token", req{form: pw, cookies: cookie(tok)})
 	login("cookie and form differ", req{form: with(tok2), cookies: cookie(tok)})
 	login("forged token in both", req{form: with("AAAA"), cookies: cookie("AAAA")})
-	forged := []byte(tok)
-	forged[10] = map[bool]byte{true: 'B', false: 'A'}[forged[10] == 'A']
-	login("tampered token in both", req{form: with(string(forged)), cookies: cookie(string(forged))})
+	forged := alterToken(tok)
+	login("tampered token in both", req{form: with(forged), cookies: cookie(forged)})
 	login("cross-site", req{form: with(tok), cookies: cookie(tok), crossSite: true})
 	login("same-site", req{form: with(tok), cookies: cookie(tok), header: http.Header{"Sec-Fetch-Site": {"same-site"}}})
 	// Another server's process key: a token this process did not mint.
