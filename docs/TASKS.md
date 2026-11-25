@@ -69,6 +69,8 @@ Decisions for TASK-0008 from the user (2026-11-25):
 - The user's interfaces are one Wi-Fi interface joined to one fixed
   network, two Ethernet interfaces, and two USB-tethered phones. Interfaces
   of the same kind must be distinguishable; no hotspot joins over Wi-Fi.
+- cuttle supports macOS only, so darwin-only mechanisms are acceptable; cgo
+  remains a cost to weigh against pure-Go options.
 
 ### TASK-0007 — M1.4 live operation
 
