@@ -109,7 +109,12 @@ type UpstreamOptions struct {
 	// Allow407 lets Status(407) answer 407 with Proxy-Authenticate. Only
 	// T1 tests whose clients are cuttle, Go, or /usr/bin/curl set it
 	// (design 0007 D6); without it the mock answers 400 instead.
+	// tools/mockenv never sets it.
 	Allow407 bool
+	// Record, when set, is called with each request as it is recorded, in
+	// recording order, while the mock holds its lock; it must not call
+	// back into the mock.
+	Record func(ProxyRequest)
 }
 
 // RecordingUpstream is a raw-socket HTTP proxy that records every request
@@ -140,9 +145,20 @@ type RecordingUpstream struct {
 // it, with every connection it holds, when the test ends.
 func NewRecordingUpstream(t testing.TB, opt UpstreamOptions) *RecordingUpstream {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	u, err := StartRecordingUpstream(opt)
 	if err != nil {
 		t.Fatal(err)
+	}
+	t.Cleanup(u.Close)
+	return u
+}
+
+// StartRecordingUpstream is NewRecordingUpstream for code outside a test,
+// such as tools/mockenv; the caller stops the mock with Close.
+func StartRecordingUpstream(opt UpstreamOptions) (*RecordingUpstream, error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, err
 	}
 	u := &RecordingUpstream{
 		Addr:  ln.Addr().(*net.TCPAddr).AddrPort(),
@@ -155,8 +171,7 @@ func NewRecordingUpstream(t testing.TB, opt UpstreamOptions) *RecordingUpstream 
 	}
 	u.wg.Add(1)
 	go u.accept()
-	t.Cleanup(u.close)
-	return u
+	return u, nil
 }
 
 // SetMode sets the mode for a target name, which is compared in lowercase
@@ -207,7 +222,9 @@ func (u *RecordingUpstream) Reset() {
 	u.reqs = nil
 }
 
-func (u *RecordingUpstream) close() {
+// Close stops the mock, closes every connection it holds, and waits for its
+// goroutines.
+func (u *RecordingUpstream) Close() {
 	u.ln.Close()
 	u.mu.Lock()
 	for _, c := range u.conns {
@@ -289,6 +306,9 @@ func (u *RecordingUpstream) serve(c net.Conn, id int) {
 		req.Conn = id
 		u.mu.Lock()
 		u.reqs = append(u.reqs, req)
+		if u.opt.Record != nil {
+			u.opt.Record(req)
+		}
 		u.mu.Unlock()
 		c.SetReadDeadline(time.Time{})
 		host, port, err := targetHostPort(req.Method, req.Target)

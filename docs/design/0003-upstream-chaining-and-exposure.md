@@ -472,7 +472,9 @@ Why names and literals differ:
 - A private IP literal is a destination the user typed, such as
   `http://192.168.0.1/`, and gives the client the reach it has without a
   proxy. The user decided that such literals are not affected. This Mac's
-  own address typed as a literal is treated the same way.
+  own address typed as a literal is treated the same way. The decision
+  rests on assumption A6: that the browser still guards a web page's
+  fetch of such a literal through cuttle, as it would without a proxy.
 - Loopback literals still need `allow_loopback`, because `127.0.0.1` and
   `::1` reach services that listen only on loopback, such as the admin UI,
   and a page can name them without any DNS. The starter `loopback` rule
@@ -732,6 +734,7 @@ deployment of D13 ([OI-0001][oi]).
 | A3 | With the macOS application firewall on, the first non-loopback bind shows an allow prompt, possibly again after an upgrade changes the binary. | Bind once with the firewall on, then after `brew upgrade` ([OI-0001][oi]). |
 | A4 | A TLS-inspecting egress proxy's re-signed leaves meet Safari's requirements. | `openssl s_client -proxy` from the gateway machine ([OI-0001][oi]). |
 | A5 | The launchd hard limit on open files allows at least 4,096 descriptors. | `cuttle status` under `brew services` in M3 ([OI-0003][oi]). |
+| A6 | Chrome's Local Network Access still applies when a public page fetches a private IP literal through cuttle, so allowing private literals for local clients without a rule (D11) gives web content no reach it would not have without a proxy. If Chrome sends such a fetch without a permission request, the D11 decision returns to the user. | The LNA observation of the M1 client check ([0007 D8][d7-8], OI-0006 V6). |
 
 ## Alternatives considered
 
@@ -767,6 +770,7 @@ deployment of D13 ([OI-0001][oi]).
 [d5-1]: 0005-statistics-and-admin.md#d1-recorded-data
 [d6-4]: 0006-packaging-paths-and-lifecycle.md#d4-control-socket
 [d6-6]: 0006-packaging-paths-and-lifecycle.md#d6-signals-and-shutdown
+[d7-8]: 0007-test-environment-and-gates.md#d8-client-checks
 [d8-5]: 0008-interface-selection.md#d5-reading-state-and-noticing-changes
 [d8-7]: 0008-interface-selection.md#d7-dial-plan
 [d8-8]: 0008-interface-selection.md#d8-failover

@@ -288,8 +288,18 @@ Move resolved items to Closed with their resolving commit or evidence.
     unmatched one, and the Block evidence names `blocked.cuttle.test`.
     The recording upstream's part is settled in TASK-0006 (M1.3): a name
     without a chosen mode gets 403 outside `cuttle.test` (0007 D2,
-    `TestRecordingUpstream`). The `tools/mockenv` configurations,
-    `check-disclosure`, and the Block evidence remain for M1 close.
+    `TestRecordingUpstream`). The rest is settled in TASK-0012 (M1
+    close): the single, edge, and gateway configurations that
+    `tools/mockenv serve` writes use `default = "block"` with rules only
+    for `cuttle.test` and loopback, plus the single instance's rule for
+    the two test literals of the V6 observation, which reach only the mock
+    origins (0007 D8, `TestServeSession`). `check-disclosure` compares
+    only the case targets and fails on one that is missing or unmatched
+    (E7, `TestCheckDisclosure`), and the Block evidence names
+    `blocked.cuttle.test`. In the implementer's Chrome smoke run,
+    egress-direct answered 41 background requests of Chrome to Google
+    services with 403, and `check-disclosure` compared only the four case
+    targets.
   - V5 (design): Go rejects the bracketless IPv6 CONNECT before any handler,
     so the M3 IPv6 row points the client at the recording mock directly, as
     research 0002 did. Tracked with OI-0002.
@@ -298,7 +308,18 @@ Move resolved items to Closed with their resolving commit or evidence.
     D11 that this is an assumption, and add to the M1 headless Chrome check
     whether a public-origin page's fetch of a private literal through cuttle
     still triggers Chrome's Local Network Access permission. If it does not,
-    return the decision to the user.
+    return the decision to the user. The design half is settled in
+    TASK-0012: 0003 D11 cites the new assumption A6, and the M1 client
+    check's LNA observation (0007 D8) loads
+    `https://lna.cuttle.test/lna.html` through cuttle. The page fetches a
+    private, a loopback, and a public literal, and the check records for
+    each the page's outcome, whether cuttle logged a decision, and the
+    permission states. Remaining: the tester's M1 client check run records
+    the observation. In the implementer's smoke run of the tooling with
+    Chrome 157 headless, Chrome sent all three fetches through cuttle with
+    no permission request, and the page reported `local-network-access` as
+    `prompt`. If the tester's run confirms this, A6 does not hold, and the
+    orchestrator returns the D11 decision to the user.
   - V7 (implementer): mention Go's 500 header-value cap
     (`DefaultMaxHeaderValueCount`) in 0002 D2 and build the C11 60 KiB head
     from fewer than 500 field lines. Settled in `8af7956` (TASK-0004):
@@ -309,7 +330,11 @@ Move resolved items to Closed with their resolving commit or evidence.
     is called), the 0003 alternative "Forwarding request heads byte for
     byte", OI-0001 step 2, the 0007 D7 `check-disclosure` flags, the 0007
     D8 chain evidence, 0005 A10 "T2-lite", the COMPATIBILITY curl M3
-    WebSocket cell, and ragged wraps in 0003.
+    WebSocket cell, and ragged wraps in 0003. The two 0007 items are
+    settled in TASK-0012: `-names` and `-client` default to the chain's
+    instance names and the loopback client address, so D7's `-dir`
+    alone is complete, and the D8 Chain row states what shows the
+    inspection root CA.
   - V9 (implementer): C4 sends the direct request before the block request,
     because cuttle's own responses close the connection. Settled in
     `8af7956` (TASK-0004): 0002 C4, `TestHTTPReusedConnRoutesPerRequest`.
@@ -317,7 +342,7 @@ Move resolved items to Closed with their resolving commit or evidence.
     C10; mockenv refuses 407 on it. Settled in `8af7956` (TASK-0004): the
     origin answers 407 only when a test sets `Allow407` (0007 D2, 0002 C10,
     `TestHTTPExpectAnd407`, `TestOriginStatus`). E4, mockenv's own refusal,
-    is checked when M1 close builds `tools/mockenv`.
+    is settled in TASK-0012: `TestMockenvRefuses407`.
   - V11 (docs): add Consequences sections to records 0003–0007 or relax the
     convention in the design README.
   - V12 (design): note `proxy.remote.ports` in the 0003 D13 deployment notes
@@ -413,9 +438,9 @@ Move resolved items to Closed with their resolving commit or evidence.
     `CGO_ENABLED=0` is set in the environment; run it as `CGO_ENABLED=1 go
     list -deps -f '{{if .CgoFiles}}{{.ImportPath}}{{end}}' ./cmd/cuttle` in
     `scripts/gate` and 0007 D7.
-- Next action: orchestrator — include the open items (V4–V6, V8, V11,
-  V12, P1, W1–W3, Z2, Z4, G1–G2, and M-R2) in the briefs of the stages
-  they affect; the producer closes each item with the commit that settles
+- Next action: orchestrator — include the open items (V5, V6's
+  observation, V8, V11, V12, P1, W1–W3, Z2, Z4, G1–G2, and M-R2) in the
+  briefs of the stages they affect; the producer closes each item with the commit that settles
   it.
   The M1.4 items, R5 with the C13 remainder, the per-request source
   recheck of 0003 D10 with N5, the bind retry of V1, Z3, W-R1, and W-R2,

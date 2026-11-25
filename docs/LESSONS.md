@@ -179,3 +179,24 @@ removes entries. Append new entries at the end, oldest first.
   the targeted test fails with its own message, not a build error or a
   timeout. Make every failure path of a test finish, for example by
   remembering a value already received from a channel.
+
+### 2026-11-25 — implementer — mutation run against the wrong package
+
+- Task: TASK-0012, proving `tools/mockenv` tests with one mutation per
+  scratch copy, where the mutation script ran
+  `go test -run <Test> ./<directory of the mutated file>`.
+- Attempts: 2 for one mutation, recorded because the failure looks like a
+  test gap rather than a script error.
+- What failed: A mutation in `internal/testenv/upstream.go` meant for
+  `TestServeSession` in `tools/mockenv` ran
+  `go test -run TestServeSession ./internal/testenv`. No test matched, so
+  `go test` printed `ok ... [no tests to run]`, exited 0, and the script
+  reported the mutation as surviving. A second mutation was killed, but
+  the script's expected-message pattern used spaces where Go prints
+  subtest names with underscores, so it was reported as failing without
+  the expected message.
+- What to do instead: Give each mutation the package of the test that
+  should catch it, and treat `no tests to run` in the output as an
+  invalid run. Match expected messages against the test's own failure
+  text, and for subtests use the underscore form, as in
+  `TestCheckDisclosure/disclosure_field_outside_the_case_targets`.
