@@ -403,6 +403,13 @@ Move resolved items to Closed with their resolving commit or evidence.
     a private directory without a socket; the `upgrade` helper sits above
     the `TestUpgradedConnections` doc comment; and serve takes `s.reloadMu`
     before it logs `stopped`, which `TestStopWaitsForReload` checks.
+    M-R2 is settled in TASK-0010 (M2.1): 0006 D6 shortens the statistics
+    flush to 1 s, so the steps take at most 5 s + 1 s + 1 s = 7 s and
+    leave 1 s of P5's 8 s. The flush cannot overlap the earlier steps,
+    because it writes the final bytes of the tunnels that step 4 closes.
+    A 20,000-row flush took 72 ms in `TestStatsRowSize`, and
+    `TestStatsShutdownFlush` and `TestServeSIGTERM` check the order and
+    the 8 s bound.
   - O-R1 and gate items (from the TASK-0009 re-check): O-R1 (design,
     implementer): the MAC redaction in validation messages also hides
     12-hex-digit labels, `xxxx.xxxx.xxxx` hex names, six-pair dashed labels,
@@ -412,9 +419,14 @@ Move resolved items to Closed with their resolving commit or evidence.
     0008 D6. Gate (infra): the cgo step's `go list` returns nothing when
     `CGO_ENABLED=0` is set in the environment; run it as `CGO_ENABLED=1 go
     list -deps -f '{{if .CgoFiles}}{{.ImportPath}}{{end}}' ./cmd/cuttle` in
-    `scripts/gate` and 0007 D7.
+    `scripts/gate` and 0007 D7. The gate item is settled in TASK-0010
+    (M2.1): `scripts/gate` and 0007 D7 run the step with `CGO_ENABLED=1`.
+    In a scratch copy with an `import "C"` file in `internal/paths`,
+    `CGO_ENABLED=0 sh scripts/gate t0` now fails at that step, which lists
+    `runtime/cgo` and `squid/internal/paths`, where the old command listed
+    nothing; without the file the gate passes.
 - Next action: orchestrator — include the open items (V4–V6, V8, V11,
-  V12, P1, W1–W3, Z2, Z4, G1–G2, and M-R2) in the briefs of the stages
+  V12, P1, W1–W3, Z2, Z4, and G1–G2) in the briefs of the stages
   they affect; the producer closes each item with the commit that settles
   it.
   The M1.4 items, R5 with the C13 remainder, the per-request source

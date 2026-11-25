@@ -110,7 +110,10 @@ untouched.
 
 - At start and every hour, cuttle deletes rows with `bucket` older than
   `stats.retention_days` (default 30, range 1–90) in batches of 5,000 rows,
-  then runs `PRAGMA incremental_vacuum(1000)`.
+  then runs `PRAGMA incremental_vacuum(1000)`. A row is older when its
+  `bucket` is before the start of the current hour minus the retention,
+  so the oldest kept hour began exactly `retention_days` days before the
+  current one.
 - `stats.max_hosts_per_hour` (default 1,000) bounds distinct hosts per hour
   (D4).
 
@@ -132,16 +135,24 @@ rate.
 
 ### D4. Write path
 
-- The forwarding path updates an in-memory aggregator: one map update under
-  a short mutex for each decision and each completion. It never calls
-  SQLite.
-- Tunnel bytes use the atomic counters behind the live counters. On each
-  flush, the flusher takes the deltas of every active tunnel and adds them
-  to the current hour; a closing tunnel adds its final delta. A long tunnel
-  therefore spreads its bytes over the hours in which they moved, with
-  10-second resolution.
+- The forwarding path updates an in-memory aggregator under a short
+  mutex: once when a tunnel, an upgraded connection, or a plain-HTTP
+  exchange starts relaying, which registers it for sampling, and once
+  when its decision completes. It never calls SQLite.
+- Bytes use the counters behind the decision line and the live counters.
+  On each flush, the flusher takes the deltas of every registered
+  exchange and adds them to the current hour; a completing exchange adds
+  its final delta. A long tunnel therefore spreads its bytes over the
+  hours in which they moved, with 10-second resolution.
+- A decision counts in the hour in which it completes, as its decision
+  line does, so a tunnel open across an hour boundary has bytes in both
+  hours and its `connects` in the later one. `first_seen` and
+  `last_seen` are the times at which the aggregator recorded a
+  completion or a flush found bytes.
 - Every 10 s and at shutdown, the flusher swaps the map and writes all keys
-  in one transaction over a single writer connection.
+  in one transaction over a single writer connection. The shutdown flush
+  has 1 s ([0006 D6][d6-6]); a write that is still waiting for a lock then
+  gives up, and its rows are lost.
 - If a write fails, the batch is merged back and retried at the next flush,
   `stats_write_errors_total` increases, and an error is logged at most once
   a minute.
@@ -153,7 +164,8 @@ rate.
 - If the database cannot be opened, migrated, or written at start, cuttle
   logs the reason and runs without statistics. `cuttle status` and the
   dashboard show `stats: unavailable` with the reason. Forwarding never
-  depends on SQLite.
+  depends on SQLite. The first retention run at start (D3) is the write
+  check.
 - Dashboard data lags traffic by at most one flush interval.
 
 ### D5. Admin listener and Host allowlist
@@ -349,6 +361,7 @@ timeouts.
 [d4-6]: 0004-configuration-and-reload.md#d6-reload
 [d4-7]: 0004-configuration-and-reload.md#d7-atomic-write
 [d6-1]: 0006-packaging-paths-and-lifecycle.md#d1-paths
+[d6-6]: 0006-packaging-paths-and-lifecycle.md#d6-signals-and-shutdown
 [d6-3]: 0006-packaging-paths-and-lifecycle.md#d3-command-line
 [d7-7]: 0007-test-environment-and-gates.md#d7-gates
 [d8]: 0008-interface-selection.md

@@ -451,7 +451,7 @@ func TestPermissions(t *testing.T) {
 		}
 		return nil
 	})
-	for _, want := range []string{".config/cuttle/config.toml", ".local/state/cuttle/cuttle.log"} {
+	for _, want := range []string{".config/cuttle/config.toml", ".local/state/cuttle/cuttle.log", ".local/state/cuttle/stats.db"} {
 		found := false
 		for _, s := range seen {
 			found = found || s == want

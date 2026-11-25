@@ -28,6 +28,7 @@ var errProxyAuth = errors.New("next hop answered 407")
 func (p *Proxy) forward(w http.ResponseWriter, r *http.Request, ex *exchange, rp *httputil.ReverseProxy) {
 	r = r.WithContext(withOutConnTrace(context.WithValue(r.Context(), exchangeKey{}, ex), ex))
 	cw := &countingWriter{ResponseWriter: w, p: p, ex: ex}
+	p.rec.Open(ex)
 	p.live.Add(1, stats.HTTPRequestsActive)
 	defer p.live.Add(-1, stats.HTTPRequestsActive)
 	defer cw.endUpgrade()

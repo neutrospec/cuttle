@@ -16,8 +16,10 @@
 # grep itself failed. Its pattern forbids internal/testenv and every package
 # of the golang.org/x/net module; the standard library's own
 # vendor/golang.org/x/net packages do not start with golang.org and pass.
-# The cgo check lists the packages with cgo files in the default
-# environment, because CGO_ENABLED=0 go build silently drops such files.
+# The cgo check lists the packages with cgo files with cgo enabled, because
+# CGO_ENABLED=0 go build silently drops such files. It sets CGO_ENABLED=1
+# itself: with CGO_ENABLED=0 in the caller's environment, go list would
+# leave those files out too and list nothing.
 set -eu
 
 cd "$(dirname "$0")/.."
@@ -39,7 +41,7 @@ t0() {
 	rc=0
 	grep -E 'internal/testenv|^golang\.org/x/net/' "$deps" || rc=$?
 	test "$rc" -eq 1
-	out=$(go list -deps -f '{{if .CgoFiles}}{{.ImportPath}}{{end}}' ./cmd/cuttle)
+	out=$(CGO_ENABLED=1 go list -deps -f '{{if .CgoFiles}}{{.ImportPath}}{{end}}' ./cmd/cuttle)
 	test -z "$out"
 	CGO_ENABLED=0 go build -o /dev/null ./cmd/cuttle
 	{ set +x; } 2>/dev/null

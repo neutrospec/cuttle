@@ -88,7 +88,11 @@ func printStatus(w io.Writer, st *control.Status, now time.Time) {
 		}
 	}
 	fmt.Fprintf(tw, "log\t%s (rotation failures %d)\n", st.Log.Path, st.Log.RotationFailures)
-	fmt.Fprintf(tw, "stats\t%s\n", st.Stats)
+	if st.StatsErr != "" {
+		fmt.Fprintf(tw, "stats\t%s: %s\n", st.Stats, st.StatsErr)
+	} else {
+		fmt.Fprintf(tw, "stats\t%s\n", st.Stats)
+	}
 	fmt.Fprintf(tw, "open files\t%d\n", st.RlimitNofile)
 	tw.Flush()
 

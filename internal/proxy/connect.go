@@ -63,6 +63,7 @@ func (p *Proxy) establish(w http.ResponseWriter, ex *exchange, server net.Conn, 
 		return
 	}
 	p.live.Add(1, stats.TunnelsActive)
+	p.rec.Open(ex)
 	t.relay(pipelined, early, ex.snap.cfg.Proxy.IdleTimeout, func(dir string, n int) { p.addBytes(ex, dir, n) })
 	p.live.Add(-1, stats.TunnelsActive)
 	p.untrack(t)

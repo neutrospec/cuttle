@@ -24,6 +24,7 @@ import (
 	"squid/internal/netx"
 	"squid/internal/paths"
 	"squid/internal/proxy"
+	"squid/internal/stats"
 )
 
 // shutdownDrain is how long serve waits for in-flight plain-HTTP exchanges
@@ -53,6 +54,12 @@ type serveState struct {
 	p         *proxy.Proxy
 	startCfg  *config.Config // the configuration the listeners were bound with
 	startedAt time.Time
+
+	// stats is nil when the database is unavailable, with the reason in
+	// statsErr (design 0005 D4); statsOnce guards closeStats.
+	stats     *stats.Stats
+	statsErr  string
+	statsOnce sync.Once
 
 	// reloadMu serializes reloads; mu guards the fields below.
 	reloadMu        sync.Mutex
@@ -178,6 +185,11 @@ func (s *serveState) run(stderr io.Writer, listen func(network, address string) 
 	// under s.mu once the control socket serves.
 	cfg := s.cfg
 
+	// D5 step 5: statistics; failure is not fatal.
+	live := stats.NewLive()
+	s.openStats(cfg, live)
+	defer s.closeStats()
+
 	// D5 step 6: the control socket. Another running instance stops
 	// startup; any other failure leaves cuttle running without the socket.
 	// A socket path over the Unix limit is a configuration error of the
@@ -250,6 +262,8 @@ func (s *serveState) run(stderr io.Writer, listen func(network, address string) 
 		Bind:          listen,
 		RetryInterval: retryInterval,
 		Logger:        s.log,
+		Live:          live,
+		Stats:         s.statsRecorder(),
 	})
 	if err != nil {
 		closeAll()
@@ -315,6 +329,8 @@ func (s *serveState) run(stderr io.Writer, listen func(network, address string) 
 				s.log.Warn("shutdown", "error", err.Error())
 			}
 			<-served
+			// D6 step 5, after every handler has recorded its decision.
+			s.closeStats()
 			// A reload that the control socket started before it closed
 			// writes its lines before stopped.
 			s.reloadMu.Lock()
@@ -364,6 +380,9 @@ func (s *serveState) Reload() (control.ReloadResult, bool) {
 	if lvl, err := logx.ParseLevel(cfg.Log.Level); err == nil {
 		s.level.Set(lvl)
 	}
+	if s.stats != nil {
+		s.stats.SetLimits(cfg.Stats.RetentionDays, cfg.Stats.MaxHostsPerHour)
+	}
 	for _, w := range report.Warnings {
 		s.log.Warn("configuration warning", "warning", w.String())
 		res.Warnings = append(res.Warnings, w.String())
@@ -383,6 +402,7 @@ func (s *serveState) Status() control.Status {
 	cfg, loadedAt, rr, lastErr := s.cfg, s.loadedAt, s.restartRequired, s.lastReloadError
 	s.mu.Unlock()
 	now := time.Now()
+	statsState, statsErr := s.statsState()
 	// Reading the interface states first ends any expired demotion, so the
 	// counters snapshot below shows the same state in interface_state.
 	interfaces := s.p.InterfaceStatus()
@@ -401,7 +421,8 @@ func (s *serveState) Status() control.Status {
 		},
 		Counters: s.p.Live().Snapshot(),
 		Tunnels:  []control.Tunnel{},
-		Stats:    "disabled",
+		Stats:    statsState,
+		StatsErr: statsErr,
 		Log:      control.Log{Path: s.paths.Log.Path, RotationFailures: s.logw.Failures()},
 	}
 	for _, l := range s.p.Listeners() {

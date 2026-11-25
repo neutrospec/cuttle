@@ -142,7 +142,7 @@ func TestControlSocket(t *testing.T) {
 	data, _ := os.ReadFile(sb.ConfigPath())
 	st := statusJSON(t, sb)
 	if st.Name != "cuttle-test" || st.Version != "0.0.0-test" || st.PID <= 0 || st.Config.Path != sb.ConfigPath() ||
-		st.Config.SHA256 != config.Digest(data) || st.Stats != "disabled" || st.RlimitNofile == 0 ||
+		st.Config.SHA256 != config.Digest(data) || st.Stats != "enabled" || st.RlimitNofile == 0 ||
 		len(st.Listeners) != 1 || st.Listeners[0].Address != addr || st.Listeners[0].State != "bound" {
 		t.Errorf("status %+v", st)
 	}
