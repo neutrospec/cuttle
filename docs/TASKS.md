@@ -41,6 +41,29 @@ A closed task becomes one line under Closed:
 
 ## Active
 
+### TASK-0007 — M1.4 live operation
+
+- Milestone: M1.4
+- Status: implement
+- Iteration: 1/3
+- Workers: implementer on a T3 worktree branch
+- Base: `b3094ad` plus this board update
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: implementer — build M1.4 with the T0 and T1 gates and return
+  the candidate commit
+
+Decisions for TASK-0007 (2026-11-25):
+
+- OI-0006 items settled in this task: R5 (upgraded connections tracked for
+  shutdown and idle limits), the C13 remainder (socket-exact plain-HTTP
+  `up`, exact totals after a `101`), the per-request source recheck after
+  reload (N5), the bind retry (N7, V1), the status half of Z3, upstream
+  state in `cuttle status`, and keeping unchanged upstreams and their hold
+  across a reload. G1 and G2 go with any change to `warn.go`; W-R1 and
+  W-R2 may go with this task's docs and tests.
+
 ## Closed
 
 The history was rewritten on 2026-11-25 (TASK-0003) to remove local
