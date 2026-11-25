@@ -44,20 +44,17 @@ A closed task becomes one line under Closed:
 ### TASK-0006 — M1.3 upstreams and chaining
 
 - Milestone: M1.3
-- Status: implement
+- Status: review
 - Iteration: 3/3
-- Workers: implementer on branch `t3/implement-upstream-chaining`;
-  iteration 2 reviewer done
+- Workers: implementer done on branch `t3/implement-upstream-chaining`;
+  fresh final re-check pending
 - Base: `8c2e801`
-- Candidate: `bf49f03` (tree `023dbe7`), approved with minor fixes
-- Evidence: reviewer reran T0, T1, and `-race -count=5` on the proxy
-  package (pass); all non-disclosure probes clean; iteration 1 mutations
-  now caught
-- Findings: open V-R1 (`upstream_status` only on CONNECT), V-R2 (more trace
-  names), V-R3 (weakened loop assertion), V-R4, V-R5 (nits), V-R6 (known
-  limit)
-- Next action: implementer — fix V-R1-V-R6 with the decisions below, rerun
-  T0 and T1, then a fresh final re-check
+- Candidate: `56f8e0c` (tree `ad5772e`) on top of `bf49f03`
+- Evidence: implementer ran `scripts/gate t0`, `t1`, and `-race -count=3`
+  on the proxy package for `ad5772e`, all pass; V-R1 and V-R2 proven by
+  mutation
+- Findings: V-R1-V-R6 reported fixed, pending the final re-check
+- Next action: reviewer — fresh final re-check of `bf49f03..56f8e0c`
 
 Decisions for TASK-0006 (2026-11-25):
 
