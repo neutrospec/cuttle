@@ -24,7 +24,7 @@ Closed tasks are either landed or stopped.
 - Milestone: M1.x or none
 - Status: design
 - Iteration: 1/3
-- Workers: role, T3 task or thread ID, checkout path and branch
+- Workers: role, T3 task or thread ID, branch (never a local path)
 - Base: commit SHA
 - Candidate: commit and tree SHA, or none
 - Evidence: gate tiers with commands and results, or report links
@@ -44,15 +44,17 @@ A closed task becomes one line under Closed:
 ### TASK-0002 — Generalize terminology for a public project
 
 - Milestone: none (prepares M1)
-- Status: implement
+- Status: review
 - Iteration: 1/3
-- Workers: docs role in a T3 isolated worktree
-- Base: `9e9da92` plus this board update
-- Candidate: none
-- Evidence: none
-- Findings: none
-- Next action: docs — add the glossary and apply the general terms across
-  the tracked docs, then return the candidate commit for review
+- Workers: docs done on branch `t3/generalize-proxy-docs` (T3 worktree);
+  fresh reviewer pending
+- Base: `7159f37`
+- Candidate: `88c8110` (tree `9b5867e`); history `d561197`, `88c8110`
+  (producer fix before review)
+- Evidence: docs role acceptance checks 1-7 and docs checks passed on
+  `9b5867e`
+- Findings: none yet
+- Next action: reviewer — independent review of `7159f37..88c8110`
 
 Decisions for TASK-0002 from the user (2026-11-25):
 
