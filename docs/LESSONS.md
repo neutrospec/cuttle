@@ -56,3 +56,16 @@ removes entries. Append new entries at the end, oldest first.
   and with the web fetch tool.
 - What to do instead: Use the Safari release notes on `webkit.org` or the
   WebKit source on GitHub. Do not retry `bugs.webkit.org` more than once.
+
+### 2026-11-25 — reviewer — publication scan in the Bash tool
+
+- Task: TASK-0003, checking that the history scan finds every hit.
+- Attempts: 1 hidden failure, recorded because it can make a leak scan
+  report 0.
+- What failed: In the agent Bash tool, `grep` is a shell function that runs
+  ugrep with `-I --ignore-files`, so a plain `grep` over files silently
+  skips binary and gitignored files. `git grep -I` also skips binary files
+  without a message.
+- What to do instead: For scans that must not miss anything, call
+  `/usr/bin/grep` or run the script with `sh`, and do not pass `-I` to
+  `git grep`. Add a positive control that plants a known hit.

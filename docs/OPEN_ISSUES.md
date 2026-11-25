@@ -144,6 +144,25 @@ Move resolved items to Closed with their resolving commit or evidence.
   6. Delete or securely store the bundle and the commit map once the user
      approves.
 
+  Before the first push, also settle these items from the TASK-0003 final
+  re-check (K1–K4):
+  - K1 (user): an early home-relative checkout path appears in
+    docs/TASKS.md in `77530ad` and `c335b45`, which the user accepted, and
+    again in `3dccaa7`, `de59bc6`, `0cbc9aa`, and `02a2781`. Ask whether
+    the acceptance covers the later four; if not, rewrite them before the
+    first push.
+  - K2 (infra, required): remove `-I` from both `git grep` calls in rule 5,
+    so a hit inside a binary file is counted, and add a count over all
+    path names, for example `git rev-list --all --objects | cut -s -d' '
+    -f2- | grep -i -E -e "$p" | wc -l`.
+  - K3 (infra): run the block in a subshell, stop if the clone or `cd`
+    fails, check that the pattern compiles and is not empty, read only the
+    one variable instead of `set -a`, and clean up with
+    `trap 'rm -rf "$d"' EXIT`.
+  - K4 (infra): check that the set of distinct author, committer, and
+    tagger identities is exactly the allowed one, because rule 5 skips
+    those lines.
+
 ### OI-0005 — Private-root trust through the chain
 
 - Origin: research 0002 [open questions 3 and 4][r2-oq]; [0003 D13][d3-13].
