@@ -75,15 +75,17 @@ Decisions for TASK-0008 from the user (2026-11-25):
 ### TASK-0007 — M1.4 live operation
 
 - Milestone: M1.4
-- Status: implement
+- Status: review
 - Iteration: 1/3
-- Workers: implementer on a T3 worktree branch
-- Base: `b3094ad` plus this board update
-- Candidate: none
-- Evidence: none
-- Findings: none
-- Next action: implementer — build M1.4 with the T0 and T1 gates and return
-  the candidate commit
+- Workers: implementer done on branch `t3/m1-live-operation`; fresh
+  reviewer pending
+- Base: `05e6109`
+- Candidate: `dd84277` (tree `816b96f`)
+- Evidence: implementer ran `scripts/gate t0` and `t1` on `816b96f`, both
+  pass; 29 single-point mutations each fail their targeted test
+- Findings: none yet; implementer lists 8 design questions
+- Next action: reviewer — independent review of `05e6109..dd84277` with a
+  gate rerun
 
 Decisions for TASK-0007 (2026-11-25):
 
