@@ -44,19 +44,17 @@ A closed task becomes one line under Closed:
 ### TASK-0005 — M1.2 exposure controls
 
 - Milestone: M1.2
-- Status: implement
+- Status: review
 - Iteration: 2/3
-- Workers: implementer on branch `t3/add-remote-proxy-exposure`; iteration
-  1 reviewer done
+- Workers: implementer done on branch `t3/add-remote-proxy-exposure`;
+  fresh re-check pending
 - Base: `cbf0b07`
-- Candidate: `c7c6217` (tree `ee88b53`), approved with minor fixes
-- Evidence: reviewer reran T0, T1, and `-race -count=5` on the proxy
-  package (pass); mutation runs show each criterion's test fails without
-  its guard
-- Findings: open E1 (rejected-source warnings unbounded in volume), E2
-  (IPv4-mapped sources silently never match), E3-E7 (nits)
-- Next action: implementer — fix E1-E7 with the decisions below, rerun T0
-  and T1, then a fresh re-check
+- Candidate: `4aea9fa` (tree `483e2d8`) on top of `c7c6217`
+- Evidence: implementer ran `scripts/gate t0`, `t1`, and `-race -count=3`
+  on the proxy package for `483e2d8`, all pass
+- Findings: E1-E7 and the decisions reported fixed; the orchestrator
+  accepts mapped prefixes as errors in rule `cidrs` too
+- Next action: reviewer — fresh re-check of `c7c6217..4aea9fa`
 
 Decisions for TASK-0005 (2026-11-25):
 
