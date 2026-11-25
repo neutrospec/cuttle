@@ -178,9 +178,19 @@ Move resolved items to Closed with their resolving commit or evidence.
     routed case of 0003 D13 without the edge LAN listed, the request then
     never reaches the gateway instance, and the D13 observation step shows
     no rejected-source warning. This is an inference and was not tested.
-    Do not change the design until the inference is confirmed.
-- Next action: orchestrator — include V1–V12 and P1 in the first M1 task
-  brief; the producer closes each item with the commit that settles it.
+    Do not change the design until the inference is confirmed. Settle it
+    with a researcher from the private link's published routing rules
+    before M3.3.
+  - W1–W3 (from the TASK-0002 re-check; docs): in 0003 D5, word "so a
+    strict upstream has nothing to reject" as a definition rather than a
+    guarantee, since assumption A1 is unconfirmed, and rewrap that
+    paragraph. Optionally mention the start-up log line in the glossary
+    Instance entry (0004 D3, 0006 D5). In P1, say the edge LAN must be in
+    the gateway side's `AllowedIPs` or the link's equivalent, and add to
+    OI-0001 step 1: if no warning appears, see OI-0006 P1.
+- Next action: orchestrator — include V1–V12, P1, and W1–W3 in the first M1
+  task brief; the producer closes each item with the commit that settles
+  it.
 
 ## Closed
 
