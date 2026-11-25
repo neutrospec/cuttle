@@ -57,9 +57,10 @@ func (l *listener) Accept() (net.Conn, error) {
 }
 
 // classify returns the source class of a peer address, which must already
-// be unmapped: loopback addresses are local, addresses inside sources are
-// remote, and anything else is refused, an invalid address and an address
-// with an IPv6 zone included.
+// be unmapped. Every address with an IPv6 zone is refused first, even one
+// that netip reports as loopback, such as ::1%lo0. Then loopback addresses
+// are local, addresses inside sources are remote, and anything else, an
+// invalid address included, is refused.
 func classify(peer netip.Addr, sources []netip.Prefix) (policy.SourceClass, bool) {
 	if !peer.IsValid() || peer.Zone() != "" {
 		return 0, false

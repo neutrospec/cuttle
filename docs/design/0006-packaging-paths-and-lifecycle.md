@@ -183,8 +183,11 @@ status 2 and writes to stderr, which launchd sends to
   connection limits, retrying listeners, and statistics write errors;
   `error` has failures that stop a component. Rejected-source and limit
   warnings come at most once per source per minute and at most 60 per
-  minute in all, followed by one `warnings suppressed` line per minute
-  with the number left out ([0003 D12][d3-12]).
+  minute in all. One `warnings suppressed` line per minute then gives the
+  `count` of rejected or limited connections that got no warning line and
+  were not covered by a line of the same kind for the same source within
+  the last minute, which also shows the size of a flood
+  ([0003 D12][d3-12]).
 - Privacy rules are in [0002 D8][d2-8].
 
 ### D8. Tap and formula

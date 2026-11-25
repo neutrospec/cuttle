@@ -15,7 +15,9 @@ const (
 	// warnBudget is the most such warnings written per interval in total.
 	warnBudget = 60
 	// maxWarnKeys bounds the memory of the per-address rule. The budget
-	// keeps it far below this; a full map suppresses, never resets.
+	// keeps recent keys far below this, so a full map is pruned of old keys
+	// and does not suppress in practice; if it ever did, it would count the
+	// warning as suppressed rather than forget the keys it holds.
 	maxWarnKeys = 1024
 )
 
@@ -29,8 +31,12 @@ type warnKey struct {
 // most one per address and reason per interval, and at most budget lines
 // per interval in total. A warning over the budget, or one whose key finds
 // the map full, is counted as suppressed, and one summary line per
-// interval reports the count. The summary is written when the interval
-// ends, or at Shutdown if that comes first.
+// interval reports the count: the rejected or limited connections that got
+// no warning line and were not covered by a line for their address and
+// reason within the interval. It also shows the size of a flood. The
+// summary is written at the end of the interval, by the timer or by the
+// first later warning that is not such a repeat, whichever runs first, or
+// at Shutdown.
 type warnLimiter struct {
 	log      *slog.Logger
 	interval time.Duration
@@ -117,7 +123,8 @@ func (w *warnLimiter) onTimer() {
 }
 
 // summaryLocked writes the summary line when warnings were suppressed in
-// the current interval.
+// the current interval. Its count leaves out repeats that the per-address
+// rule dropped, because a line within the interval covers them.
 func (w *warnLimiter) summaryLocked() {
 	if w.suppressed > 0 {
 		w.log.Warn("warnings suppressed", "count", w.suppressed, "budget", w.budget, "interval", w.interval.String(),

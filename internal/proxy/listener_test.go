@@ -40,8 +40,9 @@ func (c *peerPipe) Close() error         { c.closed = true; return c.Conn.Close(
 
 // TestSourceClassification checks how listener.Accept classifies peers
 // (design 0003 D10): addresses are unmapped first, so IPv4-mapped peers
-// are classified by their IPv4 address, and a peer with an IPv6 zone is
-// never remote, even when its prefix is allowlisted.
+// are classified by their IPv4 address, and every peer with an IPv6 zone
+// is refused, a loopback one included and even when its prefix is
+// allowlisted.
 func TestSourceClassification(t *testing.T) {
 	cfg := mustParse(t, `name = "cuttle-test"
 [proxy]
@@ -71,6 +72,7 @@ sources = ["10.8.0.1/32", "fe80::/10", "2001:db8::1/128"]
 		{"::ffff:10.8.0.2", rejected, ""},
 		{"198.51.100.7", rejected, ""},
 		{"fe80::1%lo0", rejected, ""},
+		{"::1%lo0", rejected, ""}, // netip calls it loopback; every zoned peer is refused
 		{"fe80::1", int(policy.SourceRemote), "fe80::1"},
 	} {
 		server, client := net.Pipe()

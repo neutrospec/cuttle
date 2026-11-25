@@ -335,10 +335,11 @@ plain HTTP, the edge relays the gateway's `503` unchanged (D6).
 - On accept, before `net/http` reads a byte, cuttle unmaps the peer address
   and classifies it. Loopback sources are `local`. Sources inside
   `proxy.remote.sources` are `remote`. Anything else is closed at once and
-  counted in `connections_rejected_total{reason="source"}`, including a
-  peer address with an IPv6 zone, which no prefix contains. A warning
-  naming the source address is logged at most once per source per minute,
-  within the warning budget of D12.
+  counted in `connections_rejected_total{reason="source"}`. Every peer
+  address with an IPv6 zone is refused this way, before either check,
+  even a loopback one such as `::1%lo0`. A warning naming the source
+  address is logged at most once per source per minute, within the
+  warning budget of D12.
 - The handler checks the source again for each request, so after a reload
   removes a source, the next request on a kept-alive connection gets no
   response and the connection is closed.
@@ -446,11 +447,14 @@ allow_private = true
   minute.
 - Rejected-source warnings (D10) and limit warnings share a budget of 60
   lines per minute, so connections from many addresses cannot fill the
-  log. Warnings over the budget are counted, and one summary line per
-  minute, `msg="warnings suppressed"` with their `count`, is written when
+  log. One summary line per minute, `msg="warnings suppressed"`, follows
+  when warnings were left out. Its `count` is the number of rejected or
+  limited connections in that minute that got no warning line and were
+  not covered by a line of the same kind for the same source within the
+  last minute, so it also shows the size of a flood. It is written when
   the minute ends, or at shutdown if that comes first. The per-source
-  memory is bounded; when it is full, a new source is counted as
-  suppressed, and the sources already in it stay suppressed for their
+  memory is bounded; when it is full, a new source is counted in the
+  summary, and the sources already in it stay suppressed for their
   minute.
 - Each tunnel uses two descriptors, and pooled outbound connections add
   more. Go raises the soft `RLIMIT_NOFILE` to the hard limit at start;
