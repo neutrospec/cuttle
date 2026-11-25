@@ -41,39 +41,24 @@ A closed task becomes one line under Closed:
 
 ## Active
 
-### TASK-0015 — M3.1 Homebrew formula and service
+### TASK-0016 — Publish v0.1.0
 
 - Milestone: M3.1
-- Status: review
-- Iteration: 2/3
-- Workers: infra done on branch `t3/homebrew-formula-service`; fresh
-  reviewer re-checking the fixes
-- Base: `587f645`
-- Candidate: `5cb88c6` (tree `82d51e5`); the first candidate `c4b6c12`
-  (tree `8ece173`) was returned for fixes
-- Evidence: infra and the reviewer ran `scripts/gate t0` and `t1` on
-  `8ece173`, both pass; with a throwaway local tap, `brew install`, `brew
-  test`, `brew audit --strict`, and the service checks P9–P12 and 0003 A5
-  pass, and cleanup was verified; the final P8 with the real tag follows
-  publication
-- Findings: F1 and F2 (medium, privacy, implementer): `publish-scan`
-  misses symlink blobs and reads escapes in contents with a different
-  regex engine; F4 and F5 (minor) ride along; P1 (pre-existing): a stats
-  test uses the local time zone, which the real scan flags; F6–F9 go to
-  OI-0006 at landing
-- Next action: reviewer — re-check the fixes in `c4b6c12..5cb88c6`
+- Status: approval
+- Iteration: 1/3
+- Workers: orchestrator on `main`
+- Base: `d9eeb98`
+- Candidate: `main` with tag `v0.1.0`
+- Evidence: none yet
+- Findings: none
+- Next action: orchestrator — run `scripts/publish-scan` on a scratch bare
+  repository holding only `main` and the tag, then ask the user to
+  confirm creating `neutrospec/cuttle`, the push, and the tap update
 
-Decisions for TASK-0015 (2026-11-26):
+Decisions for TASK-0016 (2026-11-26):
 
-- The user chose the public repository `neutrospec/cuttle`, the existing
-  tap `neutrospec/homebrew-tap`, and the MIT licence (OI-0004).
-- The user approved the service checks under the conditions in OI-0003.
-  The checks point every `XDG_*` directory of the service at scratch
-  directories through `cuttle.env`, so the user's own cuttle files are
-  never created or changed.
-- The formula's source of truth lives in this repository; the
-  orchestrator copies it to the tap and pushes only after the user
-  confirms.
+- Publication follows OI-0004 rules 1–6; the final P8 (OI-0003) runs
+  against the real tap after the push.
 
 ## Closed
 
@@ -83,6 +68,10 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0015 — M3.1 Homebrew formula and service — landed `d9eeb98`, gates:
+  T0 T1 @ `5d9525a`; reviewed tree `82d51e5` (iteration 2 of 3); service
+  checks passed with a throwaway tap; final P8 after publication in
+  OI-0003; follow-ups X-R1–X-R5 in OI-0006
 - TASK-0013 — M2.3 dashboard and M2.4 settings — landed `46b9f43`, gates: T0 T1
   @ `3bf5e4b`; reviewed tree `9825b25` (iteration 1 of 3); A10 headless
   Chrome check passed on the candidate; follow-ups U-R1–U-R5 in OI-0006
