@@ -44,18 +44,20 @@ A closed task becomes one line under Closed:
 ### TASK-0006 — M1.3 upstreams and chaining
 
 - Milestone: M1.3
-- Status: review
-- Iteration: 2/3
-- Workers: implementer done on branch `t3/implement-upstream-chaining`;
-  fresh re-check pending
+- Status: implement
+- Iteration: 3/3
+- Workers: implementer on branch `t3/implement-upstream-chaining`;
+  iteration 2 reviewer done
 - Base: `8c2e801`
-- Candidate: `bf49f03` (tree `023dbe7`) on top of `00d9465`
-- Evidence: implementer ran `scripts/gate t0`, `t1`, and `-race -count=3`
-  on the proxy package for `023dbe7`, all pass; each fix proven by a
-  mutation
-- Findings: U-R1-U-R8 and the decisions reported fixed; the orchestrator
-  accepts filtering trailer keys on `direct` and `none` routes
-- Next action: reviewer — fresh re-check of `00d9465..bf49f03`
+- Candidate: `bf49f03` (tree `023dbe7`), approved with minor fixes
+- Evidence: reviewer reran T0, T1, and `-race -count=5` on the proxy
+  package (pass); all non-disclosure probes clean; iteration 1 mutations
+  now caught
+- Findings: open V-R1 (`upstream_status` only on CONNECT), V-R2 (more trace
+  names), V-R3 (weakened loop assertion), V-R4, V-R5 (nits), V-R6 (known
+  limit)
+- Next action: implementer — fix V-R1-V-R6 with the decisions below, rerun
+  T0 and T1, then a fresh final re-check
 
 Decisions for TASK-0006 (2026-11-25):
 
@@ -74,6 +76,13 @@ Decisions for TASK-0006 (2026-11-25):
   pooled response ends a probe; the hold log fields `down` and
   `failed_fast`; cuttle's own bodies may name the upstream; the V3 wording
   in 0003 D4.
+- Iteration 3 (orchestrator): every `outcome=upstream_status` line
+  carries `upstream_status`, on both paths. The filter also removes
+  `CDN-Loop`, `Proxy-Client-IP`, `WL-Proxy-Client-IP`, `X-ProxyUser-Ip`,
+  `X-Remote-Addr`, `X-Remote-IP`, `X-Envoy-External-Address`, and
+  `X-BlueCoat-Via`, and any listed name behind an `http-` prefix; 0003 D5
+  states that the guarantee covers the listed names. Invalid structured
+  syntax in upstream `Proxy-Status` members is a recorded known limit.
 
 ## Closed
 
