@@ -1,0 +1,29 @@
+# want: 18 rule[2].hosts[1]: "*.internal.example"
+# warn: 19 rule[2].hosts[2]: "wiki.internal.example" repeats rule "restricted"
+# warn: 23 rule[2].domains[2]: "internal.example" repeats rule "restricted"
+# warn: 27 rule[2].cidrs[2]: "10.20.0.0/16" repeats rule "restricted"
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[rule]]
+name = "restricted"
+hosts = ["wiki.internal.example"]
+domains = ["internal.example"]
+cidrs = ["10.20.0.0/16"]
+action = "block"
+[[rule]]
+# Each list starts with an invalid entry, so the repeated one is second.
+name = "later"
+hosts = [
+  "*.internal.example",
+  "wiki.internal.example",
+]
+domains = [
+  "Internal.Example",
+  "internal.example",
+]
+cidrs = [
+  "10.20.0.1/16",
+  "10.20.0.0/16",
+]
+action = "direct"

@@ -315,9 +315,11 @@ plain HTTP, the edge relays the gateway's `503` unchanged (D6).
 ### D9. Listeners
 
 - `proxy.listen` is a list of `IP:port` literals. Host names and the
-  wildcard addresses `0.0.0.0` and `::` are configuration errors. A wildcard
-  on a gateway machine would expose an unauthenticated proxy on that
-  machine's LAN ([research 0002 §7][r2-7]).
+  wildcard addresses `0.0.0.0` and `::` are configuration errors, and so is
+  the IPv4-mapped `[::ffff:0.0.0.0]`, which `net/netip` does not report as
+  unspecified but which binds `0.0.0.0`. A wildcard on a gateway machine
+  would expose an unauthenticated proxy on that machine's LAN
+  ([research 0002 §7][r2-7]).
 - A loopback listener that fails to bind stops startup with exit status 1.
 - A non-loopback listener requires a non-empty `proxy.remote.sources`. If it
   fails to bind, for example because the private link is down at login,
@@ -434,8 +436,11 @@ allow_private = true
 
 - `proxy.max_connections` (default 1024) caps client connections.
   `proxy.remote.max_connections_per_source` (default 128) caps each remote
-  source. A connection over a cap is closed right after accept and counted
-  in `connections_rejected_total{reason="limit"}`.
+  source address. Both count open connections, and the total includes
+  local clients. A connection over a cap is closed right after accept and
+  counted in `connections_rejected_total{reason="limit"}`. A warning naming
+  the source address and the limit is logged at most once per source per
+  minute.
 - Each tunnel uses two descriptors, and pooled outbound connections add
   more. Go raises the soft `RLIMIT_NOFILE` to the hard limit at start;
   `cuttle status` reports the effective limit. Assumption A5 covers
@@ -620,7 +625,7 @@ unless marked T0.
 | U12 | Non-disclosure: an original client with a distinctive source address sends a `CONNECT` and plain-HTTP requests (a `POST` with a chunked body, and `GET` targets `http://h/a{b}|c?x=1;y=2&z=%zz` and `http://h/q?b=2&a=1;c=3`) through edge (`via`) → gateway (`none`) → recording mock. The client also sends `Via: 1.1 lab-gw` and `X-Real-IP`, and one request has no `User-Agent`. The mock receives no field or value that cuttle added: every field it receives, apart from `Content-Length`, `Transfer-Encoding`, and `Trailer`, was sent by the client with the same value; no disclosure field arrives, the client's own included; no value contains `cuttle-edge`, `cuttle-gateway`, or the original client address; and method, target, and body bytes equal the client's. `OPTIONS` and `TRACE` with `Max-Forwards: 0` arrive with the value unchanged and are answered by the mock. | `TestNoDisclosureChain` |
 | N1 | Validation rejects a wildcard or host-name listener, a non-loopback listener without `proxy.remote.sources`, `proxy.remote.default = "direct"` without `allow_direct`, and an upstream without `disclosure`; `cuttle check` warns about `0.0.0.0/0` or `::/0` in `sources`. | T0 `TestConfigExposure` |
 | N2 | A connection from a source outside the allowlist is closed with no byte read or written, increments `connections_rejected_total{reason="source"}`, logs the source address, and produces no decision. | `TestRemoteSourceRejected` |
-| N3 | A remote client gets the upstream rule's route, `403` with rule `remote-default` for unmatched names, `403` with rule `remote-direct` for a `direct` rule, and `403` with rule `port` for port 22. With `allow_direct`, it reaches a public test address and gets `502 destination_ip_prohibited` for private, loopback, and `self` addresses even through rules with `allow_private` or `allow_loopback`. | `TestRemotePolicy` |
+| N3 | A remote client gets a `block` rule's `403` with that rule's name, `403` with rule `remote-default` for unmatched names, `403` with rule `remote-direct` for a `direct` rule, and `403` with rule `port` for port 22 and for a port outside a configured `proxy.remote.ports`, without a lookup or dial; each decision line has `source=remote`. With `allow_direct`, it reaches a public test address and gets `502 destination_ip_prohibited` for private, loopback, and `self` addresses, by name and as literals, even through rules with `allow_private` or `allow_loopback`, without a dial. A remote client's upstream route is checked from M1.3 by the chain tests (U6, U8, U12), in which the gateway instance serves the edge instance as a remote client. | `TestRemotePolicy` |
 | N4 | A local client's direct request for a name resolving to `127.0.0.1`, `192.0.2.50` (`self`), `169.254.1.1`, `fe80::1`, or `0.0.0.0` gets `502 destination_ip_prohibited` with zero dials. A name resolving to `10.20.0.5` is refused without `allow_private` and dialed with it; the literals `10.20.0.5` and `192.0.2.50` are dialed without any rule flag. `localhost:3000` and `127.0.0.1:8443` reach loopback mocks through the starter `loopback` rule. | `TestDirectAddressPolicy` |
 | N5 | After a reload removes a remote source, its kept-alive connection is closed at the next request. | `TestReloadRemovesSource` |
 | N6 | Connections over `max_connections` or `max_connections_per_source` are closed after accept and counted with `reason="limit"`. | `TestConnectionLimits` |

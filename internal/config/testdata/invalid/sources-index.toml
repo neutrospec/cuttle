@@ -1,0 +1,14 @@
+# want: 11 proxy.remote.sources[1]: is an address, not a CIDR
+# warn: 12 proxy.remote.sources[2]: 0.0.0.0/0 admits every address
+# warn: 13 proxy.remote.sources[3]: ::/0 admits every address
+name = "cuttle-test"
+[proxy]
+listen = ["127.0.0.1:18080", "10.8.0.6:18080"]
+default = "direct"
+[proxy.remote]
+# The warnings name each element as written, after the skipped first one.
+sources = [
+  "10.8.0.1",
+  "0.0.0.0/0",
+  "::/0",
+]

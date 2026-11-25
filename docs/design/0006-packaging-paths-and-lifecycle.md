@@ -179,9 +179,9 @@ status 2 and writes to stderr, which launchd sends to
   first failure of each run of log failures, and runtime panics, so it
   stays small without rotation.
 - Levels: `debug` adds tunnel-open and connection events; `info` has
-  decisions and lifecycle events; `warn` has rejected sources (rate
-  limited), retrying listeners, and statistics write errors; `error` has
-  failures that stop a component.
+  decisions and lifecycle events; `warn` has rejected sources and
+  connection limits (rate limited), retrying listeners, and statistics
+  write errors; `error` has failures that stop a component.
 - Privacy rules are in [0002 D8][d2-8].
 
 ### D8. Tap and formula

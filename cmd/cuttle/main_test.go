@@ -137,41 +137,79 @@ func copySample(t *testing.T, dir, src string) string {
 	return dst
 }
 
-var sampleWant = regexp.MustCompile(`^# (?:want|warn): (\d+) ([^ :]*): (.+)$`)
+var sampleWant = regexp.MustCompile(`^# (want|warn): (\d+) ([^ :]*): (.+)$`)
+
+// sampleIssues returns the header lines of a sample file as the lines
+// cuttle check prints for them, without the message, and the message each
+// must contain.
+func sampleIssues(t *testing.T, path string, data []byte) (prefixes, msgs []string, warnings int) {
+	t.Helper()
+	for _, line := range strings.Split(string(data), "\n") {
+		m := sampleWant.FindStringSubmatch(line)
+		if m == nil {
+			break
+		}
+		kind := "error"
+		if m[1] == "warn" {
+			kind = "warning"
+			warnings++
+		}
+		loc := path
+		if m[2] != "0" {
+			loc += ":" + m[2]
+		}
+		p := kind + ": " + loc + ": "
+		if m[3] != "" {
+			p += m[3] + ": "
+		}
+		prefixes, msgs = append(prefixes, p), append(msgs, m[4])
+	}
+	if len(prefixes) == 0 {
+		t.Fatalf("%s: no expectation header", path)
+	}
+	return prefixes, msgs, warnings
+}
+
+// hasLine reports whether out has a line that starts with prefix and
+// contains msg.
+func hasLine(out, prefix, msg string) bool {
+	for _, l := range strings.Split(out, "\n") {
+		if strings.HasPrefix(l, prefix) && strings.Contains(l[len(prefix):], msg) {
+			return true
+		}
+	}
+	return false
+}
 
 // TestCheckCommand checks cuttle check: each warning sample prints its
 // warning with exit status 0 (K1), errors exit 1, and usage errors exit 2
-// (P7). It runs in-process for T0 and also against the built binary for T1.
+// (P7). Every issue in a sample's header must appear with its line and key
+// path. It runs in-process for T0 and also against the built binary for T1.
 func TestCheckCommand(t *testing.T) {
 	lookup, _ := tempEnv(t)
 	dir := t.TempDir()
 
 	warn, _ := filepath.Glob("../../internal/config/testdata/warn/*.toml")
 	invalid, _ := filepath.Glob("../../internal/config/testdata/invalid/*.toml")
-	if len(warn) != 3 || len(invalid) < 40 {
+	if len(warn) != 4 || len(invalid) < 40 {
 		t.Fatalf("samples: %d warn, %d invalid", len(warn), len(invalid))
 	}
-	for _, src := range warn {
+	for _, src := range append(warn, invalid...) {
 		path := copySample(t, dir, src)
 		data, _ := os.ReadFile(path)
-		m := sampleWant.FindStringSubmatch(strings.SplitN(string(data), "\n", 2)[0])
+		prefixes, msgs, warnings := sampleIssues(t, path, data)
 		code, out, _ := runCLI(lookup, "check", "--config", path)
-		want := fmt.Sprintf("warning: %s:%s: %s: ", path, m[1], m[2])
-		if code != 0 || !strings.Contains(out, want) || !strings.Contains(out, m[3]) || !strings.Contains(out, ": ok, 1 warning(s)") {
-			t.Errorf("%s: exit %d, output:\n%s\nwant %q", src, code, out, want)
+		wantCode, summary := 1, " error(s), "
+		if strings.HasPrefix(prefixes[0], "warning: ") {
+			wantCode, summary = 0, fmt.Sprintf(": ok, %d warning(s)", warnings)
 		}
-	}
-	for _, src := range invalid {
-		path := copySample(t, dir, src)
-		data, _ := os.ReadFile(path)
-		m := sampleWant.FindStringSubmatch(strings.SplitN(string(data), "\n", 2)[0])
-		code, out, _ := runCLI(lookup, "check", "--config", path)
-		loc := fmt.Sprintf("error: %s:%s: ", path, m[1])
-		if m[1] == "0" {
-			loc = fmt.Sprintf("error: %s: ", path)
-		}
-		if code != 1 || !strings.Contains(out, loc) || !strings.Contains(out, m[3]) {
+		if code != wantCode || !strings.Contains(out, summary) {
 			t.Errorf("%s: exit %d, output:\n%s", src, code, out)
+		}
+		for i := range prefixes {
+			if !hasLine(out, prefixes[i], msgs[i]) {
+				t.Errorf("%s: no line %q...%q in output:\n%s", src, prefixes[i], msgs[i], out)
+			}
 		}
 	}
 	valid := filepath.Join(dir, "valid.toml")

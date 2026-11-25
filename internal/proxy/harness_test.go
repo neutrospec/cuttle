@@ -50,6 +50,10 @@ action = "block"
 type envOptions struct {
 	logWriter io.Writer
 	allow407  bool
+	// remote lists peer addresses, such as "10.8.0.1". Each gets its own
+	// loopback listener wrapped by testenv.SourceListener, so the instance
+	// sees its clients at that address (design 0007 D4).
+	remote []string
 }
 
 // env is one in-process cuttle instance with mock origins behind the test
@@ -63,6 +67,9 @@ type env struct {
 	p     *Proxy
 	addr  string
 	logs  *logBuffer
+	// remote maps each peer address of envOptions.remote to the real
+	// address of its listener.
+	remote map[string]string
 }
 
 func newEnv(t *testing.T, cfgText string) *env {
@@ -103,6 +110,16 @@ func newEnvWith(t *testing.T, cfgText string, opt envOptions) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
+	listeners := []net.Listener{ln}
+	e.remote = map[string]string{}
+	for _, peer := range opt.remote {
+		rl, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		listeners = append(listeners, testenv.SourceListener(rl, netip.MustParseAddr(peer)))
+		e.remote[peer] = rl.Addr().String()
+	}
 	var w io.Writer = e.logs
 	if opt.logWriter != nil {
 		w = io.MultiWriter(e.logs, opt.logWriter)
@@ -110,7 +127,7 @@ func newEnvWith(t *testing.T, cfgText string, opt envOptions) *env {
 	p, err := New(cfg, Deps{
 		Network:   n,
 		SelfAddrs: testenv.SelfAddrs,
-		Listeners: []net.Listener{ln},
+		Listeners: listeners,
 		Logger:    logx.NewLogger(w, slog.LevelDebug),
 	})
 	if err != nil {
@@ -129,8 +146,27 @@ func newEnvWith(t *testing.T, cfgText string, opt envOptions) *env {
 // goClient returns a Go client that uses the proxy and trusts only the test
 // root. It sends no Accept-Encoding of its own.
 func (e *env) goClient() (*http.Client, *http.Transport) {
+	return e.goClientFrom("")
+}
+
+// proxyAddr returns the listener a client at peer connects to: the local
+// listener for "", or the listener that reports peer.
+func (e *env) proxyAddr(peer string) string {
+	e.t.Helper()
+	if peer == "" {
+		return e.addr
+	}
+	a, ok := e.remote[peer]
+	if !ok {
+		e.t.Fatalf("no listener reports peer %s", peer)
+	}
+	return a
+}
+
+// goClientFrom is goClient for a client that the instance sees at peer.
+func (e *env) goClientFrom(peer string) (*http.Client, *http.Transport) {
 	tr := &http.Transport{
-		Proxy:              http.ProxyURL(&url.URL{Scheme: "http", Host: e.addr}),
+		Proxy:              http.ProxyURL(&url.URL{Scheme: "http", Host: e.proxyAddr(peer)}),
 		TLSClientConfig:    &tls.Config{RootCAs: e.ca.Pool()},
 		DisableCompression: true,
 		ForceAttemptHTTP2:  false,
@@ -142,7 +178,13 @@ func (e *env) goClient() (*http.Client, *http.Transport) {
 // dial opens a raw connection to the proxy.
 func (e *env) dial() net.Conn {
 	e.t.Helper()
-	c, err := net.DialTimeout("tcp", e.addr, 5*time.Second)
+	return e.dialFrom("")
+}
+
+// dialFrom opens a raw connection that the instance sees from peer.
+func (e *env) dialFrom(peer string) net.Conn {
+	e.t.Helper()
+	c, err := net.DialTimeout("tcp", e.proxyAddr(peer), 5*time.Second)
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -154,7 +196,13 @@ func (e *env) dial() net.Conn {
 // raw sends exact request bytes on a new connection and reads one response.
 func (e *env) raw(req string) (*http.Response, []byte) {
 	e.t.Helper()
-	c := e.dial()
+	return e.rawFrom("", req)
+}
+
+// rawFrom is raw for a client that the instance sees at peer.
+func (e *env) rawFrom(peer, req string) (*http.Response, []byte) {
+	e.t.Helper()
+	c := e.dialFrom(peer)
 	if _, err := io.WriteString(c, req); err != nil {
 		e.t.Fatal(err)
 	}
@@ -296,7 +344,13 @@ func generatedHeaders(t *testing.T, res *http.Response, status int, proxyStatus 
 // 200.
 func (e *env) connectRaw(target string) net.Conn {
 	e.t.Helper()
-	c := e.dial()
+	return e.connectRawFrom("", target)
+}
+
+// connectRawFrom is connectRaw for a client that the instance sees at peer.
+func (e *env) connectRawFrom(peer, target string) net.Conn {
+	e.t.Helper()
+	c := e.dialFrom(peer)
 	io.WriteString(c, "CONNECT "+target+" HTTP/1.1\r\nHost: "+target+"\r\n\r\n")
 	got := make([]byte, len(connectEstablished))
 	if _, err := io.ReadFull(c, got); err != nil {

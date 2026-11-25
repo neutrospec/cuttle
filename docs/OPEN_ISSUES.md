@@ -194,7 +194,14 @@ Move resolved items to Closed with their resolving commit or evidence.
 - Items:
   - V1 (design): 0003 N3 asserts an upstream route in M1.2, which is
     delivered in M1.3; limit N3 to decisions M1.2 can show. Move the
-    roadmap's non-loopback bind retry sentence from M1.2 to M1.4.
+    roadmap's non-loopback bind retry sentence from M1.2 to M1.4. Settled
+    in TASK-0005 (M1.2): N3 now asserts a `block` rule's `403`, the
+    `remote-default`, `remote-direct`, and `port` refusals with
+    `source=remote` decision lines, and the `allow_direct` address limits;
+    the remote upstream route is left to the M1.3 chain tests (U6, U8,
+    U12). The roadmap's M1.2 row no longer promises the retry, and the M1.4
+    row now says that a non-loopback listener that cannot bind is retried
+    and shows as retrying (N7).
   - V2 (implementer): add checks that client-sent `Forwarded` and
     `X-Forwarded-*` fields pass unchanged on `disclosure = "via"` routes,
     on the CONNECT head and the plain-HTTP copy-back (U1, U5). Add an
@@ -269,7 +276,10 @@ Move resolved items to Closed with their resolving commit or evidence.
     the `proxy.remote.sources` `/0` warning, the "repeats rule" warnings,
     and `rule` or `upstream` elements after a non-table element still name
     positions in the filtered list; keep each element's original position
-    and add samples. Z2 (docs): the 0002 D7 `decisions_total` row also
+    and add samples. Settled in TASK-0005 (M1.2): the validator keeps the
+    written index of every table, rule pattern, and source, and the samples
+    `sources-index.toml`, `repeat-index.toml`, and `table-index.toml` list
+    each position, which the base code got wrong. Z2 (docs): the 0002 D7 `decisions_total` row also
     counts `action=none` for a connection without a source class. Z3
     (docs, status half at M1.4): 0006 D7 should say that lines written to
     a deleted log file before the next rotation are lost, that a deleted

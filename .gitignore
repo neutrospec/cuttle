@@ -6,6 +6,9 @@
 # macOS Finder metadata.
 .DS_Store
 
+# The binary that the README quick start builds in the repository root.
+/cuttle
+
 # Private keys, certificates, key bundles, and traffic captures stay outside
 # Git under the Local artifacts rule in AGENTS.md and design 0007 D6.
 *.pem
