@@ -5,9 +5,9 @@ import (
 	"net/netip"
 	"testing"
 
-	"squid/internal/policy"
-	"squid/internal/stats"
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/policy"
+	"github.com/neutrospec/cuttle/internal/stats"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 // queueListener hands out the given connections, then reports closed.

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"squid/internal/config"
+	"github.com/neutrospec/cuttle/internal/config"
 )
 
 var baseRE = regexp.MustCompile(`name="base" value="([0-9a-f]{64})"`)

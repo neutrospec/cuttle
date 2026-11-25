@@ -19,11 +19,11 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/config"
-	"squid/internal/control"
-	"squid/internal/paths"
-	"squid/internal/proxy"
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/config"
+	"github.com/neutrospec/cuttle/internal/control"
+	"github.com/neutrospec/cuttle/internal/paths"
+	"github.com/neutrospec/cuttle/internal/proxy"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 // serveConfig is a configuration for binary tests: listeners on chosen

@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/policy"
+	"github.com/neutrospec/cuttle/internal/policy"
 )
 
 // expectation is one header line of a sample file:

@@ -1,6 +1,8 @@
 # 0006 — Packaging, paths, and lifecycle
 
 **Status** — Proposed (TASK-0001, 2026-11-25; revised in iteration 2).
+D8 and the C2–C4 assumptions revised in TASK-0015 (M3.1) after checks with
+the installed Homebrew.
 
 ## Context
 
@@ -273,9 +275,9 @@ status 2 and writes to stderr, which launchd sends to
   directory is recreated only at the next start: until then the rotation
   cannot open a new file, and each later line is lost and counted as a
   failure.
-- The launchd file receives only output from before the log opens, the
-  first failure of each run of log failures, and runtime panics, so it
-  stays small without rotation.
+- The launchd file receives only output from before the log opens,
+  configuration errors at start (D5 step 4), the first failure of each run
+  of log failures, and runtime panics, so it stays small without rotation.
 - Levels: `debug` adds tunnel-open and connection events; `info` has
   decisions, lifecycle events, and interfaces coming online or leaving
   demotion; `warn` has rejected sources and connection limits, retrying
@@ -292,43 +294,47 @@ status 2 and writes to stderr, which launchd sends to
 
 ### D8. Tap and formula
 
-- The tap is a GitHub repository `<owner>/homebrew-tap` with
-  `Formula/cuttle.rb`. Since Homebrew 6, users install with the fully
-  qualified name or trust the tap first ([research 0001 §1][r1-1]). The
-  owner and hosting are open ([OI-0004][oi]).
-- Releases are tags `vX.Y.Z` with a source tarball and its SHA-256. `head`
-  tracks `main` for development.
+- The tap is the public GitHub repository `neutrospec/homebrew-tap`, tapped
+  as `neutrospec/tap`, with `Formula/cuttle.rb`. The source repository is
+  the public `neutrospec/cuttle`, MIT-licensed ([OI-0004][oi]). Since
+  Homebrew 6, users install with the fully qualified name or trust the tap
+  first ([research 0001 §1][r1-1]); `brew install neutrospec/tap/cuttle`
+  also records the formula in the user's trust store, so later
+  `brew services` and `brew test` commands need no separate trust step.
+- The formula's source of truth is
+  [packaging/homebrew/cuttle.rb](../../packaging/homebrew/cuttle.rb). At
+  each release it is copied into the tap with `url` naming the new tag and
+  `sha256` set to that tag tarball's checksum: a tag's tarball cannot
+  contain its own checksum, so the repository copy holds a placeholder.
+- Releases are tags `vX.Y.Z` with GitHub's source tarball. `head` tracks
+  `main` for development.
 
 ```ruby
 class Cuttle < Formula
   desc "Explicit HTTP and HTTPS forward proxy with rule-based routing"
-  homepage "https://github.com/<owner>/squid"
-  url "https://github.com/<owner>/squid/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "<sha256>"
-  license "<SPDX id>"
-  head "https://github.com/<owner>/squid.git", branch: "main"
+  homepage "https://github.com/neutrospec/cuttle"
+  url "https://github.com/neutrospec/cuttle/archive/refs/tags/v0.1.0.tar.gz"
+  sha256 "<sha256 of that tarball>"
+  license "MIT"
+  head "https://github.com/neutrospec/cuttle.git", branch: "main"
 
   depends_on "go" => :build
+  depends_on :macos
+
+  allow_network_access! :test
 
   def fetch
     system "go", "mod", "download"
   end
 
   def install
-    system "go", "build", *std_go_args(ldflags: "-X main.version=#{version}"),
-           "./cmd/cuttle"
+    ENV["CGO_ENABLED"] = "0"
+    system "go", "build", *std_go_args(ldflags: "-X main.version=#{version}"), "./cmd/cuttle"
   end
 
   def caveats
-    <<~EOS
-      Configuration: ~/.config/cuttle/config.toml (created on first start)
-      Admin UI:      http://127.0.0.1:3129/ after `cuttle admin passwd`
-      Paths:         `cuttle paths`
-      Non-default XDG_* values must also be set for the service in
-        $HOMEBREW_USER_CONFIG_HOME/services/cuttle.env
-      Uninstalling leaves ~/.config/cuttle, ~/.local/share/cuttle, and
-        ~/.local/state/cuttle in place.
-    EOS
+    # Paths, the admin URL, the cuttle.env override, stopping before
+    # uninstalling, and the files uninstalling leaves; see the source file.
   end
 
   service do
@@ -341,29 +347,59 @@ class Cuttle < Formula
   end
 
   test do
-    port = free_port
-    (testpath/".config/cuttle/config.toml").write <<~EOS
-      name = "cuttle-test"
-      [proxy]
-      listen = ["127.0.0.1:#{port}"]
-      default = "block"
-      [admin]
-      listen = ""
-    EOS
-    with_test_process bin/"cuttle", "serve" do
-      sleep 1
-      code = shell_output("curl -s -o /dev/null -w '%{http_connect}' " \
-                          "-x http://127.0.0.1:#{port} " \
-                          "https://blocked.invalid/; true")
-      assert_equal "403", code
-    end
-    assert_match version.to_s, shell_output("#{bin}/cuttle version")
+    # XDG_RUNTIME_DIR in testpath, a block-default config on free_port,
+    # `cuttle check`, then under with_test_process a raw CONNECT over
+    # TCPSocket must get "HTTP/1.1 403", and `cuttle version` must print
+    # the formula version; see the source file.
   end
 end
 ```
 
-The `fetch`, `with_test_process`, and `std_go_args` usage follows the
-research draft ([research 0001 §1][r1-1]). The service block decisions:
+The Homebrew 7.0 API the formula uses, checked against the installed
+Homebrew and in TASK-0015 with a throwaway tap ([OI-0003][oi]):
+
+- `fetch` is a public formula method. It runs after unpacking, with
+  network access, and `go mod download` fills Homebrew's package-manager
+  cache (`GOPATH` and `GOCACHE` under `$(brew --cache)`). `install` then
+  runs with all network denied and only those caches writable, so
+  `go build` works offline from the downloaded modules; no `GOFLAGS` or
+  `GOPROXY` setting is needed. The `go` directive must not exceed the
+  Homebrew `go`, because Homebrew sets `GOTOOLCHAIN=local`.
+- `std_go_args(ldflags: ...)` expands to `-trimpath -o=<bin>/cuttle
+  -ldflags=-s -w -X main.version=<version>`.
+- `CGO_ENABLED=0` makes the build independent of the C toolchain; cuttle
+  has no cgo files ([0008 D16][d8-16]), and the built binary records
+  `CGO_ENABLED=0`. modernc.org/sqlite is pure Go and builds this way.
+- `depends_on :macos`, because cuttle does not build for Linux (interface
+  binding is darwin-only).
+- Network access is allowed in every phase unless the formula restricts
+  it. `allow_network_access! :test` allows it for `test` and denies it for
+  `build` and `postinstall`; `fetch` keeps network access regardless. The
+  test needs it: with `deny_network_access! :test`, the sandbox refuses
+  even Homebrew's own `free_port` (`Errno::EPERM` from `bind(2)`), so
+  loopback TCP is network access to the test sandbox.
+- `free_port` and `with_test_process` are public test helpers;
+  `with_test_process` sends `SIGTERM` when the block ends and `SIGKILL`
+  after 5 s. The test sandbox sets `HOME` and `XDG_CONFIG_HOME` inside
+  `testpath` and `TMPDIR` to `HOMEBREW_TEMP`; the test sets
+  `XDG_RUNTIME_DIR` to a 0700 directory in `testpath`, so the control
+  socket does not land in the shared `$HOMEBREW_TEMP/cuttle`.
+- The test sends the `CONNECT` itself over `TCPSocket` instead of running
+  curl: it then depends on no curl version or proxy environment variable,
+  and `brew audit --strict` rejects curl's `-w '%{http_connect}'` under
+  RuboCop's `Style/FormatStringToken`.
+- `service do` accepts `run`, `keep_alive`, `process_type`,
+  `stop_timeout`, `log_path`, and `error_log_path`. `brew services start`
+  writes `~/Library/LaunchAgents/sh.brew.cuttle.plist` with label
+  `sh.brew.cuttle` and merges `cuttle.env` into `EnvironmentVariables`.
+- The per-service environment file is
+  `$HOMEBREW_USER_CONFIG_HOME/services/cuttle.env`:
+  `$XDG_CONFIG_HOME/homebrew/services/cuttle.env` when the shell that runs
+  `brew` sets `XDG_CONFIG_HOME`, otherwise `~/.homebrew/services/cuttle.env`.
+  Homebrew skips a group- or world-writable file. It applies at the next
+  `brew services start` or `restart`.
+
+The service block decisions:
 
 - No `--config` and no `XDG_*` in the block. cuttle resolves paths at run
   time, and the `.env` file covers custom values
@@ -371,22 +407,32 @@ research draft ([research 0001 §1][r1-1]). The service block decisions:
 - `keep_alive true` restarts after crashes and failed starts. A Go panic
   exits with status 2, not a signal, so `keep_alive crashed: true` would
   miss it. `brew services stop` uses `bootout`, which launchd does not undo.
-- `stop_timeout 15` covers the D6 budget.
+  Observed: a clean exit after `SIGTERM` (`last exit code = 0`) and a
+  `SIGKILL` are relaunched at once, and an invalid configuration exits 1
+  and is relaunched every 10 s until the file is fixed.
+- `stop_timeout 15` covers the D6 budget; `launchctl print` reports
+  `exit timeout = 15`.
 - `process_type :interactive`, because an unset `ProcessType` lets launchd
   throttle CPU and I/O, and cuttle carries interactive browser traffic
-  ([research 0001 §2][r1-2]). Assumption C1.
+  ([research 0001 §2][r1-2]); `launchctl print` reports
+  `spawn type = interactive`. Assumption C1.
 - No `require_root`; `sudo brew services` is unsupported.
-- The test needs no outbound connection because a block makes none. It
-  checks only curl's `%{http_connect}`, since curl's exit status for a
-  failed `CONNECT` differs between versions ([research 0002 §6][r2-6]).
-  Whether the sandbox needs `allow_network_access! :test` for loopback is
-  open ([OI-0003][oi]).
 
-Uninstalling leaves the XDG files, the `var/log` file, and a loaded agent
-unless the service was stopped first ([research 0001 §5][r1-5]). The README
-gives the cleanup steps: `brew services stop cuttle`, `brew uninstall
-cuttle`, `brew services cleanup`, and removal of the three XDG directories
-and the log.
+Uninstalling leaves the XDG files, the `var/log` file, and the
+`cuttle.env` file. `brew uninstall` does not stop the service: the job
+stays loaded and running from the deleted keg, its plist stays in
+`~/Library/LaunchAgents`, and `brew services cleanup` skips it ("not
+managed by `brew services`"), because it stops only running jobs whose
+formula is still installed and removes only plists of jobs that are not
+running. The caveats and the README therefore say to stop first:
+`brew services stop cuttle`, `brew uninstall cuttle`,
+`brew services cleanup`, then removal of the three XDG directories, the
+log, and any `cuttle.env`. After an uninstall without a stop,
+`launchctl bootout gui/$(id -u)/sh.brew.cuttle` stops the job and
+`brew services cleanup` then removes its plist. `brew services start` also
+runs `launchctl enable`, which leaves an `sh.brew.cuttle => enabled`
+record in launchd's per-user override database; it is launchd's default
+state, harmless, and removing it needs root.
 
 ## Acceptance criteria
 
@@ -399,7 +445,7 @@ and the log.
 | P5 | The built binary, sent `SIGTERM` with an open tunnel and an in-flight 2 s plain-HTTP response, completes the response, closes the tunnel, and exits 0 within 8 s; a second signal exits at once. | T1 `TestServeSIGTERM` |
 | P6 | With a test threshold of 64 KiB, rotation keeps exactly five rotated files. | T1 `TestLogRotation` |
 | P7 | `cuttle explain` prints the D3 fields for direct, upstream, block, and `--remote` targets, and `cuttle check` exits 0, 1, or 2 as specified. | T1 `TestExplainCommand`, `TestCheckCommand` |
-| P8 | `brew install --build-from-source <owner>/tap/cuttle`, `brew test cuttle`, and `brew audit --strict <owner>/tap/cuttle` pass. | T2 at M3 |
+| P8 | `brew install --build-from-source neutrospec/tap/cuttle`, `brew test cuttle`, and `brew audit --strict neutrospec/tap/cuttle` pass. | T2 at M3 |
 | P9 | `brew services start cuttle` writes `~/Library/LaunchAgents/sh.brew.cuttle.plist` with `KeepAlive`, `ExitTimeOut` 15, `ProcessType` `Interactive`, and the log paths; the service serves on `127.0.0.1:3128`; `cuttle status` reaches it and its paths equal `cuttle paths`. | T2 at M3 |
 | P10 | `brew services stop cuttle` logs `stopped` within 15 s without `SIGKILL`; `restart` works; after `kill -9` launchd relaunches it; with an invalid configuration it is relaunched with errors in the log and serves once the file is fixed. | T2 at M3 |
 | P11 | With `XDG_STATE_HOME` in `cuttle.env`, the service uses that state directory after `brew services restart`. | T2 at M3 |
@@ -410,9 +456,9 @@ and the log.
 | ID | Assumption | Smallest check |
 | --- | --- | --- |
 | C1 | `process_type :interactive` avoids throttling that the default would apply. | T3: latency under `brew services` with the key unset and set ([research 0001, open question 3][r1-oq]) |
-| C2 | `brew test` can use loopback TCP, possibly with `allow_network_access! :test`. | Open question 5 ([OI-0003][oi]) |
-| C3 | launchd sends `SIGTERM` and waits `ExitTimeOut` from `stop_timeout`. | Open question 1 ([OI-0003][oi]) |
-| C4 | The `.env` override reaches the agent's environment. | Open question 2 ([OI-0003][oi]); P11 |
+| C2 | `brew test` can use loopback TCP, possibly with `allow_network_access! :test`. | Settled in TASK-0015: loopback TCP needs network access in the test phase, which the default and `allow_network_access! :test` give and `deny_network_access! :test` takes away (D8). |
+| C3 | launchd sends `SIGTERM` and waits `ExitTimeOut` from `stop_timeout`. | Settled in TASK-0015: `brew services stop` delivers `SIGTERM` and `launchctl print` reports `exit timeout = 15`. cuttle exits within milliseconds, so the `SIGKILL` at 15 s was not reached. |
+| C4 | The `.env` override reaches the agent's environment. | Settled in TASK-0015 with P11. |
 
 ## Alternatives considered
 
@@ -440,6 +486,7 @@ and the log.
 [d5-6]: 0005-statistics-and-admin.md#d6-password
 [d8-3]: 0008-interface-selection.md#d3-matching-system-interfaces
 [d8-15]: 0008-interface-selection.md#d15-status-command-line-logging-counters-and-statistics
+[d8-16]: 0008-interface-selection.md#d16-dependencies-and-platform-code
 [oi]: ../OPEN_ISSUES.md
 [r1]: ../research/0001-homebrew-launchd-xdg.md
 [r1-1]: ../research/0001-homebrew-launchd-xdg.md#1-homebrew-formula-for-a-go-program-in-a-personal-tap

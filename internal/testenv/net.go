@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"squid/internal/netx"
+	"github.com/neutrospec/cuttle/internal/netx"
 )
 
 // Net implements the Network seam for tests (design 0007 D3). Lookups answer

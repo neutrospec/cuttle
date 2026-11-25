@@ -15,11 +15,11 @@ import (
 
 	"golang.org/x/term"
 
-	"squid/internal/admin"
-	"squid/internal/config"
-	"squid/internal/control"
-	"squid/internal/paths"
-	"squid/internal/stats"
+	"github.com/neutrospec/cuttle/internal/admin"
+	"github.com/neutrospec/cuttle/internal/config"
+	"github.com/neutrospec/cuttle/internal/control"
+	"github.com/neutrospec/cuttle/internal/paths"
+	"github.com/neutrospec/cuttle/internal/stats"
 )
 
 const adminUsage = "usage: cuttle admin passwd [--stdin]"

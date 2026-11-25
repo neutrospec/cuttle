@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"squid/internal/iface"
-	"squid/internal/policy"
+	"github.com/neutrospec/cuttle/internal/iface"
+	"github.com/neutrospec/cuttle/internal/policy"
 )
 
 // MaxFileSize is the largest configuration file cuttle reads.

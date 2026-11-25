@@ -20,10 +20,10 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/control"
-	"squid/internal/iface"
-	"squid/internal/paths"
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/control"
+	"github.com/neutrospec/cuttle/internal/iface"
+	"github.com/neutrospec/cuttle/internal/paths"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 func ipList(list ...string) []netip.Addr {

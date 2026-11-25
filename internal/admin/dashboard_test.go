@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/control"
-	"squid/internal/stats"
+	"github.com/neutrospec/cuttle/internal/control"
+	"github.com/neutrospec/cuttle/internal/stats"
 )
 
 // testFlow is a completed exchange with fixed bytes.

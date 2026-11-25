@@ -13,11 +13,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"squid/internal/authority"
-	"squid/internal/logx"
-	"squid/internal/netx"
-	"squid/internal/policy"
-	"squid/internal/stats"
+	"github.com/neutrospec/cuttle/internal/authority"
+	"github.com/neutrospec/cuttle/internal/logx"
+	"github.com/neutrospec/cuttle/internal/netx"
+	"github.com/neutrospec/cuttle/internal/policy"
+	"github.com/neutrospec/cuttle/internal/stats"
 )
 
 // Outcomes logged and counted (design 0002 D6 and D7).

@@ -17,10 +17,10 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/admin"
-	"squid/internal/config"
-	"squid/internal/control"
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/admin"
+	"github.com/neutrospec/cuttle/internal/config"
+	"github.com/neutrospec/cuttle/internal/control"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 const adminTestPassword = "correct horse battery"

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"sync"
 
-	"squid/internal/netx"
+	"github.com/neutrospec/cuttle/internal/netx"
 )
 
 // outConn is an outbound connection of a plain-HTTP transport, direct or

@@ -211,3 +211,30 @@ removes entries. Append new entries at the end, oldest first.
   invalid run. Match expected messages against the test's own failure
   text, and for subtests use the underscore form, as in
   `TestCheckDisclosure/disclosure_field_outside_the_case_targets`.
+
+### 2026-11-26 — infra — Homebrew checks leave state outside the tap
+
+- Task: TASK-0015, installing a formula from a throwaway tap and running
+  `brew services` checks that had to leave nothing behind.
+- Attempts: 1, recorded because the obvious cleanup (`brew services stop`,
+  `brew uninstall`, `brew untap`) misses three side effects, and one of
+  them defeats `brew services cleanup`.
+- What failed: `brew install --dry-run <user>/<tap>/<formula>` already
+  added the formula to `trustedformulae` in
+  `$HOMEBREW_USER_CONFIG_HOME/trust.json`. `brew uninstall` with the
+  service running left the job running from the deleted keg, with its
+  plist in `~/Library/LaunchAgents`, and `brew services cleanup` printed
+  `Service sh.brew.cuttle not managed by brew services => skipping`. The
+  build created `$(brew --cache)/go_mod_cache` and `go_cache`, about
+  500 MB, and `brew services start` left `"sh.brew.cuttle" => enabled`
+  under `disabled services` in `launchctl print gui/$(id -u)`, which only
+  root can remove.
+- What to do instead: Before the check, record `shasum -a 256` of
+  `trust.json`, `launchctl print gui/$(id -u) | grep <name>`, and the
+  birth times (`stat -f %SB`) of the cache directories. Always run
+  `brew services stop` before `brew uninstall`; for a job left running,
+  run `launchctl bootout gui/$(id -u)/<label>` and then
+  `brew services cleanup`. `brew untap` removes the trust entry. Remove the
+  Go caches only when their birth time shows the check created them, with
+  `GOMODCACHE=<cache>/go_mod_cache/pkg/mod go clean -modcache` first,
+  because module files are read-only. Report the launchd record.

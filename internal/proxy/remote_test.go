@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/stats"
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/stats"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 // remoteConfig serves remote clients from 10.8.0.1 with the default remote

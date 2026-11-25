@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"squid/internal/authority"
+	"github.com/neutrospec/cuttle/internal/authority"
 )
 
 // Kind is the request kind.

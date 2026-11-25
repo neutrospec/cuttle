@@ -1,9 +1,8 @@
-# squid — the cuttle proxy
+# cuttle
 
-This repository builds `cuttle`, a small explicit forward proxy for macOS
-clients such as Chrome, Safari, and command-line tools. The repository keeps
-the name `squid`; the Homebrew formula, binary, service, and XDG directories
-are named `cuttle`, because homebrew/core already ships a `squid` formula.
+`cuttle` is a small explicit forward proxy for macOS clients such as Chrome,
+Safari, and command-line tools. It is released under the
+[MIT licence](LICENSE).
 
 cuttle routes each HTTPS `CONNECT` tunnel and each plain `http://` request by
 ordered rules on host name, domain, IP prefix, and port:
@@ -28,7 +27,73 @@ ordered rules on host name, domain, IP prefix, and port:
   a password-protected dashboard and settings page on loopback show where
   traffic went.
 - cuttle installs from a Homebrew tap, runs under `brew services`, and
-  follows the XDG Base Directory specification.
+  follows the XDG Base Directory specification ([Install](#install)).
+
+## Install
+
+cuttle needs macOS. It installs from the `neutrospec/tap` Homebrew tap,
+which builds it from source with Homebrew's `go`, and runs as a user-level
+LaunchAgent under `brew services`; no step needs `sudo`.
+
+```sh
+brew install neutrospec/tap/cuttle
+brew services start cuttle    # starts now and at every login
+cuttle status                 # listeners, upstreams, counters, and paths
+cuttle admin passwd           # then sign in at http://127.0.0.1:3129/
+```
+
+The first start writes the starter configuration to
+`~/.config/cuttle/config.toml`, with the proxy on `127.0.0.1:3128` and the
+admin UI on `http://127.0.0.1:3129/`; point clients at
+`http://127.0.0.1:3128`. Edit the configuration on the admin settings page,
+or by hand followed by `cuttle check` and `cuttle reload`. Sign-in stays
+disabled until `cuttle admin passwd` has set a password; a new password
+needs no restart. `cuttle paths` lists every file the CLI uses.
+
+The service sees no `XDG_*` variable from your shell. If your shell sets
+`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, or `XDG_RUNTIME_DIR`
+to a value other than the default, put the same `KEY=value` lines in
+Homebrew's per-service environment file `cuttle.env`, which must not be
+writable by group or others, and restart the service:
+
+```sh
+# $XDG_CONFIG_HOME/homebrew/services when XDG_CONFIG_HOME is set,
+# otherwise ~/.homebrew/services
+dir=${XDG_CONFIG_HOME:+$XDG_CONFIG_HOME/homebrew}
+dir=${dir:-$HOME/.homebrew}/services
+mkdir -p "$dir"
+printf 'XDG_STATE_HOME=%s\n' "$XDG_STATE_HOME" >>"$dir/cuttle.env"
+brew services restart cuttle
+cuttle status                 # warns when the service's paths differ
+```
+
+Logs:
+
+- `~/.local/state/cuttle/cuttle.log` is cuttle's own log, with the
+  decision log; cuttle rotates it at 10 MiB and keeps five old files.
+- `$(brew --prefix)/var/log/cuttle.log` receives what launchd captures:
+  configuration errors at start, output from before cuttle's own log
+  opens, and crashes. launchd restarts cuttle after a crash and, while the
+  configuration is invalid, every 10 s until the file is fixed.
+
+After `brew upgrade cuttle`, run `brew services restart cuttle`.
+
+To remove cuttle and everything it created:
+
+```sh
+brew services stop cuttle
+brew uninstall cuttle
+brew services cleanup
+rm -rf ~/.config/cuttle ~/.local/share/cuttle ~/.local/state/cuttle
+rm -f "$(brew --prefix)/var/log/cuttle.log"
+# and the cuttle.env file above, if you created one
+```
+
+Stop the service before uninstalling: `brew uninstall` leaves it running
+from the deleted files, and `brew services cleanup` then skips it. If that
+happened, run `launchctl bootout gui/$(id -u)/sh.brew.cuttle` and then
+`brew services cleanup`. Uninstalling alone also leaves the configuration,
+password, statistics, and logs in place.
 
 ## Status
 
@@ -116,7 +181,7 @@ addresses leave through the listed interface and bypass full-tunnel and
 split-tunnel VPN routes; private addresses keep system routing
 ([0008 D7](docs/design/0008-interface-selection.md#d7-dial-plan)).
 
-Try it from a checkout:
+Try it from a checkout without installing:
 
 ```sh
 go build -o cuttle ./cmd/cuttle
@@ -138,7 +203,12 @@ cuttle sees it, a documented limitation
 
 ## Development
 
-Building needs Go 1.26 or later; the gates use the Homebrew `go`. Run the
+The module path is `github.com/neutrospec/cuttle`. Building needs Go 1.26
+or later; the gates use the Homebrew `go`. A plain `go build` reports its
+version as `dev+<revision>` (`.dirty` with uncommitted changes); release
+builds set it with `-ldflags "-X main.version=..."`. The Homebrew formula's
+source is [packaging/homebrew/cuttle.rb](packaging/homebrew/cuttle.rb),
+which is copied into the tap at each release. Run the
 gate tiers of [AGENTS.md](AGENTS.md#evidence-by-git-tree) from the
 repository root with `scripts/gate`, which runs exactly the commands of
 [design 0007 D7](docs/design/0007-test-environment-and-gates.md#d7-gates):

@@ -43,7 +43,7 @@ func BuildCuttle(t testing.TB) string {
 			return
 		}
 		buildPath = filepath.Join(buildDir, "cuttle")
-		cmd := exec.Command(goBin, "build", "-o", buildPath, "-ldflags", "-X main.version=0.0.0-test", "squid/cmd/cuttle")
+		cmd := exec.Command(goBin, "build", "-o", buildPath, "-ldflags", "-X main.version=0.0.0-test", "github.com/neutrospec/cuttle/cmd/cuttle")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			buildErr = fmt.Errorf("go build: %v\n%s", err, out)

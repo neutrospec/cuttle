@@ -4,7 +4,7 @@ import (
 	"net/netip"
 	"testing"
 
-	"squid/internal/authority"
+	"github.com/neutrospec/cuttle/internal/authority"
 )
 
 func mustConnect(t *testing.T, s string) authority.Authority {

@@ -19,7 +19,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 // The M1 client check of design 0007 D8, as one runnable procedure. For each
@@ -123,7 +123,7 @@ func buildCuttle(ctx context.Context, dir string) (string, error) {
 	}
 	gomod, err := exec.CommandContext(ctx, goBin, "env", "GOMOD").Output()
 	if err != nil || strings.TrimSpace(string(gomod)) == "" || strings.TrimSpace(string(gomod)) == os.DevNull {
-		return "", errors.New("run m1-check inside the squid module, or pass -cuttle")
+		return "", errors.New("run m1-check inside the cuttle module, or pass -cuttle")
 	}
 	bin := filepath.Join(dir, "cuttle")
 	cmd := exec.CommandContext(ctx, goBin, "build", "-o", bin, "./cmd/cuttle")

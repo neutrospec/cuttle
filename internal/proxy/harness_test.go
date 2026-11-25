@@ -16,10 +16,10 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/config"
-	"squid/internal/logx"
-	"squid/internal/stats"
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/config"
+	"github.com/neutrospec/cuttle/internal/logx"
+	"github.com/neutrospec/cuttle/internal/stats"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 // baseConfig is the starter's routing with the test name, a block rule for

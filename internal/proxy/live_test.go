@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/stats"
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/stats"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 // bytesOf returns bytes_total for an action and direction.

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"squid/internal/iface"
+	"github.com/neutrospec/cuttle/internal/iface"
 )
 
 // Interfaces is the injected interface source of design 0008 for tests

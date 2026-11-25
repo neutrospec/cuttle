@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"squid/internal/config"
+	"github.com/neutrospec/cuttle/internal/config"
 )
 
 var sha256Hex = regexp.MustCompile(`^[0-9a-f]{64}$`)

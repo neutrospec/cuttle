@@ -15,10 +15,10 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"squid/internal/authority"
-	"squid/internal/iface"
-	"squid/internal/netx"
-	"squid/internal/policy"
+	"github.com/neutrospec/cuttle/internal/authority"
+	"github.com/neutrospec/cuttle/internal/iface"
+	"github.com/neutrospec/cuttle/internal/netx"
+	"github.com/neutrospec/cuttle/internal/policy"
 )
 
 var (

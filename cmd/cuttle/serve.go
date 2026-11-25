@@ -17,14 +17,14 @@ import (
 	"syscall"
 	"time"
 
-	"squid/internal/config"
-	"squid/internal/control"
-	"squid/internal/iface"
-	"squid/internal/logx"
-	"squid/internal/netx"
-	"squid/internal/paths"
-	"squid/internal/proxy"
-	"squid/internal/stats"
+	"github.com/neutrospec/cuttle/internal/config"
+	"github.com/neutrospec/cuttle/internal/control"
+	"github.com/neutrospec/cuttle/internal/iface"
+	"github.com/neutrospec/cuttle/internal/logx"
+	"github.com/neutrospec/cuttle/internal/netx"
+	"github.com/neutrospec/cuttle/internal/paths"
+	"github.com/neutrospec/cuttle/internal/proxy"
+	"github.com/neutrospec/cuttle/internal/stats"
 )
 
 // shutdownDrain is how long serve waits for in-flight plain-HTTP exchanges

@@ -18,9 +18,9 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/logx"
-	"squid/internal/stats"
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/logx"
+	"github.com/neutrospec/cuttle/internal/stats"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 // clientDisclosure are disclosure fields a client sends itself; none may

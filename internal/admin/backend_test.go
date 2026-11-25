@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/config"
-	"squid/internal/control"
-	"squid/internal/stats"
+	"github.com/neutrospec/cuttle/internal/config"
+	"github.com/neutrospec/cuttle/internal/control"
+	"github.com/neutrospec/cuttle/internal/stats"
 )
 
 // fakeConfig is a valid configuration for the fake backend.

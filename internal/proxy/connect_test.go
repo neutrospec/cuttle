@@ -19,8 +19,8 @@ import (
 
 	"golang.org/x/net/websocket"
 
-	"squid/internal/stats"
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/stats"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 // tlsGet runs one HTTPS GET over an established tunnel.

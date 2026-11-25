@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"squid/internal/policy"
-	"squid/internal/stats"
+	"github.com/neutrospec/cuttle/internal/policy"
+	"github.com/neutrospec/cuttle/internal/stats"
 )
 
 // errProxyAuth marks an origin's 407, which never reaches a client.

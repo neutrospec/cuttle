@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/config"
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/config"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 func TestMain(m *testing.M) {

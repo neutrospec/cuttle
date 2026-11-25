@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"squid/internal/config"
-	"squid/internal/stats"
+	"github.com/neutrospec/cuttle/internal/config"
+	"github.com/neutrospec/cuttle/internal/stats"
 )
 
 const (

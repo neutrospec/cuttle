@@ -8,10 +8,10 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"squid/internal/authority"
-	"squid/internal/config"
-	"squid/internal/paths"
-	"squid/internal/policy"
+	"github.com/neutrospec/cuttle/internal/authority"
+	"github.com/neutrospec/cuttle/internal/config"
+	"github.com/neutrospec/cuttle/internal/paths"
+	"github.com/neutrospec/cuttle/internal/policy"
 )
 
 // configPath returns --config or the resolved default.

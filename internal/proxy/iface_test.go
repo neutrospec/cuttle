@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/iface"
-	"squid/internal/policy"
-	"squid/internal/stats"
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/iface"
+	"github.com/neutrospec/cuttle/internal/policy"
+	"github.com/neutrospec/cuttle/internal/stats"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 // ifaceDefs defines the test interfaces eth-a, eth-b, and wifi with

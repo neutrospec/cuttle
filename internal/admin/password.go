@@ -17,8 +17,8 @@ import (
 
 	"golang.org/x/crypto/argon2"
 
-	"squid/internal/config"
-	"squid/internal/paths"
+	"github.com/neutrospec/cuttle/internal/config"
+	"github.com/neutrospec/cuttle/internal/paths"
 )
 
 // Password lengths in bytes (design 0005 D6).

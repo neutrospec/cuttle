@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"squid/internal/authority"
-	"squid/internal/stats"
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/authority"
+	"github.com/neutrospec/cuttle/internal/stats"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 func TestRemoveDisclosure(t *testing.T) {

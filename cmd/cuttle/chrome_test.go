@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"squid/internal/testenv"
+	"github.com/neutrospec/cuttle/internal/testenv"
 )
 
 // defaultChrome is Chrome's binary on macOS (design 0007 D8).
