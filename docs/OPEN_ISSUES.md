@@ -320,6 +320,14 @@ Move resolved items to Closed with their resolving commit or evidence.
     no permission request, and the page reported `local-network-access` as
     `prompt`. If the tester's run confirms this, A6 does not hold, and the
     orchestrator returns the D11 decision to the user.
+    Observed in TASK-0014 (`6cec471`, COMPATIBILITY.md "M1 client check
+    run, 2026-11-25"): Chrome 158 headless sent all three `no-cors`
+    fetches through cuttle with no permission request; each got an opaque
+    response, cuttle logged `outcome=ok` for each, and the origin received
+    each once, with no preflight. The page reported all three permission
+    names as `prompt`. A6 does not hold in this run, so the D11 decision is
+    returned to the user. The run has no direct comparison, so it does not
+    show whether this build would ask without a proxy.
   - V7 (implementer): mention Go's 500 header-value cap
     (`DefaultMaxHeaderValueCount`) in 0002 D2 and build the C11 60 KiB head
     from fewer than 500 field lines. Settled in `8af7956` (TASK-0004):

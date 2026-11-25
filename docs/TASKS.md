@@ -41,28 +41,6 @@ A closed task becomes one line under Closed:
 
 ## Active
 
-### TASK-0014 — M1 client check run
-
-- Milestone: M1 close
-- Status: test
-- Iteration: 1/3
-- Workers: tester on `main`, writing only `docs/COMPATIBILITY.md`
-- Base: `169df68`
-- Candidate: none
-- Evidence: none
-- Findings: none
-- Next action: tester — run `go run ./tools/mockenv m1-check` with
-  headless Chrome and `/usr/bin/curl` and record the results and the V6
-  Local Network Access observation in COMPATIBILITY.md
-
-Decisions for TASK-0014 (2026-11-25):
-
-- The tester runs the tooling landed in TASK-0012 (0007 D8). The user
-  approved headless Chrome with a throwaway profile and the mock keychain.
-- If Chrome sends the private-literal fetch through cuttle with no Local
-  Network Access request, the orchestrator returns the 0003 D11 decision
-  to the user (OI-0006 V6).
-
 ### TASK-0013 — M2.3 dashboard and M2.4 settings
 
 - Milestone: M2.3 and M2.4
@@ -97,6 +75,9 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0014 — M1 client check run — landed `6cec471`, gates: none @
+  `66623ad`; every M1 case passes with headless Chrome 158 and curl; the
+  LNA observation returns the 0003 D11 decision to the user (OI-0006 V6)
 - TASK-0012 — M1 close: mockenv and the client check tooling — landed
   `169df68`, gates: T0 T1 @ `607aa63`; reviewed tree `ae46bcd` (iteration
   1 of 3); follow-ups S-R1–S-R2 in OI-0006; the client check run is
