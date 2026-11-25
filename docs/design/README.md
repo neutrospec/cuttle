@@ -6,4 +6,14 @@ decision, consequences, alternatives considered, and relevant evidence. Use
 when changing an accepted decision. Link open research and implementation work
 to [OPEN_ISSUES.md](../OPEN_ISSUES.md) when it blocks the current scope.
 
-- [0001 — HTTPS CONNECT proxy](0001-https-connect-proxy.md)
+| Record | Topic | Status |
+| --- | --- | --- |
+| [0001](0001-https-connect-proxy.md) | HTTPS CONNECT proxy, initial scope | Superseded by 0002 and 0003 |
+| [0002](0002-proxy-core-and-routing.md) | `net/http` front end, authority normalization, rules, forwarding and standard-library defaults, responses, byte accounting, live counters, decision log, non-goals | Proposed |
+| [0003](0003-upstream-chaining-and-exposure.md) | Upstream trace modes (`via`, `none`), `Via` entries and loop detection, no trace toward the corporate proxy, `Proxy-Status`, timeouts, unreachable hold, listeners, remote policy, destination checks, home → office → corporate deployment | Proposed |
+| [0004](0004-configuration-and-reload.md) | Configuration format, source of truth, schema, validation, starter file, reload, atomic write | Proposed |
+| [0005](0005-statistics-and-admin.md) | SQLite statistics, admin listener, password, sessions, CSRF, dashboard, settings page | Proposed |
+| [0006](0006-packaging-paths-and-lifecycle.md) | XDG paths, permissions, CLI, control socket, first run, signals, logging, Homebrew formula and service | Proposed |
+| [0007](0007-test-environment-and-gates.md) | Test layers, mocks, name-resolution control, chain and loop setups, safety rules, T0–T3 gates, M1 and M3 client checks | Proposed |
+
+Read 0002 first; the others refer to its interfaces and response table.

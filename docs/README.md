@@ -1,10 +1,15 @@
 # Documentation
 
+The product is `cuttle`: the Homebrew formula, binary, launchd service, and
+XDG directories use that name. The repository stays `squid`, because
+homebrew/core already ships a `squid` formula.
+
 1. [Agent operating rules](../AGENTS.md) define the work loop, checkout rules,
    gates, and role ownership.
 2. [Lessons](LESSONS.md) records repeated failures and their remedies.
 3. [Roadmap](ROADMAP.md) states what each milestone must demonstrate.
 4. [Design records](design/README.md) explain architecture and contracts.
+   Start with [0002](design/0002-proxy-core-and-routing.md).
 5. [Research notes](research/README.md) record protocol and client evidence.
 6. [Compatibility matrix](COMPATIBILITY.md) tracks outcomes on actual clients.
 7. [Tasks](TASKS.md) holds the current status and next action of each change.
