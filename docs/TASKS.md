@@ -49,11 +49,13 @@ A closed task becomes one line under Closed:
 - Workers: orchestrator on `main`
 - Base: `d9eeb98`
 - Candidate: `main` with tag `v0.1.0`
-- Evidence: none yet
+- Evidence: pre-push scan of a scratch bare repository with `main` at
+  `8b6acea` and `v0.1.0`: exit 1 with only the two accepted matches
+  (OI-0004)
 - Findings: none
-- Next action: orchestrator — run `scripts/publish-scan` on a scratch bare
-  repository holding only `main` and the tag, then ask the user to
-  confirm creating `neutrospec/cuttle`, the push, and the tap update
+- Next action: orchestrator — create `neutrospec/cuttle`, push `main` and
+  `v0.1.0`, scan the remote, update the tap, run the final P8, and start
+  the service
 
 Decisions for TASK-0016 (2026-11-26):
 

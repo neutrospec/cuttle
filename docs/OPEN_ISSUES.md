@@ -151,6 +151,13 @@ Move resolved items to Closed with their resolving commit or evidence.
   licence is MIT. K1: the user accepts the home-relative checkout path in
   all six commits, so they are not rewritten. Creating the repository and
   every push still need the user's confirmation at that time.
+  Publication of v0.1.0 (user, 2026-11-26): confirmed. The pre-push scan
+  of `main` and `v0.1.0` found exactly two matches, both the local
+  time-zone marker: blob `66bdffd` (an earlier `internal/stats` test,
+  fixed in `5cb88c6`) and the message of `5cb88c6`. Every commit date
+  already carries the same offset, which the user accepted, so the user
+  accepted both; later scans pass when these two are the only matches.
+  Rule 6: the user chose to delete the bundle and `.git/filter-repo/`.
 - Prepared in TASK-0015: `LICENSE` (MIT), the module path
   `github.com/neutrospec/cuttle`, the formula source
   `packaging/homebrew/cuttle.rb`, and `scripts/publish-scan`, which
