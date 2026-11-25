@@ -41,6 +41,47 @@ A closed task becomes one line under Closed:
 
 ## Active
 
+### TASK-0010 — M2.1 statistics
+
+- Milestone: M2.1
+- Status: implement
+- Iteration: 1/3
+- Workers: implementer on a T3 worktree branch, in parallel with TASK-0011
+- Base: this board update
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: implementer — build M2.1 (0005 S1–S7) with T0 and T1 and
+  return the candidate commit
+
+Decisions for TASK-0010 (2026-11-25):
+
+- The user wants the admin page soon; M2.1 and M2.2 run in parallel, and
+  the second to land merges the first.
+- Also in scope: OI-0006 M-R2 (fit the statistics flush into the 8 s
+  shutdown budget) and the cgo gate fix (`CGO_ENABLED=1 go list` in
+  `scripts/gate` and 0007 D7).
+- Review follows the risk-based policy in AGENTS.md.
+
+### TASK-0011 — M2.2 admin access
+
+- Milestone: M2.2
+- Status: implement
+- Iteration: 1/3
+- Workers: implementer on a T3 worktree branch, in parallel with TASK-0010
+- Base: this board update
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: implementer — build M2.2 (0005 A1–A7) with T0 and T1 and
+  return the candidate commit
+
+Decisions for TASK-0011 (2026-11-25):
+
+- Runs in parallel with TASK-0010; the second to land merges the first.
+- Review follows the risk-based policy in AGENTS.md; mutation proofs apply
+  to authentication, sessions, CSRF, Host checks, and backoff.
+
 ## Closed
 
 The history was rewritten on 2026-11-25 (TASK-0003) to remove local
