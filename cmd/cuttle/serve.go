@@ -273,8 +273,14 @@ func (s *serveState) run(stderr io.Writer, listen func(network, address string) 
 	s.log.Info("started", "version", version, "go", runtime.Version(), "name", cfg.Name, "pid", os.Getpid(),
 		"config", s.cfgPath, "log", s.paths.Log.Path, "control", s.paths.Control.Path,
 		"listeners", strings.Join(addrs, ","), "retrying", strings.Join(retrying, ","))
+	var adminSrv *http.Server
 	if cfg.Admin.Listen.IsValid() {
-		s.log.Info("admin UI not available in this version", "admin.listen", cfg.Admin.Listen.String())
+		adminSrv = s.startAdmin(cfg.Admin.Listen, listen)
+	}
+	closeAdmin := func() {
+		if adminSrv != nil {
+			adminSrv.Close()
+		}
 	}
 
 	served := make(chan error, 1)
@@ -282,6 +288,7 @@ func (s *serveState) run(stderr io.Writer, listen func(network, address string) 
 	for {
 		select {
 		case err := <-served:
+			closeAdmin()
 			if ctlSrv != nil {
 				ctlSrv.Close()
 			}
@@ -303,8 +310,9 @@ func (s *serveState) run(stderr io.Writer, listen func(network, address string) 
 					}
 				}
 			}()
-			// D6 step 1: the control listener closes with the proxy
-			// listeners.
+			// D6 step 1: the admin and control listeners close with the
+			// proxy listeners.
+			closeAdmin()
 			if ctlSrv != nil {
 				ctlSrv.Close()
 			}

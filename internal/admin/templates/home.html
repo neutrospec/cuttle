@@ -1,0 +1,9 @@
+{{define "content"}}
+<h1>Signed in</h1>
+<p>The dashboard arrives in a later version. Use <code>cuttle status</code>
+in a terminal meanwhile.</p>
+<form method="post" action="/logout">
+<input type="hidden" name="csrf" value="{{.Token}}">
+<button type="submit">Sign out</button>
+</form>
+{{end}}

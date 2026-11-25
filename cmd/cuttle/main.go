@@ -37,9 +37,9 @@ commands:
                                             match the [[interface]] definitions
   reload                                    ask the running service to reload
                                             its configuration
+  admin passwd [--stdin]                    set the admin password; --stdin reads
+                                            one line from standard input
   version                                   print the version
-
-admin passwd arrives in a later version.
 `
 
 func main() {
@@ -80,8 +80,7 @@ func run(args []string, lookup env, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "cuttle %s (%s)\n", version, runtime.Version())
 		return exitOK
 	case "admin":
-		fmt.Fprintln(stderr, "cuttle: the admin UI and cuttle admin passwd arrive in a later version")
-		return exitFailure
+		return cmdAdmin(rest, lookup, os.Stdin, stdout, stderr)
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, usage)
 		return exitOK

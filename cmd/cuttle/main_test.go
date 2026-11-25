@@ -488,12 +488,12 @@ func TestPathsAndVersion(t *testing.T) {
 	if code, _, _ := runCLI(lookup, "--version"); code != 0 {
 		t.Errorf("--version: %d", code)
 	}
-	for _, args := range [][]string{{}, {"bogus"}, {"paths", "extra"}} {
+	for _, args := range [][]string{{}, {"bogus"}, {"paths", "extra"}, {"admin"}, {"admin", "bogus"}, {"admin", "passwd", "extra"}} {
 		if code, _, _ := runCLI(lookup, args...); code != 2 {
 			t.Errorf("%v: %d", args, code)
 		}
 	}
-	for _, cmd := range []string{"reload", "status", "admin"} {
+	for _, cmd := range []string{"reload", "status"} {
 		if code, _, errOut := runCLI(lookup, cmd); code != 1 || errOut == "" {
 			t.Errorf("%s: %d %q", cmd, code, errOut)
 		}
