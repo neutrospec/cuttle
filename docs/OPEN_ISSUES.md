@@ -49,6 +49,9 @@ Move resolved items to Closed with their resolving commit or evidence.
      from the edge machine; note any firewall prompt, also after an
      upgrade.
 
+  The step inputs come from the root `.env` (see
+  [`.env.example`](../.env.example)).
+
 ### OI-0002 — Safari and CFNetwork behavior unverified
 
 - Origin: research 0002 [open questions 1, 7, and 8][r2-oq];
@@ -98,9 +101,25 @@ Move resolved items to Closed with their resolving commit or evidence.
   undecided. A private repository needs an authenticated download strategy
   in the formula.
 - Next action: orchestrator — ask the user for the owner, visibility, and
-  licence before M3.1 starts. Publish by pushing `main` (and tags) only,
-  never with `--mirror` or `--all`, so the local `refs/t3/*` checkpoint
-  refs, which still reach the pre-rewrite history, stay unpublished.
+  licence before M3.1 starts. Publication follows these rules, because the
+  TASK-0003 history rewrite left pre-rewrite history in local refs and
+  files:
+  1. Before the first push, run `git config --get-regexp '^remote\.'` and
+     confirm that no remote is a mirror and none has a `remote.*.push`
+     entry or a `refs/*` refspec.
+  2. Push only `refs/heads/main` and tags, never `--mirror`, a `refs/*`
+     refspec, or anything else that syncs `refs/t3/*`.
+  3. Keep `refs/t3/*` private permanently. They contain pre-rewrite
+     history, and T3 keeps adding checkpoints that can capture untracked
+     files.
+  4. The reflogs, `.git/filter-repo/`, the backup bundle, and the commit
+     map hold pre-rewrite history. Never copy or share the working folder
+     or the bundle.
+  5. After pushing, check that `git ls-remote` lists only `refs/heads/main`
+     and tags, and re-run the TASK-0003 history scan on a fresh clone of
+     the remote.
+  6. Delete or securely store the bundle and the commit map once the user
+     approves.
 
 ### OI-0005 — Private-root trust through the chain
 

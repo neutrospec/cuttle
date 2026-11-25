@@ -5,3 +5,11 @@
 
 # macOS Finder metadata.
 .DS_Store
+
+# Private keys, key bundles, and traffic captures stay outside Git under the
+# Local artifacts rule in AGENTS.md.
+*.key
+*.p12
+*.pcap
+*.pcapng
+*.har
