@@ -2,11 +2,17 @@ package proxy
 
 import (
 	"context"
+	"io"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/http/httputil"
+	"net/netip"
+	"strings"
 	"testing"
 
 	"squid/internal/authority"
+	"squid/internal/testenv"
 )
 
 func TestRemoveDisclosure(t *testing.T) {
@@ -16,6 +22,11 @@ func TestRemoveDisclosure(t *testing.T) {
 	}
 	h["x-forwarded-lowercase"] = []string{"1"} // set directly, not canonical
 	h["X-Real-IP"] = []string{"1"}
+	h["X_forwarded_for"] = []string{"1"}
+	h["x_real_ip"] = []string{"1"}
+	h["X-FORWARDED_HOST"] = []string{"1"}
+	h["Proxy_Status"] = []string{"1"}
+	h["CF_CONNECTING_IP"] = []string{"1"}
 	h.Set("X-Forwarded", "kept: not a prefix match")
 	h.Set("X-Kept", "yes")
 	h.Set("User-Agent", "ua")
@@ -67,6 +78,76 @@ func TestRewriteDirect(t *testing.T) {
 		}
 		if out.URL.Host != ht.Authority.String() || out.Host != ht.RawAuthority || out.Header.Get("Via") != "" {
 			t.Errorf("%s: host %q/%q via %q", c.target, out.URL.Host, out.Host, out.Header.Get("Via"))
+		}
+	}
+}
+
+// idleListener satisfies Deps.Listeners for tests that call ServeHTTP
+// directly and never serve.
+type idleListener struct{}
+
+func (idleListener) Accept() (net.Conn, error) { return nil, net.ErrClosed }
+func (idleListener) Close() error              { return nil }
+func (idleListener) Addr() net.Addr            { return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1} }
+
+func newUnitProxy(t *testing.T, n *testenv.Net, logs io.Writer) *Proxy {
+	t.Helper()
+	p, err := New(mustParse(t, baseConfig), Deps{
+		Network:   n,
+		SelfAddrs: testenv.SelfAddrs,
+		Listeners: []net.Listener{idleListener{}},
+		Logger:    newTestLogger(logs),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// TestRequestWithoutSourceClass checks that a request on a connection that
+// did not come through the classifying listener fails closed: it gets 500,
+// is never routed as local, and causes no lookup or dial.
+func TestRequestWithoutSourceClass(t *testing.T) {
+	n := testenv.NewNet()
+	n.Map("plain.cuttle.test", "203.0.113.10")
+	logs := &logBuffer{}
+	p := newUnitProxy(t, n, logs)
+	for _, req := range []*http.Request{
+		httptest.NewRequest("CONNECT", "origin.cuttle.test:443", nil),
+		httptest.NewRequest("GET", "http://plain.cuttle.test/", nil),
+	} {
+		rec := httptest.NewRecorder()
+		p.ServeHTTP(rec, req)
+		if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Header().Get("Proxy-Status"), "error=proxy_internal_error") {
+			t.Errorf("%s: %d %q", req.Method, rec.Code, rec.Header().Get("Proxy-Status"))
+		}
+	}
+	if ev := n.Events(); len(ev) != 0 {
+		t.Errorf("network events %v", ev)
+	}
+	if len(logs.decisions()) != 0 || !strings.Contains(logs.String(), "without a source class") {
+		t.Errorf("log %q", logs.String())
+	}
+}
+
+// TestWarnedSourcesBounded checks that the rejected-source warnings are rate
+// limited per address and that their memory stays bounded.
+func TestWarnedSourcesBounded(t *testing.T) {
+	logs := &logBuffer{}
+	p := newUnitProxy(t, testenv.NewNet(), logs)
+	a := netip.MustParseAddr("10.8.0.1")
+	p.warnSource(a)
+	p.warnSource(a)
+	if got := strings.Count(logs.String(), "rejected source"); got != 1 {
+		t.Errorf("warnings for one source %d", got)
+	}
+	for i := range 5000 {
+		p.warnSource(netip.AddrFrom4([4]byte{10, 9, byte(i >> 8), byte(i)}))
+		p.mu.Lock()
+		size := len(p.warned)
+		p.mu.Unlock()
+		if size > maxWarnedSources {
+			t.Fatalf("warned map holds %d addresses", size)
 		}
 	}
 }

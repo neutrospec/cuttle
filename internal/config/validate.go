@@ -519,10 +519,14 @@ func (v *validator) rules(raw map[string]any, c *Config, upstreams map[string]bo
 		}
 		names[r.Name] = true
 
-		_, hasHosts := rm["hosts"]
-		_, hasDomains := rm["domains"]
+		// An explicitly empty list would silently widen the rule, possibly to
+		// every destination with allow_loopback or allow_private.
+		for _, key := range []string{"hosts", "domains", "cidrs", "ports"} {
+			if a, ok := rm[key].([]any); ok && len(a) == 0 {
+				v.errf(sub(base, key), "empty list; list at least one entry or remove the key")
+			}
+		}
 		_, hasCIDRs := rm["cidrs"]
-		_, hasPorts := rm["ports"]
 		hosts, _ := v.strings(rm, base, "hosts")
 		for j, h := range hosts {
 			if err := authority.CheckPattern(h); err != nil {
@@ -545,8 +549,9 @@ func (v *validator) rules(raw map[string]any, c *Config, upstreams map[string]bo
 		if ports, ok := v.ports(rm, base, "ports"); ok {
 			r.Ports = ports
 		}
-		if !hasHosts && !hasDomains && !hasCIDRs && !hasPorts {
-			v.errf(base, "rule %q has none of hosts, domains, cidrs, or ports; a catch-all belongs in proxy.default", r.Name)
+		// Decided on the parsed lists, not on which keys are present.
+		if len(r.Hosts) == 0 && len(r.Domains) == 0 && len(r.CIDRs) == 0 && len(r.Ports) == 0 {
+			v.errf(base, "rule %q has none of hosts, domains, cidrs, or ports, so it would match every destination; a catch-all belongs in proxy.default", r.Name)
 		}
 		if rt, ok := v.route(rm, base, "action", upstreams); ok {
 			r.Route = rt
@@ -573,29 +578,37 @@ func (v *validator) rules(raw map[string]any, c *Config, upstreams map[string]bo
 
 func (v *validator) admin(raw map[string]any, c *Config) {
 	c.Admin.Listen = DefaultAdminListen
-	am, ok := v.table(raw, "", "admin")
-	if !ok {
-		return
+	explicit := false
+	if am, ok := v.table(raw, "", "admin"); ok {
+		v.known(am, "admin", "listen")
+		if s, ok := v.str(am, "admin", "listen"); ok {
+			explicit = true
+			if s == "" {
+				c.Admin.Listen = netip.AddrPort{}
+				return
+			}
+			ap, err := netip.ParseAddrPort(s)
+			switch {
+			case err != nil || ap.Port() == 0:
+				v.errf("admin.listen", "%q is not an IP:port literal", s)
+				return
+			case !ap.Addr().Unmap().IsLoopback():
+				v.errf("admin.listen", "%q is not a loopback address; the admin UI listens on loopback only", s)
+				return
+			}
+			c.Admin.Listen = unmapAP(ap)
+		}
 	}
-	v.known(am, "admin", "listen")
-	s, ok := v.str(am, "admin", "listen")
-	if !ok {
-		return
-	}
-	if s == "" {
-		c.Admin.Listen = netip.AddrPort{}
-		return
-	}
-	ap, err := netip.ParseAddrPort(s)
-	switch {
-	case err != nil || ap.Port() == 0:
-		v.errf("admin.listen", "%q is not an IP:port literal", s)
-	case !ap.Addr().Unmap().IsLoopback():
-		v.errf("admin.listen", "%q is not a loopback address; the admin UI listens on loopback only", s)
-	case slices.Contains(c.Proxy.Listen, unmapAP(ap)):
-		v.errf("admin.listen", "%q equals a proxy listener", s)
-	default:
-		c.Admin.Listen = unmapAP(ap)
+	// Compare the effective address, the default included.
+	for i, l := range c.Proxy.Listen {
+		if l != c.Admin.Listen {
+			continue
+		}
+		if explicit {
+			v.errf("admin.listen", "%s equals a proxy listener", l)
+		} else {
+			v.errf(elem("proxy.listen", i), "%s equals the default admin.listen; listen elsewhere or set admin.listen", l)
+		}
 	}
 }
 

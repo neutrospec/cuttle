@@ -1,7 +1,7 @@
-# want: 7 rule[1].action: unknown upstream "office"
+# want: 7 rule[1].action: unknown upstream "gateway"
 name = "cuttle-test"
 [proxy]
 default = "direct"
 [[rule]]
 domains = ["internal.example"]
-action = "upstream:office"
+action = "upstream:gateway"

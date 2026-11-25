@@ -233,14 +233,28 @@ func (p *Proxy) Close() error {
 	return p.Shutdown(ctx)
 }
 
+// maxWarnedSources bounds the memory of warnSource.
+const maxWarnedSources = 1024
+
 // warnSource logs a rejected source at most once per minute per address.
+// The map of recent warnings is pruned, and reset when every entry is still
+// recent, so it never holds more than maxWarnedSources addresses.
 func (p *Proxy) warnSource(a netip.Addr) {
-	p.mu.Lock()
-	last, seen := p.warned[a]
 	now := time.Now()
-	if seen && now.Sub(last) < time.Minute {
+	p.mu.Lock()
+	if last, seen := p.warned[a]; seen && now.Sub(last) < time.Minute {
 		p.mu.Unlock()
 		return
+	}
+	if len(p.warned) >= maxWarnedSources {
+		for k, t := range p.warned {
+			if now.Sub(t) >= time.Minute {
+				delete(p.warned, k)
+			}
+		}
+		if len(p.warned) >= maxWarnedSources {
+			clear(p.warned)
+		}
 	}
 	p.warned[a] = now
 	p.mu.Unlock()

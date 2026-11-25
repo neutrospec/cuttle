@@ -279,6 +279,13 @@ name = "lan"
 domains = ["lan.cuttle.test"]
 action = "direct"
 allow_private = true
+
+[[rule]]
+name = "link-local"
+cidrs = ["169.254.0.0/16"]
+action = "direct"
+allow_loopback = true
+allow_private = true
 `
 	e := newEnv(t, cfg)
 	n := e.net
@@ -313,7 +320,8 @@ allow_private = true
 	for _, d := range ds {
 		checkDecision(t, d, map[string]string{"outcome": "prohibited", "status": "502", "error": "destination_ip_prohibited", "up": "0", "down": "0"})
 	}
-	// Unusable literals are refused even through a rule with both flags.
+	// Unusable literals are refused even through the link-local rule, which
+	// has both flags.
 	n.Reset()
 	if res, _ := e.raw("CONNECT 169.254.1.1:443 HTTP/1.1\r\nHost: x\r\n\r\n"); res.StatusCode != 502 {
 		t.Errorf("link-local literal: %d", res.StatusCode)
@@ -588,6 +596,9 @@ func TestDirectFailures(t *testing.T) {
 	e.net.Map("refused.cuttle.test", "203.0.113.40")
 	e.net.Map("hole.cuttle.test", "203.0.113.41")
 	e.net.Blackhole("203.0.113.41")
+	e.net.Map("bad.cuttle.test", "203.0.113.42")
+	e.net.Route("203.0.113.42:80", newBadOrigin(t))
+	e.net.Map("lo.cuttle.test", "127.0.0.1")
 
 	for _, c := range []struct {
 		req, status, errType, outcome string
@@ -599,6 +610,10 @@ func TestDirectFailures(t *testing.T) {
 		{"GET http://hole.cuttle.test/ HTTP/1.1\r\nHost: hole.cuttle.test\r\n\r\n", "504", "connection_timeout", "timeout"},
 		{"GET http://nowhere.cuttle.test/ HTTP/1.1\r\nHost: nowhere.cuttle.test\r\n\r\n", "502", "dns_error", "dns_error"},
 		{"GET http://plain.cuttle.test/slow?ms=3000 HTTP/1.1\r\nHost: plain.cuttle.test\r\n\r\n", "504", "http_response_timeout", "timeout"},
+		{"GET http://bad.cuttle.test/eof HTTP/1.1\r\nHost: bad.cuttle.test\r\n\r\n", "502", "connection_refused", "refused"},
+		{"GET http://bad.cuttle.test/reset HTTP/1.1\r\nHost: bad.cuttle.test\r\n\r\n", "502", "connection_refused", "refused"},
+		{"GET http://bad.cuttle.test/garbage HTTP/1.1\r\nHost: bad.cuttle.test\r\n\r\n", "502", "http_protocol_error", "upstream_protocol"},
+		{"GET http://lo.cuttle.test/ HTTP/1.1\r\nHost: lo.cuttle.test\r\n\r\n", "502", "destination_ip_prohibited", "prohibited"},
 	} {
 		start := time.Now()
 		res, _ := e.raw(c.req)
@@ -609,8 +624,32 @@ func TestDirectFailures(t *testing.T) {
 			t.Errorf("%s: took %v", firstLine(c.req), el)
 		}
 	}
-	ds := e.waitDecisions(7)
-	for i, want := range []string{"refused", "timeout", "dns_error", "refused", "timeout", "dns_error", "timeout"} {
+	ds := e.waitDecisions(11)
+	for i, want := range []string{"refused", "timeout", "dns_error", "refused", "timeout", "dns_error", "timeout",
+		"refused", "refused", "upstream_protocol", "prohibited"} {
 		checkDecision(t, ds[i], map[string]string{"outcome": want, "up": "0", "down": "0"})
 	}
+	// The prohibited name was looked up but never dialed.
+	for _, d := range e.net.Dials() {
+		if d.Addr() == netip.MustParseAddr("127.0.0.1") {
+			t.Errorf("dialed %s", d)
+		}
+	}
+
+	// A body that fails after the head: the client keeps the status and the
+	// bytes the socket accepted, and the decision logs exactly those bytes
+	// with outcome upstream_protocol (design 0002 Failure behavior).
+	c := e.dial()
+	io.WriteString(c, "GET http://bad.cuttle.test/midbody HTTP/1.1\r\nHost: bad.cuttle.test\r\n\r\n")
+	res, err := http.ReadResponse(bufio.NewReader(c), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(res.Body)
+	if res.StatusCode != 200 || string(body) != "0123456789" || err == nil {
+		t.Errorf("mid-body failure: %d %q %v", res.StatusCode, body, err)
+	}
+	d := e.waitDecisions(12)[11]
+	checkDecision(t, d, map[string]string{"target": "bad.cuttle.test:80", "outcome": "upstream_protocol", "status": "200",
+		"down": strconv.Itoa(len(body))})
 }

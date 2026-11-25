@@ -47,7 +47,7 @@ var clientDisclosure = map[string]string{
 func checkNoDisclosure(t *testing.T, h http.Header) {
 	t.Helper()
 	for k := range h {
-		ck := http.CanonicalHeaderKey(k)
+		ck := http.CanonicalHeaderKey(strings.ReplaceAll(k, "_", "-"))
 		if _, bad := clientDisclosure[ck]; bad || strings.HasPrefix(ck, "X-Forwarded-") {
 			t.Errorf("origin received disclosure field %s: %q", k, h[k])
 		}
@@ -167,15 +167,17 @@ func TestHTTPDirect(t *testing.T) {
 		for k, v := range clientDisclosure {
 			fmt.Fprintf(&req, "%s: %s\r\n", strings.ToLower(k), v)
 		}
-		req.WriteString("x-forwarded-anything: 1\r\nX-Kept: yes\r\nConnection: close\r\n\r\n")
+		// Underscore spellings that some servers read as the hyphenated names.
+		req.WriteString("X_forwarded_for: 198.51.100.7\r\nx_real_ip: 198.51.100.7\r\nX-FORWARDED_HOST: front\r\nClient_IP: 198.51.100.7\r\n")
+		req.WriteString("x-forwarded-anything: 1\r\nX-Kept: yes\r\nX_Kept_Underscore: yes\r\nConnection: close\r\n\r\n")
 		res, _ := e.raw(req.String())
 		if res.StatusCode != 200 {
 			t.Fatalf("status %d", res.StatusCode)
 		}
 		rec := e.http.Requests()[0]
 		checkNoDisclosure(t, rec.Header)
-		if rec.Header.Get("X-Kept") != "yes" {
-			t.Errorf("end-to-end field lost")
+		if rec.Header.Get("X-Kept") != "yes" || rec.Header.Get("X_Kept_Underscore") != "yes" {
+			t.Errorf("end-to-end field lost: %v", rec.Header)
 		}
 		if _, ok := rec.Header["User-Agent"]; ok {
 			t.Errorf("User-Agent added for a client that sent none")

@@ -30,12 +30,13 @@ func (p *Proxy) forward(w http.ResponseWriter, r *http.Request, ex *exchange) {
 	defer func() {
 		if v := recover(); v != nil {
 			// ReverseProxy aborts with http.ErrAbortHandler when copying the
-			// response fails. Log what was relayed, then let the server close
-			// the connection.
+			// response fails after the head was sent. Log the status sent and
+			// the bytes relayed, then let the server close the connection
+			// (design 0002 Failure behavior).
 			if ex.outcome == "" {
 				ex.status = cw.status
 				ex.outcome = OutcomeUpstreamProto
-				if r.Context().Err() != nil {
+				if cw.writeErr != nil || r.Context().Err() != nil {
 					ex.outcome = OutcomeClientClosed
 				}
 				p.finish(ex)
@@ -141,6 +142,7 @@ type countingWriter struct {
 	ex        *exchange
 	status    int
 	generated bool
+	writeErr  error // a write or flush to the client failed
 }
 
 func (c *countingWriter) WriteHeader(code int) {
@@ -150,15 +152,27 @@ func (c *countingWriter) WriteHeader(code int) {
 	c.ResponseWriter.WriteHeader(code)
 }
 
+// Write passes body bytes to the client and flushes them through the
+// server's buffers, so down counts only bytes the client socket accepted,
+// never bytes still buffered (design 0002 D7). A failed write or flush
+// counts nothing for that call and marks the client side as failed.
 func (c *countingWriter) Write(b []byte) (int, error) {
 	if c.status == 0 {
 		c.status = http.StatusOK
 	}
-	n, err := c.ResponseWriter.Write(b)
-	if !c.generated {
-		c.p.addBytes(c.ex, "down", n)
+	if c.generated {
+		return c.ResponseWriter.Write(b)
 	}
-	return n, err
+	n, err := c.ResponseWriter.Write(b)
+	if err == nil {
+		err = http.NewResponseController(c.ResponseWriter).Flush()
+	}
+	if err != nil {
+		c.writeErr = err
+		return n, err
+	}
+	c.p.addBytes(c.ex, "down", n)
+	return n, nil
 }
 
 // Unwrap lets http.ResponseController reach Flush on the server's writer.

@@ -1,13 +1,16 @@
 package testenv
 
 import (
+	"context"
 	"io"
 	"log"
 	"net"
 	"net/netip"
 	"os"
 	"os/exec"
+	"strconv"
 	"testing"
+	"time"
 )
 
 func newDiscardLogger() *log.Logger { return log.New(io.Discard, "", 0) }
@@ -74,17 +77,29 @@ func CurlPath(t testing.TB) string {
 	return path
 }
 
+// CurlTimeout bounds every curl run: curl gets --max-time, and the process
+// is killed if it outlives the limit by 10 s.
+const CurlTimeout = 30 * time.Second
+
 // Curl runs curl with an environment holding only PATH and a temporary
-// HOME, and with -q so no .curlrc is read (design 0007 D5).
+// HOME, with -q so no .curlrc is read (design 0007 D5), and with a
+// deadline.
 func Curl(t testing.TB, args ...string) CurlResult {
 	t.Helper()
-	cmd := exec.Command(CurlPath(t), append([]string{"-q"}, args...)...)
+	ctx, cancel := context.WithTimeout(context.Background(), CurlTimeout+10*time.Second)
+	defer cancel()
+	limit := strconv.Itoa(int(CurlTimeout / time.Second))
+	cmd := exec.CommandContext(ctx, CurlPath(t), append([]string{"-q", "--max-time", limit}, args...)...)
+	cmd.WaitDelay = 5 * time.Second
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + t.TempDir()}
 	var out, errb limitedBuffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	err := cmd.Run()
 	code := 0
 	if err != nil {
+		if ctx.Err() != nil {
+			t.Fatalf("curl killed after %v: %v", CurlTimeout+10*time.Second, err)
+		}
 		ee, ok := err.(*exec.ExitError)
 		if !ok {
 			t.Fatalf("curl: %v", err)

@@ -7,7 +7,10 @@
 #                     needs /usr/bin/curl or CUTTLE_CURL
 #
 # Each command is echoed before it runs. The script stops at the first
-# failing command and exits non-zero.
+# failing command and exits non-zero. Output that must be empty is captured
+# with a plain assignment first, because an assignment takes the exit status
+# of its command substitution and so fails the gate under set -e, while a
+# failure inside test -z "$(...)" or on the left of && would not.
 set -eu
 
 cd "$(dirname "$0")/.."
@@ -15,13 +18,16 @@ cd "$(dirname "$0")/.."
 t0() {
 	set -x
 	go version
-	test -z "$(gofmt -l .)"
+	out=$(gofmt -l .)
+	test -z "$out"
 	go mod tidy -diff
 	go vet ./...
 	go build ./...
 	go test -short -count=1 ./...
-	test -z "$(git ls-files '*.pem' '*.key' '*.crt' '*.p12')"
-	test -z "$(go list -deps ./cmd/cuttle | grep -E 'internal/testenv|x/net/websocket')"
+	out=$(git ls-files '*.pem' '*.key' '*.crt' '*.p12')
+	test -z "$out"
+	out=$(go list -deps ./cmd/cuttle)
+	test -z "$(printf '%s\n' "$out" | grep -E 'internal/testenv|x/net/websocket')"
 	{ set +x; } 2>/dev/null
 }
 

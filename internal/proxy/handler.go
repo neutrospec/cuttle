@@ -80,9 +80,17 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		client: r.RemoteAddr,
 		snap:   p.snap.Load(),
 	}
-	if tc, ok := r.Context().Value(connKey{}).(*trackedConn); ok {
-		ex.source = tc.source
+	tc, ok := r.Context().Value(connKey{}).(*trackedConn)
+	if !ok {
+		// Every served connection comes through listener.Accept, which
+		// classifies its source. Without a class the request is refused,
+		// never treated as local.
+		p.log.Warn("request on a connection without a source class; refused", "client", r.RemoteAddr)
+		p.writeGenerated(w, http.StatusInternalServerError,
+			ex.snap.cfg.Name+"; error=proxy_internal_error; details=\"unknown source\"", "internal error: unknown source")
+		return
 	}
+	ex.source = tc.source
 	if r.Method == http.MethodConnect {
 		ex.kind = policy.KindConnect
 		p.serveConnect(w, r, ex)

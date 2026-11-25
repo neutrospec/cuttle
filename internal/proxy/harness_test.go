@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -332,3 +333,41 @@ func mustParse(t *testing.T, text string) *config.Config {
 }
 
 func newTestLogger(w io.Writer) *slog.Logger { return logx.NewLogger(w, slog.LevelDebug) }
+
+// newBadOrigin starts an origin that misbehaves by path: /eof closes before a
+// response head, /reset resets the connection, /garbage sends an unparsable
+// head, and /midbody announces 100 body bytes, sends 10, and closes.
+func newBadOrigin(t *testing.T) netip.AddrPort {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func(c net.Conn) {
+				defer c.Close()
+				c.SetDeadline(time.Now().Add(10 * time.Second))
+				req, err := http.ReadRequest(bufio.NewReader(c))
+				if err != nil {
+					return
+				}
+				switch req.URL.Path {
+				case "/reset":
+					c.(*net.TCPConn).SetLinger(0)
+				case "/garbage":
+					io.WriteString(c, "NOT-HTTP garbage\r\n\r\n")
+				case "/midbody":
+					io.WriteString(c, "HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n0123456789")
+					time.Sleep(100 * time.Millisecond)
+				}
+			}(c)
+		}
+	}()
+	return ln.Addr().(*net.TCPAddr).AddrPort()
+}

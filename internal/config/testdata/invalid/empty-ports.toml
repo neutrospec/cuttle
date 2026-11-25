@@ -1,0 +1,9 @@
+# want: 7 rule[1].ports: empty list
+name = "cuttle-test"
+[proxy]
+default = "block"
+[[rule]]
+name = "x"
+ports = []
+action = "direct"
+allow_private = true
