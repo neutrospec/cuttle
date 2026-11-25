@@ -1,4 +1,4 @@
-# want: 8 interface[1].<redacted>: unknown key
+# want: 8 : unknown key
 name = "cuttle-test"
 [proxy]
 default = "direct"

@@ -314,7 +314,22 @@ into the error (`internal/config/validate.go`, `Parse`). When the
 `LastKey` of a syntax error is `interface`, starts with `interface.`, or
 ends with `interfaces`, the message is only its position and the fixed
 text `TOML syntax: invalid value; put it in double quotes`. So neither
-`cuttle check`, the log, nor `last_reload_error` carries a MAC.
+`cuttle check`, the log, `last_reload_error`, nor the settings page
+carries a MAC written where a MAC belongs.
+
+That is the whole rule. Every other message shows what the operator
+wrote, as written: key names, rule names, instance names, host patterns,
+addresses, and the parser's own quoted text, including anything that
+merely looks like a MAC, such as a 12-hex-digit label or an IPv6 address
+that starts with six two-digit groups. The operator who writes the
+configuration is trusted ([AGENTS.md](../../AGENTS.md)), and these messages
+reach only the operator's own terminal, log, `cuttle status`, and the
+settings page of [0005 D10][d5-10], where hiding a name or an address
+would make an error unreadable. A MAC typed under another key, such as a
+misspelled `[[interfce]]` table or a rule's `hosts`, is therefore echoed
+like any other value. An earlier blanket redaction of MAC-shaped text in
+every message hid such names and addresses and was removed
+([OI-0006][oi-6] O-R1).
 
 Validation does not require upstream addresses to be distinct: only
 upstream names must be unique ([0004 D4][d4-4]; the validator compares
@@ -654,7 +669,9 @@ array in configuration order, and the text form shows the same fields:
   lists of `ipv4` and `ipv6` (D4).
 - Each entry of `tunnels` gains `interface`, with the decision-log value
   below.
-- No MAC address appears in status output, logs, counters, or statistics.
+- No MAC address from an `[[interface]]` definition appears in status
+  output, logs, counters, or statistics; D6 gives the rule for validation
+  messages.
 
 **`cuttle interfaces [--json] [--all] [--watch] [--config PATH]`.** A new
 command that reads the system directly and needs no running service. It
@@ -1214,8 +1231,10 @@ in group 0); D15 (tried interfaces in `skipped` wherever they come, and
 [d4-4]: 0004-configuration-and-reload.md#d4-validation
 [d4-6]: 0004-configuration-and-reload.md#d6-reload
 [d5-2]: 0005-statistics-and-admin.md#d2-schema
+[d5-10]: 0005-statistics-and-admin.md#d10-settings
 [d6-4]: 0006-packaging-paths-and-lifecycle.md#d4-control-socket
 [d7-7]: 0007-test-environment-and-gates.md#d7-gates
+[oi-6]: ../OPEN_ISSUES.md#oi-0006--design-follow-ups-from-the-task-0001-final-review
 [oi-7]: ../OPEN_ISSUES.md#oi-0007--local-network-privacy-for-cuttle-under-launchd
 [oi-8]: ../OPEN_ISSUES.md#oi-0008--interface-behavior-on-the-users-devices
 [r3]: ../research/0003-interface-selection.md

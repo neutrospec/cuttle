@@ -155,7 +155,10 @@ rate.
   gives up, and its rows are lost.
 - If a write fails, the batch is merged back and retried at the next flush,
   `stats_write_errors_total` increases, and an error is logged at most once
-  a minute.
+  a minute. `cuttle status` and the dashboard show the last failed write
+  since start with its time and message, as `stats_last_write_error` and
+  `stats_last_write_error_at`; a later successful flush leaves it in place
+  ([OI-0006][oi] Q-R5).
 - More than 20,000 pending keys, or a host beyond `max_hosts_per_hour` for
   its hour, folds into host `*` with the same hour, action, upstream, rule,
   source, and interface; `stats_folded_total` counts it. The host cap
@@ -219,13 +222,25 @@ rate.
   both there is not established ([research 0002 §7][r2-7],
   [OI-0002][oi]).
 - Login always issues a new ID. The idle timeout is 30 minutes and the
-  absolute timeout 12 hours. Logout deletes the session.
+  absolute timeout 12 hours. Logout deletes the session. A request for
+  `/live`, which reloads itself every 5 s (D9), does not restart the idle
+  timeout, so a forgotten tab cannot keep a session alive.
 - A session stores the SHA-256 of the password file at login. When the
   file changes, every session ends. The hash is cached by inode, size, and
   modification time.
 - Browsers scope cookies by host, not port, so a browser sends the cookie
   to any other server on `127.0.0.1` it visits. The short idle timeout
   limits the exposure; the risk is accepted for a single-user Mac.
+- Port squatting is the same exposure from the other side. A program that
+  binds the admin port before cuttle does, for example while cuttle is
+  stopped, receives the browser's requests to that address, with the
+  session cookie of an earlier session and whatever the operator types
+  into a look-alike sign-in form. cuttle cannot reserve the port. When
+  its own bind fails it logs an error and serves the proxy without the
+  admin UI, and `cuttle status` shows the admin listener as `unavailable`
+  with the bind error, so the operator learns that something else answers
+  on that port ([0006 D4][d6-4], [OI-0006][oi] P-R2). The risk is accepted
+  for a single-user Mac.
 
 ### D8. CSRF and login limits
 
@@ -269,14 +284,36 @@ exact range.
 | `GET` | `/static/*` | Host check | Embedded styles |
 
 `route` is `direct`, `upstream` (all upstreams), `upstream:<name>`,
-`block`, or `all`. `interface` is a configured interface name, `other`,
-`none` for rows without an interface, or `all`. The overview answers the
-operator's questions directly: domains sent to each upstream, domains sent
-direct, and domains blocked.
+`block`, or `all`. `source` is `local`, `remote`, or `all`. `interface` is
+a configured interface name, `other`, `none` for rows without an
+interface, or `all`. The filter selects list the running configuration's
+upstreams and interfaces; a well-formed name that it no longer has, such
+as an upstream a reload removed, still selects its rows. Any other value,
+an unknown preset, an incomplete or reversed date range, a range wholly
+outside the retention period, and an offset that is not a multiple of 500
+get `400` with the reason.
+
+A date range covers the hourly buckets that start within its local
+dates, so in a time zone with a half-hour offset each day starts at the
+next whole UTC hour. It is cut to the retention period and to the end of
+the current hour, and the page shows the exact hours it covers.
+
+The overview answers the operator's questions directly: domains sent to
+each upstream, domains sent direct, and domains blocked. It shows the
+totals per route, in the order `direct`, upstreams by name, `block`, the
+totals per interface when the configuration defines interfaces, and the
+ten hosts with the most bytes on each route, or the most requests on
+`block`, with a link to that route's full table.
 The domain table shows host, route, rules, requests (`connects` plus
 `http_requests`), failures, bytes in each direction, and first and last
-seen. A host that took several routes appears once per route. Bars drawn
-with CSS widths stand in for charts.
+seen, ordered by bytes in both directions, then requests, then host, 500
+rows a page. A host that took several routes appears once per route.
+Bars drawn with CSS widths stand in for charts; the widths come from
+classes in the embedded stylesheet in steps of 5 %, because the D5
+`Content-Security-Policy` refuses inline styles.
+
+The queries run on their own read-only SQLite connections, so a page
+never waits for a flush that waits for a lock (D4).
 
 The pages are rendered on the server; there is no JSON API and no
 `/explain` page, because no consumer needs them. Operators use
@@ -289,15 +326,27 @@ The pages are rendered on the server; there is no JSON API and no
 - `/settings` shows the configuration path, its text in an editor, the
   SHA-256 of that text as `base`, when the running configuration was loaded,
   `restart_required` keys, the last reload result, and validator warnings.
-- `POST /settings` checks the CSRF token and the 256 KiB size limit, then:
+- Browsers submit a text area's line breaks as CRLF; the page stores them
+  as LF. The editor starts on a new line after its tag, so a leading empty
+  line of the file survives the round trip.
+- `POST /settings` checks the CSRF token and the 256 KiB size limit, which
+  gets `413`, and that `base` is a lowercase hex SHA-256, which gets `400`
+  otherwise, then:
   1. validates the text with the [0004 D4][d4-4] validator; on errors it
      answers `422` with the messages and keeps the submitted text, and the
      file is unchanged;
   2. writes it with the [0004 D7][d4-7] procedure and the `base` hash; on a
      conflict it answers `409` and shows both the file and the submitted
-     text;
+     text, with the file's current hash as the new `base`, so saving again
+     deliberately replaces the other change;
   3. reloads ([0004 D6][d4-6]) and shows the result and any
-     `restart_required` keys.
+     `restart_required` keys. If the reload refuses the file it was just
+     given, for example because the file changed again in between, the page
+     answers `422` with the errors, and the running configuration stays.
+- One save at a time runs from the write through the reload.
+- `POST /settings/validate` runs the same checks and the validator on the
+  submitted text and never writes: `200` when the text is valid, `422`
+  with the messages otherwise.
 - The whole file is editable. Validation already refuses unsafe values,
   such as a non-loopback admin listener or a non-loopback proxy listener
   without sources. The password and statistics are not settings.
@@ -327,7 +376,7 @@ timeouts.
 | A7 | Every admin response carries the D5 security headers. | `TestAdminHeaders` |
 | A8 | After S1's traffic, the query for `upstream:gateway`, `direct`, and `block` over `24h` returns exactly the expected hosts, and `1h` excludes rows from earlier hours. `/domains` renders those rows, and `/live` lists an open tunnel. | `TestStatsDomainsQuery`, `TestAdminPages` |
 | A9 | A valid save replaces the file (0600, `.bak` written), reloads, and an open tunnel survives; invalid text gets `422` with line numbers and leaves the file; a stale `base` gets `409` and leaves the file; a `proxy.listen` change shows `restart_required`. | `TestAdminSettings` |
-| A10 | Headless Chrome with a throwaway profile and `--use-mock-keychain` logs in at `http://127.0.0.1:<port>/` and renders the overview. No window opens. | T2-lite at M2 close, [0007 D7][d7-7] |
+| A10 | Headless Chrome with a throwaway profile and `--use-mock-keychain` logs in at `http://127.0.0.1:<port>/` and renders the overview. No window opens. | T2 at M2 close: `scripts/admin-check` runs `TestAdminChrome`, [0007 D7][d7-7] |
 
 ## Assumptions
 
@@ -361,6 +410,7 @@ timeouts.
 [d4-6]: 0004-configuration-and-reload.md#d6-reload
 [d4-7]: 0004-configuration-and-reload.md#d7-atomic-write
 [d6-1]: 0006-packaging-paths-and-lifecycle.md#d1-paths
+[d6-4]: 0006-packaging-paths-and-lifecycle.md#d4-control-socket
 [d6-6]: 0006-packaging-paths-and-lifecycle.md#d6-signals-and-shutdown
 [d6-3]: 0006-packaging-paths-and-lifecycle.md#d3-command-line
 [d7-7]: 0007-test-environment-and-gates.md#d7-gates

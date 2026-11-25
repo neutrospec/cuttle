@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"io"
 	"net"
 	"net/netip"
@@ -85,12 +86,23 @@ func echoServer(t *testing.T) netip.AddrPort {
 	return ln.Addr().(*net.TCPAddr).AddrPort()
 }
 
-// TestStatsRowsMatchTraffic checks S1: after direct CONNECT tunnels to two
-// hosts, one pinned to a test interface, plain HTTP through upstream
-// gateway, blocked requests, and a failed dial, the host_hour rows hold the
-// expected counts, bytes, and interfaces, and agree with the live counters
-// (design 0005 D1, D4).
-func TestStatsRowsMatchTraffic(t *testing.T) {
+// s1 is the traffic of S1 and what it ran against.
+type s1 struct {
+	e     *env
+	st    *stats.Stats
+	live  *stats.Live
+	clock *fakeClock
+	// tunnel opens a CONNECT tunnel, sends up bytes, reads down bytes, and
+	// closes it.
+	tunnel func(target string, up, down int)
+}
+
+// s1Traffic runs S1's scripted mix: direct CONNECT tunnels to two hosts,
+// one pinned to a test interface, plain HTTP through upstream gateway,
+// blocked requests, a failed dial, and a refused target, all at 10:20 on
+// the test clock. It waits for the decisions and flushes nothing.
+func s1Traffic(t *testing.T) *s1 {
+	t.Helper()
 	cfg := ifaceConfig("", `
 [[upstream]]
 name = "gateway"
@@ -115,7 +127,6 @@ action = "block"
 `)
 	clock := newFakeClock()
 	clock.Advance(10*time.Hour + 20*time.Minute)
-	bucket := stats.Bucket(clock.Now())
 	live := stats.NewLive()
 	st, _ := openStats(t, clock.Now, live)
 	e, _, _ := newIfaceEnv(t, cfg, envOptions{stats: st.Recorder(), live: live})
@@ -163,7 +174,18 @@ action = "block"
 			t.Errorf("decision interface %q for %s", d["interface"], d["target"])
 		}
 	}
+	return &s1{e: e, st: st, live: live, clock: clock, tunnel: tunnel}
+}
 
+// TestStatsRowsMatchTraffic checks S1: after direct CONNECT tunnels to two
+// hosts, one pinned to a test interface, plain HTTP through upstream
+// gateway, blocked requests, and a failed dial, the host_hour rows hold the
+// expected counts, bytes, and interfaces, and agree with the live counters
+// (design 0005 D1, D4).
+func TestStatsRowsMatchTraffic(t *testing.T) {
+	r := s1Traffic(t)
+	st, live, clock := r.st, r.live, r.clock
+	bucket := stats.Bucket(clock.Now())
 	rows := flushRows(t, st)
 	key := func(host, action, upstream, rule, iface string) stats.RowKey {
 		return stats.RowKey{Host: host, Action: action, Upstream: upstream, Rule: rule, Source: "local", Interface: iface}
@@ -223,6 +245,103 @@ action = "block"
 	if n := live.Get(stats.DecisionsTotal, "kind", "http", "action", "none"); n != 1 {
 		t.Errorf("refused target: decisions_total action=none %d, want 1", n)
 	}
+}
+
+// TestStatsDomainsQuery checks the query half of A8: after S1's traffic,
+// the dashboard query over 24h for upstream:gateway, direct, and block
+// returns exactly the expected hosts with their counts, the filters by
+// source and interface select their rows, and after an hour passes, 1h
+// shows only the new hour's rows while 24h sums both (design 0005 D9).
+func TestStatsDomainsQuery(t *testing.T) {
+	r := s1Traffic(t)
+	st, clock := r.st, r.clock
+	flushRows(t, st)
+	ctx := context.Background()
+	type hostCounts struct {
+		host, route, rules         string
+		requests, failures, up, dn int64
+	}
+	query := func(preset string, f stats.Filter) []hostCounts {
+		t.Helper()
+		w, err := stats.PresetWindow(preset, clock.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.Window = w
+		rows, err := st.Domains(ctx, f, stats.MaxDomainRows, 0)
+		if err != nil {
+			t.Fatalf("%s %+v: %v", preset, f, err)
+		}
+		out := make([]hostCounts, len(rows))
+		for i, h := range rows {
+			out[i] = hostCounts{h.Host, h.Route(), strings.Join(h.Rules, ","), h.Requests, h.Failures, h.BytesUp, h.BytesDown}
+		}
+		return out
+	}
+	gateway := hostCounts{"h", "upstream:gateway", "restricted", 4, 0, 500, 3*1234 + int64(len("500"))}
+	bulk := hostCounts{"bulk.cuttle.test", "direct", "pin", 2, 0, 2000, 10000}
+	files := hostCounts{"files.cuttle.test", "direct", "default", 1, 0, 300, 700}
+	nowhere := hostCounts{"nowhere.cuttle.test", "direct", "default", 1, 1, 0, 0}
+	blocked := hostCounts{"blocked.cuttle.test", "block", "blocked", 2, 0, 0, 0}
+	xblocked := hostCounts{"x.blocked.cuttle.test", "block", "blocked", 1, 0, 0, 0}
+	for _, c := range []struct {
+		name string
+		f    stats.Filter
+		want []hostCounts
+	}{
+		{"upstream:gateway", stats.Filter{Route: "upstream:gateway"}, []hostCounts{gateway}},
+		{"every upstream", stats.Filter{Route: "upstream"}, []hostCounts{gateway}},
+		{"another upstream", stats.Filter{Route: "upstream:other"}, []hostCounts{}},
+		{"direct", stats.Filter{Route: "direct"}, []hostCounts{bulk, files, nowhere}},
+		{"block", stats.Filter{Route: "block"}, []hostCounts{blocked, xblocked}},
+		{"all", stats.Filter{Route: "all"}, []hostCounts{bulk, gateway, files, blocked, nowhere, xblocked}},
+		{"interface eth-b", stats.Filter{Interface: "eth-b"}, []hostCounts{bulk}},
+		{"interface other", stats.Filter{Interface: "other"}, []hostCounts{gateway, files}},
+		{"no interface", stats.Filter{Interface: "none"}, []hostCounts{blocked, nowhere, xblocked}},
+		{"local", stats.Filter{Source: "local", Route: "direct"}, []hostCounts{bulk, files, nowhere}},
+		{"remote", stats.Filter{Source: "remote"}, []hostCounts{}},
+	} {
+		if got := query("24h", c.f); !slices.Equal(got, c.want) {
+			t.Errorf("24h %s:\n got %+v\nwant %+v", c.name, got, c.want)
+		}
+	}
+	totals, err := st.RouteTotals(ctx, stats.Filter{Window: mustWindow(t, "24h", clock.Now())})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var routes []string
+	for _, tot := range totals {
+		routes = append(routes, fmt.Sprintf("%s:%d/%d/%d", tot.Route(), tot.Hosts, tot.Requests, tot.Failures))
+	}
+	if got := strings.Join(routes, " "); got != "direct:3/4/1 upstream:gateway:1/4/0 block:2/3/0" {
+		t.Errorf("route totals %s", got)
+	}
+
+	// An hour later another tunnel to files.cuttle.test: 1h holds only it,
+	// 24h sums both hours.
+	clock.Advance(time.Hour)
+	r.tunnel("files.cuttle.test:9000", 300, 700)
+	r.e.waitDecisions(13)
+	flushRows(t, st)
+	if got, want := query("1h", stats.Filter{}), []hostCounts{files}; !slices.Equal(got, want) {
+		t.Errorf("1h:\n got %+v\nwant %+v", got, want)
+	}
+	if got := query("1h", stats.Filter{Route: "block"}); len(got) != 0 {
+		t.Errorf("1h block: %+v", got)
+	}
+	files2 := hostCounts{"files.cuttle.test", "direct", "default", 2, 0, 600, 1400}
+	if got, want := query("24h", stats.Filter{Route: "direct"}), []hostCounts{bulk, files2, nowhere}; !slices.Equal(got, want) {
+		t.Errorf("24h after an hour:\n got %+v\nwant %+v", got, want)
+	}
+}
+
+func mustWindow(t *testing.T, preset string, now time.Time) stats.Window {
+	t.Helper()
+	w, err := stats.PresetWindow(preset, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return w
 }
 
 // TestStatsNeverBlocksForwarding checks S2: while another connection holds

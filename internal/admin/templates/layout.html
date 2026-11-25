@@ -4,14 +4,45 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<title>{{.Title}} · cuttle</title>
+{{if gt .Refresh 0}}<meta http-equiv="refresh" content="{{.Refresh}}">
+{{end}}<title>{{.Title}} · cuttle</title>
 <link rel="stylesheet" href="/static/admin.css">
 </head>
 <body>
-<header><span class="brand">cuttle</span></header>
-<main>
-{{template "content" .}}
+<header>
+<span class="brand">cuttle</span>
+{{if .Page}}<nav aria-label="Pages">
+<a href="/"{{if eq .Page "overview"}} aria-current="page"{{end}}>Overview</a>
+<a href="/domains"{{if eq .Page "domains"}} aria-current="page"{{end}}>Domains</a>
+<a href="/live"{{if eq .Page "live"}} aria-current="page"{{end}}>Live</a>
+<a href="/settings"{{if eq .Page "settings"}} aria-current="page"{{end}}>Settings</a>
+</nav>
+<form method="post" action="/logout" class="signout">
+<span class="muted">Signed in</span>
+<input type="hidden" name="csrf" value="{{.Token}}">
+<button type="submit" class="secondary">Sign out</button>
+</form>
+{{end}}</header>
+<main{{if .Page}} class="wide"{{end}}>
+{{if and .Page .Message}}<p class="message" role="alert">{{.Message}}</p>
+{{end}}{{template "content" .}}
 </main>
 </body>
 </html>
 {{end}}
+
+{{/* window shows the preset links of a windowView and the exact range. */}}
+{{define "window"}}<div class="window">
+<span class="muted">Window</span>
+{{range .Presets}}<a href="{{.Href}}"{{if .Current}} aria-current="true"{{end}}>{{.Label}}</a>
+{{end}}<span class="range">{{.Range}}</span>
+</div>
+{{end}}
+
+{{/* stats shows the statistics state of a statsState. */}}
+{{define "stats"}}{{if not .OK}}<p class="message" role="alert">Statistics are unavailable{{if .Reason}}: {{.Reason}}{{end}}. The proxy serves without them.</p>
+{{end}}{{if .WriteError}}<p class="message" role="alert">Last statistics write error at {{time .WriteErrorAt}}: {{.WriteError}}</p>
+{{end}}{{if .QueryError}}<p class="message" role="alert">Statistics query failed: {{.QueryError}}</p>
+{{end}}{{end}}
+
+{{define "routename"}}{{if eq .Action "direct"}}direct{{else if eq .Action "block"}}block{{else}}upstream:{{.Upstream}}{{end}}{{end}}

@@ -1,12 +1,13 @@
 // Package admin serves the password-protected admin UI on a loopback
-// listener (design 0005 D5–D9): the Host allowlist, the security headers,
-// the Argon2id password file, in-memory sessions, CSRF protection, and the
-// login backoff.
+// listener (design 0005 D5–D10): the Host allowlist, the security headers,
+// the Argon2id password file, in-memory sessions, CSRF protection, the
+// login backoff, the dashboard, and the settings page.
 package admin
 
 import (
 	"bytes"
 	"embed"
+	"errors"
 	"html/template"
 	"io/fs"
 	"log/slog"
@@ -19,6 +20,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"squid/internal/config"
+	"squid/internal/control"
+	"squid/internal/stats"
 )
 
 // Cookie names (design 0005 D7, D8).
@@ -29,6 +34,30 @@ const (
 
 // maxFormBytes bounds the body of the login and logout forms.
 const maxFormBytes = 16 << 10
+
+// maxSettingsFormBytes bounds the body of the settings forms: a
+// configuration of config.MaxFileSize bytes, each of which URL encoding
+// may triple, and the other fields. The text itself is limited to
+// config.MaxFileSize after decoding (design 0005 D10).
+const maxSettingsFormBytes = 3*config.MaxFileSize + 16<<10
+
+// Backend is the running instance that the dashboard shows and the
+// settings page changes (design 0005 D9, D10).
+type Backend interface {
+	// Status returns the instance's state as cuttle status reports it
+	// (design 0006 D4).
+	Status() control.Status
+	// Config returns the running configuration.
+	Config() *config.Config
+	// ConfigPath returns the configuration file the instance reloads.
+	ConfigPath() string
+	// Stats returns the statistics service, or nil while statistics are
+	// unavailable (design 0005 D4).
+	Stats() *stats.Stats
+	// Reload applies the configuration file as SIGHUP does (design 0004
+	// D6); ok is false when the file was refused.
+	Reload() (res control.ReloadResult, ok bool)
+}
 
 // securityHeaders go on every response (design 0005 D5).
 var securityHeaders = [][2]string{
@@ -48,21 +77,33 @@ type Options struct {
 	Listen netip.AddrPort
 	// PasswordPath is the admin password file (design 0006 D1).
 	PasswordPath string
-	Logger       *slog.Logger
+	// Backend is the running instance the pages show and change; it is
+	// required.
+	Backend Backend
+	Logger  *slog.Logger
 	// Now replaces the clock in tests; nil means time.Now.
 	Now func() time.Time
+	// Location is the time zone of dates and times on the pages; nil
+	// means time.Local.
+	Location *time.Location
 }
 
 // Server is the admin UI.
 type Server struct {
-	log   *slog.Logger
-	now   func() time.Time
-	hosts []string
-	pw    *passwordFile
-	login *loginTokens
-	pages map[string]*template.Template
+	log     *slog.Logger
+	now     func() time.Time
+	loc     *time.Location
+	hosts   []string
+	pw      *passwordFile
+	login   *loginTokens
+	pages   map[string]*template.Template
+	backend Backend
 
 	sessions sessions
+
+	// settingsMu serializes settings saves, from the write through the
+	// reload (design 0005 D10).
+	settingsMu sync.Mutex
 
 	// loginMu serializes the backoff check, the verification, and the
 	// failure count, so at most one Argon2id computation runs at a time
@@ -79,11 +120,13 @@ type Server struct {
 // New returns a Server for the options.
 func New(opt Options) *Server {
 	s := &Server{
-		log:   opt.Logger,
-		now:   opt.Now,
-		pw:    &passwordFile{path: opt.PasswordPath},
-		login: newLoginTokens(),
-		pages: map[string]*template.Template{},
+		log:     opt.Logger,
+		now:     opt.Now,
+		loc:     opt.Location,
+		pw:      &passwordFile{path: opt.PasswordPath},
+		login:   newLoginTokens(),
+		pages:   map[string]*template.Template{},
+		backend: opt.Backend,
 	}
 	if s.log == nil {
 		s.log = slog.New(slog.DiscardHandler)
@@ -91,21 +134,29 @@ func New(opt Options) *Server {
 	if s.now == nil {
 		s.now = time.Now
 	}
+	if s.loc == nil {
+		s.loc = time.Local
+	}
 	port := strconv.Itoa(int(opt.Listen.Port()))
 	s.hosts = []string{"127.0.0.1:" + port, "localhost:" + port}
 	if own := strings.ToLower(opt.Listen.String()); !slices.Contains(s.hosts, own) {
 		s.hosts = append(s.hosts, own)
 	}
-	base := template.Must(template.ParseFS(assets, "templates/layout.html"))
-	for _, name := range []string{"login", "home"} {
+	base := template.Must(template.New("").Funcs(s.funcs()).ParseFS(assets, "templates/layout.html"))
+	for _, name := range []string{"login", "overview", "domains", "live", "settings"} {
 		s.pages[name] = template.Must(template.Must(base.Clone()).ParseFS(assets, "templates/"+name+".html"))
 	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /login", s.getLogin)
 	mux.HandleFunc("POST /login", s.postLogin)
-	mux.HandleFunc("POST /logout", s.authed(s.postLogout))
-	mux.HandleFunc("GET /{$}", s.authed(s.getHome))
+	mux.HandleFunc("POST /logout", s.authed(maxFormBytes, s.postLogout))
+	mux.HandleFunc("GET /{$}", s.authed(0, s.getOverview))
+	mux.HandleFunc("GET /domains", s.authed(0, s.getDomains))
+	mux.HandleFunc("GET /live", s.authed(0, s.getLive))
+	mux.HandleFunc("GET /settings", s.authed(0, s.getSettings))
+	mux.HandleFunc("POST /settings/validate", s.authed(maxSettingsFormBytes, s.postValidate))
+	mux.HandleFunc("POST /settings", s.authed(maxSettingsFormBytes, s.postSettings))
 	static, _ := fs.Sub(assets, "static")
 	files := http.StripPrefix("/static/", http.FileServerFS(static))
 	mux.HandleFunc("GET /static/", func(w http.ResponseWriter, r *http.Request) {
@@ -176,6 +227,13 @@ type pageData struct {
 	// Token is the login token on the login page and the CSRF token on
 	// session pages.
 	Token string
+	// Page names a session page; the layout then shows the navigation
+	// with that page marked, and the sign-out form.
+	Page string
+	// Refresh, when positive, reloads the page after that many seconds.
+	Refresh int
+	// Data holds the page's own content.
+	Data any
 }
 
 func (s *Server) render(w http.ResponseWriter, code int, page string, d pageData) {
@@ -190,10 +248,14 @@ func (s *Server) render(w http.ResponseWriter, code int, page string, d pageData
 	w.Write(buf.Bytes())
 }
 
-// currentSession returns the live session the request's cookies name.
-// Every cuttle_session cookie is tried, so a cookie that another server on
-// 127.0.0.1 set for the same name cannot hide the real one.
+// currentSession returns the live session the request's cookies name and
+// marks it used. Every cuttle_session cookie is tried, so a cookie that
+// another server on 127.0.0.1 set for the same name cannot hide the real
+// one. A request for /live, which reloads itself every 5 s, does not mark
+// the session used, so a forgotten tab cannot hold a session past its idle
+// timeout (design 0005 D7, D9).
 func (s *Server) currentSession(r *http.Request) (string, session, bool) {
+	touch := r.URL.Path != "/live"
 	cookies := r.CookiesNamed(SessionCookie)
 	if len(cookies) == 0 {
 		return "", session{}, false
@@ -201,7 +263,7 @@ func (s *Server) currentSession(r *http.Request) (string, session, bool) {
 	pw := s.pw.load()
 	now := s.now()
 	for _, c := range cookies {
-		if v, ok := s.sessions.get(c.Value, now, pw); ok {
+		if v, ok := s.sessions.get(c.Value, now, pw, touch); ok {
 			return c.Value, v, true
 		}
 	}
@@ -209,9 +271,9 @@ func (s *Server) currentSession(r *http.Request) (string, session, bool) {
 }
 
 // authed serves h only within a live session. A GET without one is sent to
-// /login; any other method gets 403. A POST must carry the session's CSRF
-// token (design 0005 D8).
-func (s *Server) authed(h func(http.ResponseWriter, *http.Request, string, session)) http.HandlerFunc {
+// /login; any other method gets 403. A POST, whose body may hold at most
+// limit bytes, must carry the session's CSRF token (design 0005 D8).
+func (s *Server) authed(limit int64, h func(http.ResponseWriter, *http.Request, string, session)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, v, ok := s.currentSession(r)
 		if !ok {
@@ -223,7 +285,7 @@ func (s *Server) authed(h func(http.ResponseWriter, *http.Request, string, sessi
 			return
 		}
 		if r.Method == http.MethodPost {
-			if !parseForm(w, r) {
+			if !parseForm(w, r, limit) {
 				return
 			}
 			if !tokenEqual(r.PostForm.Get("csrf"), v.csrf) {
@@ -235,10 +297,16 @@ func (s *Server) authed(h func(http.ResponseWriter, *http.Request, string, sessi
 	}
 }
 
-// parseForm reads a URL-encoded body of at most maxFormBytes.
-func parseForm(w http.ResponseWriter, r *http.Request) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, maxFormBytes)
+// parseForm reads a URL-encoded body of at most limit bytes. A larger
+// body gets 413, any other invalid form 400.
+func parseForm(w http.ResponseWriter, r *http.Request, limit int64) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	if err := r.ParseForm(); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			http.Error(w, "413 Request Entity Too Large", http.StatusRequestEntityTooLarge)
+			return false
+		}
 		http.Error(w, "400 Bad Request: invalid form", http.StatusBadRequest)
 		return false
 	}
@@ -292,7 +360,7 @@ func (s *Server) loginTokenOK(r *http.Request) bool {
 // D8). A request runs Argon2id only with a valid login token, a usable
 // password file, and no backoff wait.
 func (s *Server) postLogin(w http.ResponseWriter, r *http.Request) {
-	if !parseForm(w, r) {
+	if !parseForm(w, r, maxFormBytes) {
 		return
 	}
 	tokenOK := s.loginTokenOK(r)
@@ -350,9 +418,4 @@ func (s *Server) postLogout(w http.ResponseWriter, r *http.Request, id string, _
 	setCookie(w, SessionCookie, "", -1)
 	s.log.Info("admin logout")
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
-}
-
-// getHome is the placeholder page that the M2.3 dashboard replaces.
-func (s *Server) getHome(w http.ResponseWriter, r *http.Request, _ string, v session) {
-	s.render(w, http.StatusOK, "home", pageData{Title: "Overview", Token: v.csrf})
 }

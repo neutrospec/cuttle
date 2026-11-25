@@ -45,6 +45,10 @@ type Stats struct {
 	live      *Live
 	clock     func() time.Time
 	retention atomic.Int64 // days
+	// writeErr is the last failed flush, for cuttle status and the
+	// dashboard (OI-0006 Q-R5). It is separate from mu, which a flush
+	// waiting for a lock holds.
+	writeErr atomic.Pointer[WriteError]
 
 	// mu serializes flushes and retention on the single writer connection,
 	// and guards the fields below.
@@ -97,6 +101,17 @@ func Open(ctx context.Context, opts Options) (*Stats, error) {
 	go s.loop(opts.Interval)
 	return s, nil
 }
+
+// WriteError is a failed statistics flush.
+type WriteError struct {
+	Msg string
+	At  time.Time
+}
+
+// LastWriteError returns the last failed flush since start, or nil. A
+// later successful flush does not clear it; stats_write_errors_total
+// counts every failure.
+func (s *Stats) LastWriteError() *WriteError { return s.writeErr.Load() }
 
 // Recorder returns the in-memory aggregator the proxy records into.
 func (s *Stats) Recorder() *Recorder { return s.rec }
@@ -160,7 +175,9 @@ func (s *Stats) flushLocked(ctx context.Context) error {
 	if err != nil {
 		s.rec.Restore(rows)
 		s.live.Add(1, StatsWriteErrorsTotal)
-		if now := s.clock(); s.lastErrLog.IsZero() || now.Sub(s.lastErrLog) >= errorLogInterval {
+		now := s.clock()
+		s.writeErr.Store(&WriteError{Msg: err.Error(), At: now})
+		if s.lastErrLog.IsZero() || now.Sub(s.lastErrLog) >= errorLogInterval {
 			s.lastErrLog = now
 			s.log.Warn("statistics write failed; retrying at the next flush", "rows", len(rows), "error", err.Error())
 		}

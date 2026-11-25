@@ -346,6 +346,8 @@ Move resolved items to Closed with their resolving commit or evidence.
     instance names and the loopback client address, so D7's `-dir`
     alone is complete, and the D8 Chain row states what shows the
     inspection root CA.
+    The 0005 A10 wording is settled in TASK-0013, which names
+    `scripts/admin-check` as the T2 check.
   - V9 (implementer): C4 sends the direct request before the block request,
     because cuttle's own responses close the connection. Settled in
     `8af7956` (TASK-0004): 0002 C4, `TestHTTPReusedConnRoutesPerRequest`.
@@ -452,9 +454,15 @@ Move resolved items to Closed with their resolving commit or evidence.
     instance names such as `cuttle-0123456789ab`, and IPv6 addresses
     written with six leading two-digit groups. The operator is trusted
     (AGENTS.md), so narrow or drop the redaction and record the rule in
-    0008 D6. Gate (infra): the cgo step's `go list` returns nothing when
-    `CGO_ENABLED=0` is set in the environment; run it as `CGO_ENABLED=1 go
-    list -deps -f '{{if .CgoFiles}}{{.ImportPath}}{{end}}' ./cmd/cuttle` in
+    0008 D6. O-R1 is settled in TASK-0013: the blanket redaction is
+    dropped; messages about `[[interface]]` keys and `interfaces` lists
+    still never repeat their value, and a syntax error under those keys
+    still gets the fixed hint, while every other message, parser messages
+    included, shows the operator's text as written (0008 D6, 0004 D4,
+    `TestConfigInterfaces`, `TestConfigEchoesOperatorText`). Gate (infra):
+    the cgo step's `go list` returns nothing when `CGO_ENABLED=0` is set in
+    the environment; run it as `CGO_ENABLED=1 go list -deps -f
+    '{{if .CgoFiles}}{{.ImportPath}}{{end}}' ./cmd/cuttle` in
     `scripts/gate` and 0007 D7. The gate item is settled in TASK-0010
     (M2.1): `scripts/gate` and 0007 D7 run the step with `CGO_ENABLED=1`.
     In a scratch copy with an `import "C"` file in `internal/paths`,
@@ -470,15 +478,23 @@ Move resolved items to Closed with their resolving commit or evidence.
     second `cuttle serve` runs retention before it finds the running
     instance; move statistics after the control-socket step or defer
     retention. Q-R5 (design, M2.3): show the last statistics write error in
-    status or on the dashboard. Q-R6 (implementer): a host whose key folds
+    status or on the dashboard. Q-R5 is settled in TASK-0013 (M2.3): 0005 D4
+    and 0006 D4 add `stats_last_write_error` and its time to status, and the
+    overview shows it (`TestStatsLastWriteError`, `TestAdminDashboard`,
+    `TestAdminPages`). Q-R6 (implementer): a host whose key folds
     at the 20,000-key cap still uses a `max_hosts_per_hour` slot. Q-R7
     (docs): state that `stats_folded_total` counts folded records. Q-R8
     (docs): rewrap the long line in 0006 D6.
   - P-R2–P-R7 (from the TASK-0011 review; M2.3 and docs): P-R2 (design):
     an admin port that cannot bind is only logged; show the admin listener
     state in `cuttle status` and record the port-squatting risk next to the
-    cookie-scope risk in 0005 D7. P-R3 (implementer): make the uid lookup
-    injectable so the password file's owner check has a test. P-R4
+    cookie-scope risk in 0005 D7. P-R2 is settled in TASK-0013 (M2.3):
+    `cuttle status` shows `admin` as `listening`, `unavailable` with the
+    bind error, or `disabled` (0006 D4, `TestAdminListenerBusy`,
+    `TestControlSocket`, `TestAdminPages`), and 0005 D7 records the
+    port-squatting risk beside the cookie-scope risk. P-R3 (implementer):
+    make the uid lookup injectable so the password file's owner check has
+    a test. P-R4
     (design): responses `net/http` writes before the handler (`400` for a
     missing, duplicate, or malformed Host, `431`, `OPTIONS *`) carry no D5
     headers; record them as the A7 exception. P-R5 (design): one global
@@ -497,10 +513,28 @@ Move resolved items to Closed with their resolving commit or evidence.
     target. S-R2 (implementer, nit): the check for an instance name or the
     client address in a request target (`tools/mockenv/disclosure.go`) has
     no test case; disabling it leaves `TestCheckDisclosure` passing.
+  - U-R1–U-R5 (from the TASK-0013 review; M2 follow-ups): U-R1
+    (implementer, minor): `writeReplace` (`internal/config/atomic.go`) can
+    fail after the rename succeeded, when opening or syncing the directory
+    fails; the settings page then says the file is unchanged and skips the
+    reload, although the file holds the new text. Treat a directory-sync
+    failure after the rename as saved, log a warning, and reload. U-R2
+    (docs, minor): 0008 D6 says the settings page never shows a MAC
+    written where a MAC belongs, but the editor and the 409 view show the
+    whole file; say "validation messages on the settings page", and state
+    that key names are echoed even inside `[[interface]]`. U-R3
+    (implementer, nit): on `/domains`, a date range leaves the window
+    select at `1h`, a preset change has no effect while the dates are set,
+    and clearing the dates falls back to `1h` instead of `24h`. U-R4
+    (implementer, nit): the 409 view's `<pre class="disk">` drops a leading
+    empty line of the file on disk; add a newline after the tag as the
+    editor does. U-R5 (test, nit): `expectRe` in
+    `internal/config/config_test.go` cannot express a key that contains
+    `:`, so three MAC-key fixtures no longer check the reported key path.
 - Next action: orchestrator — include the open items (V5, V8, V11, V12, P1,
-  W1–W3, Z2, Z4, G1–G2, O-R1, P-R2–P-R7, Q-R1–Q-R8, and S-R1–S-R2) in the
-  briefs of the stages they affect; the producer closes each item with the
-  commit that settles it.
+  W1–W3, Z2, Z4, G1–G2, P-R3–P-R7, Q-R1–Q-R4, Q-R6–Q-R8, S-R1–S-R2, and
+  U-R1–U-R5) in the briefs of the stages they affect; the producer closes
+  each item with the commit that settles it.
   The M1.4 items, R5 with the C13 remainder, the per-request source
   recheck of 0003 D10 with N5, the bind retry of V1, Z3, W-R1, and W-R2,
   are settled in TASK-0007.

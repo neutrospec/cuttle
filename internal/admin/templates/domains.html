@@ -1,0 +1,22 @@
+{{define "content"}}{{with .Data}}
+<h1>Domains</h1>
+{{template "stats" .Stats}}
+<form method="get" action="/domains" class="filters">
+<label>Route <select name="route">{{range .Route}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+<label>Source <select name="source">{{range .Source}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+<label>Interface <select name="interface">{{range .Interface}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+<label>Window <select name="window">{{range .Window.Presets}}<option value="{{.Label}}"{{if .Current}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+<label>From <input type="date" name="from" value="{{.Window.FromDate}}"></label>
+<label>To <input type="date" name="to" value="{{.Window.ToDate}}"></label>
+<button type="submit">Show</button>
+</form>
+{{if .Window.Range}}{{template "window" .Window}}{{end}}
+{{if .Rows}}<div class="table"><table>
+<thead><tr><th>#</th><th>Host</th><th>Route</th><th>Rules</th><th class="n">Requests</th><th class="n">Failures</th><th class="n">Up</th><th class="n">Down</th><th>First seen</th><th>Last seen</th><th class="barcol">Bytes</th></tr></thead>
+<tbody>
+{{$first := .First}}{{$max := .MaxBytes}}{{range $i, $r := .Rows}}<tr><td class="n muted">{{num (rowIndex $first $i)}}</td><td class="host">{{$r.Host}}</td><td class="route">{{template "routename" $r}}</td><td>{{join $r.Rules ", "}}</td><td class="n">{{num $r.Requests}}</td><td class="n">{{num $r.Failures}}</td><td class="n">{{bytes $r.BytesUp}}</td><td class="n">{{bytes $r.BytesDown}}</td><td>{{unix $r.FirstSeen}}</td><td>{{unix $r.LastSeen}}</td><td class="barcol"><span class="bar"><i class="{{bar $r.Bytes $max}}"></i></span></td></tr>
+{{end}}</tbody>
+</table></div>
+{{else}}<p class="muted">No hosts match.</p>
+{{end}}{{if or .Prev .Next}}<p class="pages">{{if .Prev}}<a href="{{.Prev}}">Previous 500</a>{{end}} {{if .Next}}<a href="{{.Next}}">Next 500</a>{{end}}</p>
+{{end}}{{end}}{{end}}

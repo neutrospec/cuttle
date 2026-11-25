@@ -125,7 +125,7 @@ control   /var/folders/<id>/T/cuttle/control.sock     TMPDIR
 
 | Method | Path | Response |
 | --- | --- | --- |
-| `GET` | `/v1/status` | Version, PID, start time, name, paths, listeners with state, upstreams with state, interfaces with state ([0008 D15][d8-15]), configuration state, counters ([0002 D7][d2-7]), up to 500 active tunnels, statistics state, log state with the rotation failure count, open-file limit |
+| `GET` | `/v1/status` | Version, PID, start time, name, paths, listeners with state, the admin listener with state, upstreams with state, interfaces with state ([0008 D15][d8-15]), configuration state, counters ([0002 D7][d2-7]), up to 500 active tunnels, statistics state with the last failed write, log state with the rotation failure count, open-file limit |
 | `POST` | `/v1/reload` | `200` with `restart_required` and warnings, or `422` with errors |
 
 ```json
@@ -137,6 +137,8 @@ control   /var/folders/<id>/T/cuttle/control.sock     TMPDIR
                {"address": "10.8.0.6:3128", "state": "retrying",
                 "error": "listen tcp 10.8.0.6:3128: bind: can't assign requested address",
                 "since": "2026-11-25T00:00:00Z"}],
+ "admin": {"address": "127.0.0.1:3129", "state": "listening",
+           "since": "2026-11-25T00:00:00Z"},
  "upstreams": [{"name": "gateway", "address": "10.8.0.6:3128",
                 "state": "down", "since": "2026-11-25T00:58:00Z",
                 "down_s": 42.3, "failed_fast": 17,
@@ -154,6 +156,8 @@ control   /var/folders/<id>/T/cuttle/control.sock     TMPDIR
               "interface": "eth-a", "age_s": 42,
               "up": 3120, "down": 88000}],
  "stats": "enabled",
+ "stats_last_write_error": "database is locked",
+ "stats_last_write_error_at": "2026-11-25T00:41:10Z",
  "log": {"path": "/Users/me/.local/state/cuttle/cuttle.log",
          "rotation_failures": 0},
  "rlimit_nofile": 10240}
@@ -175,6 +179,16 @@ control   /var/folders/<id>/T/cuttle/control.sock     TMPDIR
   or `unavailable` when the database could not be opened, migrated, or
   written at start, with the reason in `stats_error`; the text form
   prints `stats  unavailable: <reason>` ([0005 D4][d5-4]).
+  `stats_last_write_error` and `stats_last_write_error_at` hold the last
+  failed flush since start and are absent while none has failed; the text
+  form prints `last write error at <time>: <message>` under `stats`.
+- `admin` is the admin listener of [0005 D5][d5-5] as the instance
+  started it: `listening` on `address`, `unavailable` with the bind error
+  in `error`, or `disabled` with an empty `address` when `admin.listen` is
+  `""`. The text form prints `admin  <address> listening since <time>`,
+  `admin  <address> unavailable: <error>`, or `admin  disabled`. A
+  changed `admin.listen` applies at the next start and shows under
+  `restart_required` meanwhile.
 - `log.rotation_failures` counts the failed rotations and reopens since
   start (D7), so an operator sees a log that cannot rotate without reading
   the launchd file.
@@ -422,6 +436,7 @@ and the log.
 [d4-6]: 0004-configuration-and-reload.md#d6-reload
 [d4-7]: 0004-configuration-and-reload.md#d7-atomic-write
 [d5-4]: 0005-statistics-and-admin.md#d4-write-path
+[d5-5]: 0005-statistics-and-admin.md#d5-admin-listener-and-host-allowlist
 [d5-6]: 0005-statistics-and-admin.md#d6-password
 [d8-3]: 0008-interface-selection.md#d3-matching-system-interfaces
 [d8-15]: 0008-interface-selection.md#d15-status-command-line-logging-counters-and-statistics

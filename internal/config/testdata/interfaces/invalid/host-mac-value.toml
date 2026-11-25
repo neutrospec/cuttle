@@ -1,4 +1,4 @@
-# want: 7 rule[1].hosts[1]: "<redacted>"
+# want: 7 rule[1].hosts[1]: "00:00:5e:00:53:27": invalid host name
 name = "cuttle-test"
 [proxy]
 default = "direct"

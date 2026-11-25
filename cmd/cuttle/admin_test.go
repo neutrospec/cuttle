@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"squid/internal/control"
 	"squid/internal/testenv"
 )
 
@@ -228,8 +229,11 @@ listen = ""`, fmt.Sprintf("[admin]\nlisten = %q", adminAddr), 1))
 		t.Errorf("session cookie %q", raw)
 	}
 	res, body, csrf := adminGet(t, c, base+"/")
-	if res.StatusCode != 200 || !strings.Contains(body, "Signed in") || csrf == "" {
+	if res.StatusCode != 200 || !strings.Contains(body, "<h1>Overview</h1>") || csrf == "" {
 		t.Fatalf("/: %d\n%s", res.StatusCode, body)
+	}
+	if st := statusJSON(t, sb); st.Admin.State != control.AdminListening || st.Admin.Address != adminAddr {
+		t.Errorf("status admin %+v", st.Admin)
 	}
 	for k, v := range map[string]string{
 		"Content-Security-Policy": "default-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'",
@@ -277,7 +281,8 @@ listen = ""`, fmt.Sprintf("[admin]\nlisten = %q", adminAddr), 1))
 
 // TestAdminListenerBusy checks that an admin port held by another program
 // leaves cuttle serving the proxy without the admin UI, with an error in
-// the log.
+// the log, and that cuttle status shows the admin listener as unavailable
+// with the bind error (OI-0006 P-R2).
 func TestAdminListenerBusy(t *testing.T) {
 	if testing.Short() {
 		t.Skip("binary test")
@@ -295,8 +300,17 @@ func TestAdminListenerBusy(t *testing.T) {
 listen = ""`, fmt.Sprintf("[admin]\nlisten = %q", adminAddr), 1))
 	proc := sb.Start(proxyAddr, "serve")
 	waitLog(t, sb, `msg="admin listener unavailable; running without the admin UI" address=`+adminAddr)
-	if st := statusJSON(t, sb); len(st.Listeners) != 1 || st.Listeners[0].State != "bound" {
+	st := statusJSON(t, sb)
+	if len(st.Listeners) != 1 || st.Listeners[0].State != "bound" {
 		t.Errorf("listeners %+v", st.Listeners)
+	}
+	if st.Admin.State != control.AdminUnavailable || st.Admin.Address != adminAddr ||
+		!strings.Contains(st.Admin.Error, "address already in use") || st.Admin.Since.IsZero() {
+		t.Errorf("admin %+v", st.Admin)
+	}
+	r := sb.Run(10*time.Second, "status")
+	if want := regexp.MustCompile(`(?m)^admin +` + regexp.QuoteMeta(adminAddr) + ` unavailable: listen tcp .*address already in use$`); !want.MatchString(r.Stdout) {
+		t.Errorf("status text:\n%s", r.Stdout)
 	}
 	if code := proc.Stop(); code != 0 {
 		t.Fatalf("exit %d: %s", code, proc.Stderr())

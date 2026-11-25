@@ -60,16 +60,26 @@ dropping tunnels
 [0004 D6](docs/design/0004-configuration-and-reload.md#d6-reload)). A
 non-loopback listener that cannot bind, for example while a private link
 is down, is retried every 30 s and shows as `retrying`. `SIGTERM` drains
-in-flight requests for up to 5 s and closes tunnels. The dashboard and the
-settings page arrive in later stages of the [roadmap](docs/ROADMAP.md).
+in-flight requests for up to 5 s and closes tunnels.
 
-Admin access is implemented for stage M2.2
-([0005 D5–D8](docs/design/0005-statistics-and-admin.md#d5-admin-listener-and-host-allowlist)).
+The admin UI covers stages M2.2 to M2.4
+([0005 D5–D10](docs/design/0005-statistics-and-admin.md#d5-admin-listener-and-host-allowlist)).
 `cuttle admin passwd` stores an Argon2id hash of the admin password in
 `~/.local/share/cuttle/admin-password`, and `cuttle serve` answers on
-`admin.listen`, `http://127.0.0.1:3129/` by default, with a sign-in page
-and, once signed in, a placeholder that the M2.3 dashboard replaces. Only
-the Host values `127.0.0.1:<port>` and `localhost:<port>` are served.
+`admin.listen`, `http://127.0.0.1:3129/` by default, with a sign-in page.
+Once signed in, the overview shows which domains went to each upstream,
+which went direct, and which were blocked over the last hour, 24 hours,
+7 days, 30 days, or a date range, with totals per route and interface,
+upstream and interface states, and the configuration and statistics
+status. The domain table filters by route, source, and interface; the
+live page lists open tunnels; and the settings page edits the
+configuration as TOML text, validates it with line numbers, saves it
+atomically with a `.bak` copy, refuses a save when the file changed
+meanwhile, and reloads without dropping tunnels. The pages are rendered
+on the server and use no JavaScript. Only the Host values
+`127.0.0.1:<port>` and `localhost:<port>` are served. `cuttle status`
+shows whether the admin listener is listening, unavailable with the bind
+error, or disabled.
 Sessions live in memory and end after 30 idle minutes, after 12 hours, at
 logout, when the password changes, and when cuttle restarts. After three
 failed sign-ins in a row, each attempt must wait, from 1 s doubling up to
@@ -82,7 +92,8 @@ and kept for `stats.retention_days`
 ([0005 D1–D4](docs/design/0005-statistics-and-admin.md#d1-recorded-data)).
 The proxy never waits for the database; when it cannot be opened,
 `cuttle status` shows `stats  unavailable` with the reason and the proxy
-serves without statistics.
+serves without statistics. A failed write is retried at the next flush,
+and `cuttle status` and the dashboard show the last one with its time.
 
 Interface selection is implemented for stage M1.5
 ([design 0008](docs/design/0008-interface-selection.md)); its check on
@@ -117,7 +128,7 @@ go build -o cuttle ./cmd/cuttle
 curl -x http://127.0.0.1:3128 https://example.com/
 ./cuttle status               # in another terminal
 ./cuttle reload               # after editing the configuration
-./cuttle admin passwd         # then open http://127.0.0.1:3129/
+./cuttle admin passwd         # then open http://127.0.0.1:3129/ and sign in
 ```
 
 The log is `~/.local/state/cuttle/cuttle.log`; `cuttle paths` lists every
@@ -139,6 +150,8 @@ scripts/gate t0   # gofmt, go mod tidy -diff, vet, build, unit tests,
                   # and a build without cgo
 scripts/gate t1   # every test with -race, including integration and
                   # binary tests; needs /usr/bin/curl (or CUTTLE_CURL)
+scripts/admin-check  # T2 at M2 close: headless Chrome signs in to the
+                     # admin UI of a sandboxed cuttle (0005 A10)
 ```
 
 Tests use only loopback, generated certificates in temporary directories,

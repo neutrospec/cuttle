@@ -1,0 +1,15 @@
+{{define "content"}}{{with .Data}}
+<h1>Live</h1>
+<p class="muted">This page reloads every 5 s.</p>
+<div class="table"><table class="kv">
+{{range .Counters}}<tr><th>{{.Name}}</th><td class="n">{{num .Value}}</td></tr>
+{{end}}</table></div>
+<h2>Active tunnels ({{len .Status.Tunnels}})</h2>
+{{if .Status.Tunnels}}<div class="table"><table>
+<thead><tr><th>Target</th><th>Kind</th><th>Route</th><th>Source</th><th>Interface</th><th class="n">Age</th><th class="n">Up</th><th class="n">Down</th></tr></thead>
+<tbody>
+{{range .Status.Tunnels}}<tr><td class="host">{{.Target}}</td><td>{{.Kind}}</td><td class="route">{{.Action}}{{if .Upstream}}:{{.Upstream}}{{end}}</td><td>{{.Source}}</td><td>{{dash .Interface}}</td><td class="n">{{secs .AgeS}}</td><td class="n">{{bytes .Up}}</td><td class="n">{{bytes .Down}}</td></tr>
+{{end}}</tbody>
+</table></div>
+{{else}}<p class="muted">No active tunnels.</p>
+{{end}}{{end}}{{end}}

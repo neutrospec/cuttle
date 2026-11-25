@@ -93,6 +93,17 @@ func printStatus(w io.Writer, st *control.Status, now time.Time) {
 	} else {
 		fmt.Fprintf(tw, "stats\t%s\n", st.Stats)
 	}
+	if st.StatsWriteError != "" && st.StatsWriteErrorAt != nil {
+		fmt.Fprintf(tw, "\tlast write error at %s: %s\n", st.StatsWriteErrorAt.Format(time.RFC3339), st.StatsWriteError)
+	}
+	switch st.Admin.State {
+	case control.AdminListening:
+		fmt.Fprintf(tw, "admin\t%s listening since %s\n", st.Admin.Address, st.Admin.Since.Format(time.RFC3339))
+	case control.AdminUnavailable:
+		fmt.Fprintf(tw, "admin\t%s unavailable: %s\n", st.Admin.Address, st.Admin.Error)
+	case control.AdminDisabled:
+		fmt.Fprintln(tw, "admin\tdisabled")
+	}
 	fmt.Fprintf(tw, "open files\t%d\n", st.RlimitNofile)
 	tw.Flush()
 
