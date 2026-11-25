@@ -425,6 +425,19 @@ Move resolved items to Closed with their resolving commit or evidence.
     `CGO_ENABLED=0 sh scripts/gate t0` now fails at that step, which lists
     `runtime/cgo` and `squid/internal/paths`, where the old command listed
     nothing; without the file the gate passes.
+  - Q-R1–Q-R8 (from the TASK-0010 review; M2.3 and docs): Q-R1
+    (implementer): test that `prepareFile` tightens an existing 0644
+    `stats.db`, `-wal`, and `-shm` to 0600. Q-R2 (implementer): do not
+    count or log a flush failure caused by cancelling the service context
+    at shutdown. Q-R3 (docs): 0005 D2 and S5 should say a newer schema's
+    content is left untouched (its mode is tightened). Q-R4 (design): a
+    second `cuttle serve` runs retention before it finds the running
+    instance; move statistics after the control-socket step or defer
+    retention. Q-R5 (design, M2.3): show the last statistics write error in
+    status or on the dashboard. Q-R6 (implementer): a host whose key folds
+    at the 20,000-key cap still uses a `max_hosts_per_hour` slot. Q-R7
+    (docs): state that `stats_folded_total` counts folded records. Q-R8
+    (docs): rewrap the long line in 0006 D6.
   - P-R2–P-R7 (from the TASK-0011 review; M2.3 and docs): P-R2 (design):
     an admin port that cannot bind is only logged; show the admin listener
     state in `cuttle status` and record the port-squatting risk next to the
@@ -440,9 +453,9 @@ Move resolved items to Closed with their resolving commit or evidence.
     on every page except the styles. P-R7 (docs): note `golang.org/x/sys`
     as a transitive dependency in 0002 D1.
 - Next action: orchestrator — include the open items (V4–V6, V8, V11,
-  V12, P1, W1–W3, Z2, Z4, and G1–G2) in the briefs of the stages
-  they affect; the producer closes each item with the commit that settles
-  it.
+  V12, P1, W1–W3, Z2, Z4, G1–G2, O-R1, P-R2–P-R7, and Q-R1–Q-R8) in the
+  briefs of the stages they affect; the producer closes each item with the
+  commit that settles it.
   The M1.4 items, R5 with the C13 remainder, the per-request source
   recheck of 0003 D10 with N5, the bind retry of V1, Z3, W-R1, and W-R2,
   are settled in TASK-0007.
