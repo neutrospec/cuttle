@@ -41,35 +41,6 @@ A closed task becomes one line under Closed:
 
 ## Active
 
-### TASK-0009 — M1.5 interface selection implementation
-
-- Milestone: M1.5
-- Status: review
-- Iteration: 2/3
-- Workers: implementer done on branch `t3/interface-selection`; fresh
-  re-check pending
-- Base: `8161b53`
-- Candidate: `30b8f84` (tree `36a2c83`) on top of `b6aa8de`
-- Evidence: implementer ran `scripts/gate t0`, `t1`, and `-race -count=3`
-  over internal and cmd on `36a2c83`, all pass; 14 mutations and two
-  controls fail their targeted tests
-- Findings: N-R1-N-R8 reported fixed, pending re-check
-- Next action: reviewer — fresh re-check of `b6aa8de..30b8f84`
-
-Decisions for TASK-0009 (2026-11-25):
-
-- Scope: design 0008 criteria I1–I19. I20, the device check, runs with the
-  user after the candidate lands (OI-0008).
-- Also in scope: K-R2 (redact MAC-shaped fragments from TOML syntax
-  messages, beyond `LastKey`) and K-R4 (call `Watch` before the first
-  `Read`; stop reading a socket after a persistent error and rely on the
-  30 s re-read) from the TASK-0008 final re-check, and OI-0006 M-R1, M-R3,
-  and M-R4 where the touched code allows.
-- Iteration 2 (orchestrator): validation messages replace any MAC-shaped
-  key segment or value with a placeholder, using a pattern that never
-  matches an IPv4 address; other echoed values stay as they are. The gate
-  also requires that `cmd/cuttle` has no cgo files in the default build.
-
 ## Closed
 
 The history was rewritten on 2026-11-25 (TASK-0003) to remove local
@@ -78,6 +49,10 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0009 — M1.5 interface selection implementation — landed `3355992`,
+  gates: T0 T1 @ `e15583a`; reviewed tree `36a2c83` (iteration 2 of 3);
+  follow-ups O-R1 and the cgo gate fix in OI-0006; device check I20 in
+  OI-0008
 - TASK-0008 — M1.5 interface selection: research and design — landed
   `fcaebe2`, gates: none @ `9216e50`; reviewed tree `4033ed7` (iteration 3
   of 3); landing fixes in `c436cfa`; follow-ups K-R2 and K-R4 in the M1.5
