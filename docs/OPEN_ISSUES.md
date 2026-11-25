@@ -98,7 +98,9 @@ Move resolved items to Closed with their resolving commit or evidence.
   undecided. A private repository needs an authenticated download strategy
   in the formula.
 - Next action: orchestrator — ask the user for the owner, visibility, and
-  licence before M3.1 starts.
+  licence before M3.1 starts. Publish by pushing `main` (and tags) only,
+  never with `--mirror` or `--all`, so the local `refs/t3/*` checkpoint
+  refs, which still reach the pre-rewrite history, stay unpublished.
 
 ### OI-0005 — Private-root trust through the chain
 
@@ -117,8 +119,8 @@ Move resolved items to Closed with their resolving commit or evidence.
 
 ### OI-0006 — Design follow-ups from the TASK-0001 final review
 
-- Origin: TASK-0001 iteration 3 review of candidate `3d33f59`, verdict
-  "approve with minor fixes", findings V1–V12. Landed in `ec577ec`. P1
+- Origin: TASK-0001 iteration 3 review of candidate `a1e1e61`, verdict
+  "approve with minor fixes", findings V1–V12. Landed in `dc52251`. P1
   comes from the TASK-0002 review.
 - Affected milestones: M1.2, M1.3, and M1 close; V5 also M3.2; P1 M3.3.
 - Iterations used: 3 of 3, so the fixes move to the first M1 task instead of

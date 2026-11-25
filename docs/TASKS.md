@@ -47,7 +47,7 @@ A closed task becomes one line under Closed:
 - Status: implement
 - Iteration: 1/3
 - Workers: infra, in the main checkout with no other writer
-- Base: `ab8125b` plus this board update
+- Base: `745b4e4` plus this board update
 - Candidate: none
 - Evidence: the current tree has no local information (orchestrator scan)
 - Findings: none
@@ -63,9 +63,12 @@ Decisions for TASK-0003 from the user (2026-11-25):
 
 ## Closed
 
+The history was rewritten on 2026-11-25 to remove local information; tree
+IDs quoted before that date refer to pre-rewrite trees.
+
 - TASK-0002 — Generalize terminology for a public project — landed
-  `842c19e`, gates: none @ `04c249a`; reviewed tree `bb9dc18` (iteration 2
+  `7e791a4`, gates: none @ `04c249a`; reviewed tree `bb9dc18` (iteration 2
   of 3); follow-ups W1–W3 in OI-0006
 - TASK-0001 — Revise goals and design for chaining, admin, packaging, and
-  mocks — landed `ec577ec`, gates: none @ `13b7b99`; reviewed tree `1f62d55`
+  mocks — landed `dc52251`, gates: none @ `13b7b99`; reviewed tree `1f62d55`
   (iteration 3 of 3); follow-ups in OI-0006
