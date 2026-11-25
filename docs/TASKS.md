@@ -41,6 +41,27 @@ A closed task becomes one line under Closed:
 
 ## Active
 
+### TASK-0004 — M1.1 direct and block for local clients
+
+- Milestone: M1.1
+- Status: implement
+- Iteration: 1/3
+- Workers: implementer on a T3 worktree branch
+- Base: `287a81f` plus this board update
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: implementer — build M1.1 with the T0 and T1 gates and return
+  the candidate commit
+
+Decisions for TASK-0004 (2026-11-25):
+
+- The user wants to use cuttle soon. The orchestrator runs M1.1 through
+  M1.4 back to back and reports at each landing.
+- OI-0006 items settled in this task: V2 (the `HTTP_PROXY` part, C3), V7
+  (C11), V9 (C4), V10 (C10). Documentation wording items (V8, V11, W1–W3)
+  wait for a docs pass.
+
 ## Closed
 
 The history was rewritten on 2026-11-25 (TASK-0003) to remove local
