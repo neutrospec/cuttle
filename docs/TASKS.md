@@ -41,6 +41,24 @@ A closed task becomes one line under Closed:
 
 ## Active
 
+### TASK-0017 — M4 design: full configuration in the web admin
+
+- Milestone: M4
+- Status: design
+- Iteration: 1/3
+- Workers: designer on a T3 worktree branch
+- Base: this board update
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: designer — write design record 0009 for M4.1–M4.4 with
+  acceptance criteria and return the candidate
+
+Decisions for TASK-0017 (2026-11-26):
+
+- The user deferred M3.2, M3.3, and the device check I20 and put M4
+  first; the M4 decisions are in the roadmap.
+
 ## Closed
 
 The history was rewritten on 2026-11-25 (TASK-0003) to remove local

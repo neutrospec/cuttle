@@ -87,6 +87,32 @@ chained deployment. Acceptance uses T0, T1, and full T2.
 | M3.2 — Client verification | The [design 0007 D8][d7-8] M3 matrix is recorded in the [compatibility matrix](COMPATIBILITY.md) for Chrome, Safari, and `/usr/bin/curl`, with admin login in Chrome and Safari. Depends on [OI-0002][oi-2] and [OI-0005][oi-5]. |
 | M3.3 — Chained deployment | A deployment guide gives the [design 0003 D13][d3-13] configuration, all three private-link cases (routed, NAT, and a link that ends on the edge machine), the trust steps and their consequences, the timeout budget, and verification commands. The two-instance chain is verified with `tools/mockenv`. On the example deployment of D13, the user confirms on the real egress proxy that requests through the gateway instance with `disclosure = "none"` work as direct requests from Chrome on the gateway machine do, or defers that with the user's consent. Depends on [OI-0001][oi-1]. |
 
+## M4 — Full configuration in the web admin
+
+The operator configures everything that `config.toml` holds from the admin
+UI, without opening the file: rules, upstreams, interfaces, the proxy and
+remote-client settings, and the general settings, plus a password change.
+The user put M4 ahead of M3.2 and M3.3 on 2026-11-26. Acceptance uses T0,
+T1, and the T2 headless Chrome admin check extended to the form flows.
+
+Decisions (user, 2026-11-26):
+
+- All UI text is English.
+- A form save rewrites the whole file in cuttle's canonical TOML form,
+  with short generated comments; comments written by hand are not kept.
+  The previous file stays in `.bak`, and the page shows the change as a
+  diff before it is applied. The TOML text editor stays as an advanced
+  page.
+- Every form save goes through the existing validation, conflict check,
+  atomic write, and reload of [design 0005 D10][d5-10].
+
+| Stage | Done when |
+| --- | --- |
+| M4.1 — Configuration model and writer | Any valid file read, written in canonical form, and read again gives the same configuration; form edits apply to the current file through one save path with a diff preview, the `base` conflict check, and reload. |
+| M4.2 — Rules and upstreams | Rules are listed, added, edited, deleted, and reordered; upstreams are added, edited, and deleted with their live state; "Test a URL" shows the matching rule as `cuttle explain` does. |
+| M4.3 — Other settings | Interfaces are defined from the detected system interfaces, and the proxy, remote-client, and general settings have forms; the admin password can be changed with the current password, while the first password is still set with `cuttle admin passwd`. |
+| M4.4 — Dashboard integration | A domain on the domains or live page can be routed with a new rule in a few clicks, and the headless Chrome check covers the form flows. |
+
 ## Later
 
 - T3 baselines for tunnel throughput, `CONNECT` latency, memory, and open
@@ -131,3 +157,4 @@ chained deployment. Acceptance uses T0, T1, and full T2.
 [oi-4]: OPEN_ISSUES.md#oi-0004--tap-hosting-repository-remote-and-licence
 [oi-5]: OPEN_ISSUES.md#oi-0005--private-root-trust-through-the-chain
 [oi-8]: OPEN_ISSUES.md#oi-0008--interface-behavior-on-the-users-devices
+[d5-10]: design/0005-statistics-and-admin.md#d10-settings
