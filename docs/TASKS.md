@@ -41,36 +41,6 @@ A closed task becomes one line under Closed:
 
 ## Active
 
-### TASK-0004 — M1.1 direct and block for local clients
-
-- Milestone: M1.1
-- Status: review
-- Iteration: 3/3
-- Workers: implementer done on branch `t3/direct-block-local-clients`;
-  fresh final re-check pending
-- Base: `8612a74`
-- Candidate: `b1530a3` (tree `f1e6202`); fixes `d2d2519`, `b1530a3` on top
-  of `636fdac`
-- Evidence: implementer ran `scripts/gate t0`, `t1`, and `-race -count=3`
-  on `f1e6202`, all pass
-- Findings: Q1-Q8 reported fixed, pending the final re-check
-- Next action: reviewer — fresh final re-check of `636fdac..b1530a3`
-
-Decisions for TASK-0004 (2026-11-25):
-
-- The user wants to use cuttle soon. The orchestrator runs M1.1 through
-  M1.4 back to back and reports at each landing.
-- OI-0006 items settled in this task: V2 (the `HTTP_PROXY` part, C3), V7
-  (C11), V9 (C4), V10 (C10). Documentation wording items (V8, V11, W1–W3)
-  wait for a docs pass.
-- Iteration 2 (orchestrator): after a response head or the `200` reaches
-  the client, a tunnel that ends with an error still logs `ok`, and a
-  plain-HTTP body that fails logs `upstream_protocol` with the status sent;
-  `up` and `down` count bytes accepted by the socket write, not bytes
-  buffered. Disclosure field names match case-insensitively with `_`
-  treated as `-`. `scripts/gate` fails when a command inside `test -z
-  "$(…)"` fails.
-
 ## Closed
 
 The history was rewritten on 2026-11-25 (TASK-0003) to remove local
@@ -79,6 +49,9 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0004 — M1.1 direct and block for local clients — landed `a5b9f02`,
+  gates: T0 T1 @ `28f3eca`; reviewed tree `f1e6202` (iteration 3 of 3);
+  follow-ups Z1–Z4 and R5 in OI-0006
 - TASK-0003 — Remove local information from the tree and history — landed
   `ff51d00`, gates: none @ `8fe2aef`; history of `main` rewritten (tip tree
   `59d2a07` unchanged); iteration 3 of 3; follow-ups K1–K4 in OI-0004
