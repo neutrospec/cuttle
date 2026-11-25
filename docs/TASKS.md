@@ -41,6 +41,35 @@ A closed task becomes one line under Closed:
 
 ## Active
 
+### TASK-0008 — M1.5 interface selection: research and design
+
+- Milestone: M1.5 (new)
+- Status: design
+- Iteration: 1/3
+- Workers: researcher in the main checkout (research note 0003 only), then
+  a designer after TASK-0007 lands
+- Base: `05e6109` plus this board update
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: researcher — write research note 0003 on macOS interface
+  binding, interface state, and network identity
+
+Decisions for TASK-0008 from the user (2026-11-25):
+
+- New requirement (translated): because network cost differs, cuttle
+  chooses among several network interfaces. Example: with NICs A, B, and C
+  in priority order, use B only when A is not online, then C. Some
+  destinations, such as large system updates, may be pinned to B even when
+  A is online. This applies to `direct` routes, not only to upstreams.
+- Placement: a new stage M1.5 after M1.4, before M1 close, so that the M2
+  statistics can show traffic per interface.
+- The user's interfaces: wired Ethernet, Wi-Fi, and phone tethering or a
+  phone hotspot. A phone hotspot joined over Wi-Fi shares the Wi-Fi
+  interface, so cost may depend on the network, not only the interface.
+- "Online" means the link is up with a usable address; a fast connect
+  failure moves to the next interface. No periodic probe traffic.
+
 ### TASK-0007 — M1.4 live operation
 
 - Milestone: M1.4
