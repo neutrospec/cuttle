@@ -74,6 +74,39 @@ Decisions for TASK-0008 from the user (2026-11-25):
 - cuttle supports macOS only, so darwin-only mechanisms are acceptable; cgo
   remains a cost to weigh against pure-Go options.
 
+### TASK-0008 — M1.5 interface selection: research and design
+
+- Milestone: M1.5 (new)
+- Status: review
+- Iteration: 1/3
+- Workers: designer done on branch `t3/interface-selection-design`; fresh
+  reviewer pending
+- Base: `c7ef543`
+- Candidate: `12c6fd0` (tree `b473181`): record 0008, ROADMAP M1.5, design
+  index, glossary, compatibility rows
+- Evidence: designer docs checks passed; orchestrator link check passed on
+  the candidate tree
+- Findings: none yet; 26 changes to other records and 2 open-issue items
+  listed in 0008 for the orchestrator to apply after TASK-0007 lands
+- Next action: reviewer — independent review of `c7ef543..12c6fd0`
+
+Decisions for TASK-0008 from the user (2026-11-25):
+
+- New requirement (translated): because network cost differs, cuttle
+  chooses among several network interfaces. Example: with NICs A, B, and C
+  in priority order, use B only when A is not online, then C. Some
+  destinations, such as large system updates, may be pinned to B even when
+  A is online. This applies to `direct` routes, not only to upstreams.
+- Placement: a new stage M1.5 after M1.4, before M1 close, so that the M2
+  statistics can show traffic per interface.
+- "Online" means the link is up with a usable address; a fast connect
+  failure moves to the next interface. No periodic probe traffic.
+- The user's interfaces are one Wi-Fi interface joined to one fixed
+  network, two Ethernet interfaces, and two USB-tethered phones. Interfaces
+  of the same kind must be distinguishable; no hotspot joins over Wi-Fi.
+- cuttle supports macOS only, so darwin-only mechanisms are acceptable; cgo
+  remains a cost to weigh against pure-Go options.
+
 ### TASK-0007 — M1.4 live operation
 
 - Milestone: M1.4
@@ -116,6 +149,9 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0007 — M1.4 live operation — landed `106ecd7`, gates: T0 T1 @
+  `be7aceb`; reviewed tree `b1febdc` (iteration 2 of 3); follow-ups
+  M-R1–M-R4 in OI-0006
 - TASK-0006 — M1.3 upstreams and chaining — landed `f53073d`, gates: T0 T1 @
   `6739d92`; reviewed tree `ad5772e` (iteration 3 of 3); follow-ups W-R1–W-R2
   in OI-0006
