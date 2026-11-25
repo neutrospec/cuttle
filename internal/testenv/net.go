@@ -19,6 +19,7 @@ type Net struct {
 	routes    map[netip.AddrPort]netip.AddrPort
 	blackhole map[netip.Addr]bool
 	holePorts map[netip.AddrPort]bool
+	limits    map[netip.AddrPort]int
 	events    []Event
 }
 
@@ -50,7 +51,18 @@ func NewNet() *Net {
 		routes:    map[netip.AddrPort]netip.AddrPort{},
 		blackhole: map[netip.Addr]bool{},
 		holePorts: map[netip.AddrPort]bool{},
+		limits:    map[netip.AddrPort]int{},
 	}
+}
+
+// LimitWrites makes each connection dialed to the test address accept at
+// most n bytes of writes in total. The write that crosses the limit passes
+// only the bytes up to it and fails with ECONNRESET, and the connection
+// closes, so a test knows exactly which bytes a socket write accepted.
+func (n *Net) LimitWrites(test string, limit int) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.limits[netip.MustParseAddrPort(test)] = limit
 }
 
 // Map makes name resolve to addrs, in order.
@@ -179,6 +191,7 @@ func (n *Net) LookupNetIP(ctx context.Context, host string) ([]netip.Addr, error
 func (n *Net) DialContext(ctx context.Context, addr netip.AddrPort) (net.Conn, error) {
 	n.mu.Lock()
 	real, ok := n.routes[addr]
+	limit, limited := n.limits[addr]
 	hole := n.blackhole[addr.Addr()] || n.holePorts[addr]
 	n.events = append(n.events, Event{Op: "dial", Addr: addr})
 	n.mu.Unlock()
@@ -197,7 +210,34 @@ func (n *Net) DialContext(ctx context.Context, addr netip.AddrPort) (net.Conn, e
 	if err != nil {
 		return nil, opErr(fmt.Errorf("route to %s: %w", real, err))
 	}
+	if limited {
+		return &limitConn{Conn: c, left: limit}, nil
+	}
 	return c, nil
+}
+
+// limitConn accepts a limited number of written bytes (Net.LimitWrites).
+type limitConn struct {
+	net.Conn
+	mu   sync.Mutex
+	left int
+}
+
+func (c *limitConn) Write(b []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(b) <= c.left {
+		n, err := c.Conn.Write(b)
+		c.left -= n
+		return n, err
+	}
+	n, err := c.Conn.Write(b[:c.left])
+	c.left -= n
+	if err == nil {
+		err = &net.OpError{Op: "write", Net: "tcp", Addr: c.RemoteAddr(), Err: syscall.ECONNRESET}
+	}
+	c.Conn.Close()
+	return n, err
 }
 
 // SelfAddrs returns the injected own address of the test host,

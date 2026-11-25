@@ -160,26 +160,26 @@ whose name starts with `X-Forwarded`, with or without a following dash
 `Proxy-Client-IP`, `WL-Proxy-Client-IP`, `X-ProxyUser-Ip`,
 `X-Remote-Addr`, `X-Remote-IP`, `X-Envoy-External-Address`,
 `X-BlueCoat-Via`, `CDN-Loop`, and `Proxy-Status`. The user asked in
-TASK-0006 that client-sent trace fields beyond the first list, such as
-`X-Forwarded`, `Forwarded-For`, and `CDN-Loop`, be removed as well. Names
-match without regard to case and with `_` read as `-`, because some
-servers treat `X_Forwarded_For` as `X-Forwarded-For`. A listed name or
-prefix also matches behind an `http-` prefix after that normalization, as
-CGI-style servers spell `HTTP_X_FORWARDED_FOR` and `HTTP_CLIENT_IP`. No
-list of trace fields is complete: the non-disclosure guarantee covers the
-names and prefixes listed here, and a client field under any other name
-passes like other client fields. One function in `internal/proxy`, the
-disclosure filter, deletes them all from a header set. It is called from
-one place for each path: the plain-HTTP `Rewrite` and the `CONNECT` head
-writer (D3), on `direct` and `disclosure = "none"` routes. It removes the
-client's own copies as well, because any of these fields reaching the
-egress proxy would disclose an intermediary, whoever added it. `Rewrite`
-also applies it to the request's trailer keys: Go's `ReverseProxy`
-declares a request's trailer keys in `Trailer` but sends no trailer values
-([0002 D5][d2-5]), and the filter keeps disclosure names out of that
-declaration. On `disclosure = "via"` routes the filter does not run: the
-client's fields pass and cuttle adds its own `Via` entry, because the last
-hop before the egress proxy filters them anyway.
+TASK-0006 that client-sent fields that reveal a hop beyond the first list,
+such as `X-Forwarded`, `Forwarded-For`, and `CDN-Loop`, be removed as
+well. Names match without regard to case and with `_` read as `-`, because
+some servers treat `X_Forwarded_For` as `X-Forwarded-For`. A listed name
+or prefix also matches behind an `http-` prefix after that normalization,
+as CGI-style servers spell `HTTP_X_FORWARDED_FOR` and `HTTP_CLIENT_IP`. No
+list of fields that reveal a hop is complete: the non-disclosure guarantee
+covers the names and prefixes listed here, and a client field under any
+other name passes like other client fields. One function in
+`internal/proxy`, the disclosure filter, deletes them all from a header
+set. It is called from one place for each path: the plain-HTTP `Rewrite`
+and the `CONNECT` head writer (D3), on `direct` and `disclosure = "none"`
+routes. It removes the client's own copies as well, because any of these
+fields reaching the egress proxy would disclose an intermediary, whoever
+added it. `Rewrite` also applies it to the request's trailer keys: Go's
+`ReverseProxy` declares a request's trailer keys in `Trailer` but sends no
+trailer values ([0002 D5][d2-5]), and the filter keeps disclosure names
+out of that declaration. On `disclosure = "via"` routes the filter does
+not run: the client's fields pass and cuttle adds its own `Via` entry,
+because the last hop before the egress proxy filters them anyway.
 
 The list above is the minimum. Each other way a proxy can disclose itself
 is decided:
@@ -260,7 +260,9 @@ Limits:
   parse them. It drops a member that ends inside an unterminated quoted
   string, so that it cannot swallow cuttle's own member, but copies any
   other invalid structured-field syntax verbatim. A strict RFC 8941 parser
-  may then reject the whole `Proxy-Status` field (TASK-0006 V-R6).
+  may then reject the whole `Proxy-Status` field (TASK-0006 V-R6). It also
+  drops bytes outside 0x20–0x7E from the copied members and trims spaces
+  and tabs around each member.
 
 ### D7. Timeouts
 
@@ -323,8 +325,12 @@ by another upstream.
   without a dial, ends as `up` when it relays a response, and otherwise
   leaves the upstream due for another probe. cuttle sends no background
   probes (D5).
-- **Reload.** An upstream whose settings are unchanged keeps its state; a
-  changed or new upstream starts `up`.
+- **Reload.** An upstream whose settings are unchanged keeps its state
+  and its transport with the pooled connections; a changed or new upstream
+  starts `up` with a new transport. A replaced or removed upstream still
+  serves the requests and tunnels that already use it, but its state no
+  longer changes or reaches the gauges, and its idle connections close. A
+  removed upstream's `upstream_state` gauges are deleted.
 - **Logs and counters.** The change to `down` logs one warning:
   `msg="upstream unreachable" upstream=gateway address=10.8.0.6:3128
   error=connection_timeout hold=5s`. A failed probe starts a new hold
@@ -337,7 +343,9 @@ by another upstream.
   `upstream_outcomes_total` count outcome `unavailable`, and the
   `upstream_state` gauge shows which of `up`, `down`, and `probing` holds
   ([0002 D7][d2-7]). `cuttle status` and the admin overview list each
-  upstream's state, since when, and the last error. Statistics count held
+  upstream's state, since when, how long it has been down while `down` or
+  `probing`, the `failed_fast` count of the current or last outage, and
+  the last error ([0006 D4][d6-4]). Statistics count held
   requests as failures ([0005 D1][d5-1]).
 
 In a chain each hop holds only its own upstream. If the gateway cannot
@@ -358,7 +366,9 @@ plain HTTP, the edge relays the gateway's `503` unchanged (D6).
 - A non-loopback listener requires a non-empty `proxy.remote.sources`. If it
   fails to bind, for example because the private link is down at login,
   cuttle logs a warning and retries every 30 s while the other listeners
-  serve.
+  serve; later failures log at `debug`. Once it binds, cuttle logs
+  `listener bound` and serves it. A configuration whose listeners are all
+  non-loopback starts with every listener retrying.
   `cuttle status` shows the listener as `retrying` with the error.
 - Listener changes take effect at the next start
   ([0004 D6][d4-6]).
@@ -373,9 +383,15 @@ plain HTTP, the edge relays the gateway's `503` unchanged (D6).
   even a loopback one such as `::1%lo0`. A warning naming the source
   address is logged at most once per source per minute, within the
   warning budget of D12.
-- The handler checks the source again for each request, so after a reload
-  removes a source, the next request on a kept-alive connection gets no
-  response and the connection is closed.
+- The handler checks the source again for each request, against the
+  snapshot that request uses, so after a reload removes a source, the next
+  request on a kept-alive connection gets no response and the connection
+  is closed. It logs the rejected-source warning within the budget of D12
+  and writes no decision line. The connection was already counted in
+  `connections_total` on accept, so `connections_rejected_total` does not
+  count it again. Tunnels and upgraded connections from that source carry
+  no further requests and continue until they close or reach the idle
+  timeout ([0004 D6][d4-6]).
 - Remote clients may use only the ports in `proxy.remote.ports` (default
   `[80, 443]`); RFC 9110 asks for `CONNECT` port limits, and only a remote
   instance is exposed ([research 0002 §7][r2-7]). Other ports get `403`
@@ -729,6 +745,7 @@ deployment of D13 ([OI-0001][oi]).
 [d4-3]: 0004-configuration-and-reload.md#d3-schema
 [d4-6]: 0004-configuration-and-reload.md#d6-reload
 [d5-1]: 0005-statistics-and-admin.md#d1-recorded-data
+[d6-4]: 0006-packaging-paths-and-lifecycle.md#d4-control-socket
 [d6-6]: 0006-packaging-paths-and-lifecycle.md#d6-signals-and-shutdown
 [oi]: ../OPEN_ISSUES.md
 [r2]: ../research/0002-proxy-chaining-and-interception.md

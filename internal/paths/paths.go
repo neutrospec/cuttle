@@ -7,6 +7,7 @@ package paths
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -70,6 +71,28 @@ func Resolve(lookupEnv func(string) (string, bool)) (Paths, error) {
 		}
 	}
 	return p, nil
+}
+
+// WithPresence returns p with "; missing" added to the password source when
+// the password file does not exist, as cuttle paths and cuttle status show
+// it (design 0006 D1).
+func (p Paths) WithPresence() Paths {
+	if _, err := os.Stat(p.Password.Path); errors.Is(err, fs.ErrNotExist) {
+		p.Password.Source += "; missing"
+	}
+	return p
+}
+
+// Items returns the paths with their names, in the order cuttle paths
+// prints them.
+func (p Paths) Items() []NamedItem {
+	return []NamedItem{{"config", p.Config}, {"password", p.Password}, {"stats", p.Stats}, {"log", p.Log}, {"control", p.Control}}
+}
+
+// NamedItem is one path with its name.
+type NamedItem struct {
+	Name string
+	Item
 }
 
 // xdgDir uses the variable when it is non-empty and absolute, and the

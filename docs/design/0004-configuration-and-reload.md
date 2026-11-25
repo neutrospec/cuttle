@@ -245,18 +245,25 @@ Triggers: `SIGHUP`, `cuttle reload` through the control socket
 ([0006 D4][d6-4]), and saving on the settings page
 ([0005 D10][d5-10]).
 
-1. Read and validate the file. On failure, keep the running configuration,
-   log the errors, and return them to the caller.
+1. Read and validate the file, and refuse it as startup does when it is
+   writable by group or others or owned by another user
+   ([0006 D2][d6-2]). On failure, keep the running configuration, log the
+   errors, and return them to the caller. `cuttle status` shows them as
+   `last_reload_error` until a reload succeeds.
 2. Build a new immutable policy snapshot: compiled rules, remote settings,
    upstream table, timeouts, and name.
 3. Keep the transport and reachability state of each upstream whose
-   `address`, `disclosure`, and timeouts are unchanged. Create new ones for the
-   rest, close the idle connections of the replaced transports, and create
-   new direct transports for the snapshot.
+   settings, `address`, `disclosure`, the timeouts, and
+   `unreachable_hold`, are unchanged under the same name. Create new ones
+   for the rest, close the idle connections of the replaced transports,
+   and create new direct transports for the snapshot
+   ([0003 D8][d3-8]).
 4. Swap the snapshot pointer atomically. Apply `log.level` and `[stats]`
    settings.
-5. Record which restart-only keys differ from the running values. `cuttle
-   status` and the settings page list them as `restart_required`.
+5. Record which restart-only keys, `proxy.listen` and `admin.listen`,
+   differ from the values the instance started with. `cuttle status`,
+   `cuttle reload`, and the settings page list them as
+   `restart_required`.
 
 In-flight work:
 
@@ -266,7 +273,8 @@ In-flight work:
 - The next request on a kept-alive plain-HTTP connection uses the new
   snapshot, and its source is checked again ([0003 D10][d3-10]). Pooled
   outbound connections are reused only within their snapshot's transports
-  ([0002 D5][d2-5]).
+  ([0002 D5][d2-5]), except that an upstream kept in step 3 keeps its
+  transport and pool.
 
 ### D7. Atomic write
 
@@ -328,5 +336,6 @@ The target always exists, holding the old or the new content.
 [d5-3]: 0005-statistics-and-admin.md#d3-retention-and-size
 [d5-10]: 0005-statistics-and-admin.md#d10-settings
 [d6-1]: 0006-packaging-paths-and-lifecycle.md#d1-paths
+[d6-2]: 0006-packaging-paths-and-lifecycle.md#d2-permissions
 [d6-4]: 0006-packaging-paths-and-lifecycle.md#d4-control-socket
 [d7-4]: 0007-test-environment-and-gates.md#d4-instances-chains-and-loops

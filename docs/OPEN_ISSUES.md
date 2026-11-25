@@ -201,7 +201,11 @@ Move resolved items to Closed with their resolving commit or evidence.
     the remote upstream route is left to the M1.3 chain tests (U6, U8,
     U12). The roadmap's M1.2 row no longer promises the retry, and the M1.4
     row now says that a non-loopback listener that cannot bind is retried
-    and shows as retrying (N7).
+    and shows as retrying (N7). The retry itself is settled in TASK-0007
+    (M1.4): `TestListenerBindRetry` shows `192.0.2.1` as `retrying` in
+    `cuttle status` while the loopback listener serves, a busy loopback
+    listener still stops startup, and a retried listener that binds later
+    serves remote clients.
   - V2 (implementer): add checks that client-sent `Forwarded` and
     `X-Forwarded-*` fields pass unchanged on `disclosure = "via"` routes,
     on the CONNECT head and the plain-HTTP copy-back (U1, U5). Add an
@@ -282,7 +286,14 @@ Move resolved items to Closed with their resolving commit or evidence.
     neither closes nor logs it, and no idle limit applies to it, so 0006
     D6 step 4 and P5 need such upgraded connections tracked like tunnels.
     The C13 remainder of 0002 D7 belongs to the same stage: socket-exact
-    plain-HTTP `up`, and exact totals after a `101`.
+    plain-HTTP `up`, and exact totals after a `101`. Settled in TASK-0007
+    (M1.4): an upgraded connection is tracked like a tunnel, listed in
+    status with kind `upgrade`, closed by the idle limit, and closed by
+    `Shutdown` with outcome `shutdown` (0002 D5, 0006 D6,
+    `TestUpgradedConnections`). Plain-HTTP `up` is counted as the outbound
+    socket writes accept body bytes, and after a `101` every byte written to
+    either side counts, so the totals are exact (0002 D7,
+    `TestHTTPByteCounters`, `TestUpMeter`).
   - Z1–Z4 (from the TASK-0004 final re-check): Z1 (implementer, M1.2):
     the `proxy.remote.sources` `/0` warning, the "repeats rule" warnings,
     and `rule` or `upstream` elements after a non-table element still name
@@ -298,7 +309,11 @@ Move resolved items to Closed with their resolving commit or evidence.
     log directory is recreated only after restart, and whether the
     rotation failure count is shown by `cuttle status`. Z4 (implementer,
     only if it flakes): relax the lower bound in
-    `TestHTTPClientClosesMidBody`.
+    `TestHTTPClientClosesMidBody`. Z3 is settled in TASK-0007 (M1.4):
+    0006 D4 and D7 show the count as `log.rotation_failures` in `cuttle
+    status` and state that lines written to a deleted file before the next
+    rotation are lost and that a deleted log directory is recreated only
+    at the next start.
   - G1–G2 (from the TASK-0005 final re-check; implementer, next change
     to `internal/proxy/warn.go`): G1, the comments at `warn.go:35-36` and
     `:126-127` say "within the interval" where the code and 0003 D12 use a
@@ -311,13 +326,15 @@ Move resolved items to Closed with their resolving commit or evidence.
     that `splitMembers` drops bytes outside 0x20–0x7E and trims members.
     W-R2 (implementer, optional): send a harmless `HTTP_USER_AGENT` field
     in TestHTTPDirect "raw client disclosure fields" and assert it arrives.
-- Next action: orchestrator — include V1–V12, P1, and W1–W3 in the first M1
-  task brief; the producer closes each item with the commit that settles
-  it. Include R5 and the C13 remainder of 0002 D7 (socket-exact plain-HTTP
-  `up`, exact totals after a `101`) in the M1.4 brief. Also include the
-  per-request source recheck of 0003 D10, second bullet, with N5: M1.2
-  (TASK-0005) classifies sources only on accept, because nothing can
-  change the allowlist before `cuttle reload` exists.
+    Both settled in TASK-0007 (M1.4): 0003 D5 says "fields that reveal a
+    hop", the D6 known limit notes what `splitMembers` drops and trims,
+    and `TestHTTPDirect` checks that `HTTP_USER_AGENT` arrives.
+- Next action: orchestrator — include the open items (V4–V6, V8, V11,
+  V12, P1, W1–W3, Z2, Z4, and G1–G2) in the briefs of the stages they
+  affect; the producer closes each item with the commit that settles it.
+  The M1.4 items, R5 with the C13 remainder, the per-request source
+  recheck of 0003 D10 with N5, the bind retry of V1, Z3, W-R1, and W-R2,
+  are settled in TASK-0007.
 
 ## Closed
 

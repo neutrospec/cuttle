@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/netip"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -94,6 +95,20 @@ func (c *Config) PolicySettings() policy.Settings {
 		RemotePorts:       c.Proxy.Remote.Ports,
 		RemoteAllowDirect: c.Proxy.Remote.AllowDirect,
 	}
+}
+
+// RestartRequired lists the restart-only keys whose values in next differ
+// from the running ones (design 0004 D3, D6 step 5): proxy.listen and
+// admin.listen.
+func RestartRequired(running, next *Config) []string {
+	out := []string{}
+	if !slices.Equal(running.Proxy.Listen, next.Proxy.Listen) {
+		out = append(out, "proxy.listen")
+	}
+	if running.Admin.Listen != next.Admin.Listen {
+		out = append(out, "admin.listen")
+	}
+	return out
 }
 
 // Upstream returns the named upstream.

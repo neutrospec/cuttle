@@ -54,7 +54,7 @@ func (p *Proxy) establish(w http.ResponseWriter, ex *exchange, server net.Conn, 
 	}
 	ex.status = http.StatusOK
 
-	t := &tunnel{client: client, server: server}
+	t := &tunnel{client: client, server: server, ex: ex}
 	if !p.track(t) {
 		t.closeBoth()
 		ex.outcome = OutcomeShutdown
@@ -72,9 +72,18 @@ func (p *Proxy) establish(w http.ResponseWriter, ex *exchange, server net.Conn, 
 	p.finish(ex)
 }
 
-// track registers a tunnel so Shutdown can close it. It returns false once
-// shutdown has started.
-func (p *Proxy) track(t *tunnel) bool {
+// tracked is a client connection that net/http no longer tracks once the
+// handler took it: a CONNECT tunnel, or a connection upgraded after a 101.
+// Shutdown closes each one, which then logs outcome shutdown, and status
+// lists them (design 0002 D7, 0006 D6).
+type tracked interface {
+	shutdown()
+	status() TunnelStatus
+}
+
+// track registers a connection so Shutdown can close it. It returns false
+// once shutdown has started.
+func (p *Proxy) track(t tracked) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.closing {
@@ -84,19 +93,65 @@ func (p *Proxy) track(t *tunnel) bool {
 	return true
 }
 
-func (p *Proxy) untrack(t *tunnel) {
+func (p *Proxy) untrack(t tracked) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	delete(p.tunnels, t)
 }
 
+// trackedStatus describes the exchange of a tracked connection.
+func trackedStatus(ex *exchange, kind string) TunnelStatus {
+	return TunnelStatus{
+		Target:   ex.target,
+		Kind:     kind,
+		Action:   ex.d.Action.String(),
+		Upstream: ex.d.Upstream,
+		Source:   ex.source.String(),
+		Started:  ex.start,
+		Up:       ex.up.Load(),
+		Down:     ex.down.Load(),
+	}
+}
+
+// watchIdle calls closeFn once no activity was recorded in last, in unix
+// nanoseconds, for idle; 0 disables it. The returned function stops the
+// watch.
+func watchIdle(last *atomic.Int64, idle time.Duration, closeFn func()) (stop func()) {
+	if idle <= 0 {
+		return func() {}
+	}
+	done := make(chan struct{})
+	go func() {
+		timer := time.NewTimer(idle)
+		defer timer.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-timer.C:
+				since := time.Since(time.Unix(0, last.Load()))
+				if since >= idle {
+					closeFn()
+					return
+				}
+				timer.Reset(idle - since)
+			}
+		}
+	}()
+	var once sync.Once
+	return func() { once.Do(func() { close(done) }) }
+}
+
 // tunnel relays bytes between a client and its next hop (design 0002 D5).
 type tunnel struct {
 	client, server net.Conn
+	ex             *exchange
 	closeOnce      sync.Once
 	wasShutdown    atomic.Bool
 	last           atomic.Int64 // unix nanoseconds of the last write
 }
+
+func (t *tunnel) status() TunnelStatus { return trackedStatus(t.ex, "connect") }
 
 func (t *tunnel) closeBoth() {
 	t.closeOnce.Do(func() {
@@ -135,27 +190,7 @@ func (t *tunnel) relay(pipelined, early []byte, idle time.Duration, count func(d
 			return
 		}
 	}
-	if idle > 0 {
-		stop := make(chan struct{})
-		defer close(stop)
-		go func() {
-			timer := time.NewTimer(idle)
-			defer timer.Stop()
-			for {
-				select {
-				case <-stop:
-					return
-				case <-timer.C:
-					since := time.Since(time.Unix(0, t.last.Load()))
-					if since >= idle {
-						t.closeBoth()
-						return
-					}
-					timer.Reset(idle - since)
-				}
-			}
-		}()
-	}
+	defer watchIdle(&t.last, idle, t.closeBoth)()
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() { defer wg.Done(); t.copy(t.server, t.client, "up", count) }()
