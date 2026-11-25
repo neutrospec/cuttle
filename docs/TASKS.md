@@ -44,14 +44,15 @@ A closed task becomes one line under Closed:
 ### TASK-0003 — Remove local information from the tree and history
 
 - Milestone: none (prepares publication)
-- Status: queued until TASK-0002 lands
+- Status: implement
 - Iteration: 1/3
 - Workers: infra, in the main checkout with no other writer
-- Base: the commit that lands TASK-0002
+- Base: `ab8125b` plus this board update
 - Candidate: none
-- Evidence: none
+- Evidence: the current tree has no local information (orchestrator scan)
 - Findings: none
-- Next action: orchestrator — dispatch infra after TASK-0002 lands
+- Next action: infra — add `.gitignore` and `.env.example`, back up and
+  rewrite the branch history, and report the old-to-new commit map
 
 Decisions for TASK-0003 from the user (2026-11-25):
 
