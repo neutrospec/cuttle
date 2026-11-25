@@ -64,13 +64,11 @@ Decisions for TASK-0008 from the user (2026-11-25):
   A is online. This applies to `direct` routes, not only to upstreams.
 - Placement: a new stage M1.5 after M1.4, before M1 close, so that the M2
   statistics can show traffic per interface.
-- The user's interfaces: wired Ethernet, Wi-Fi, and phone tethering or a
-  phone hotspot. A phone hotspot joined over Wi-Fi shares the Wi-Fi
-  interface, so cost may depend on the network, not only the interface.
 - "Online" means the link is up with a usable address; a fast connect
   failure moves to the next interface. No periodic probe traffic.
-- The user has two Ethernet interfaces and two tethering connections;
-  interfaces of the same kind must be distinguishable.
+- The user's interfaces are one Wi-Fi interface joined to one fixed
+  network, two Ethernet interfaces, and two USB-tethered phones. Interfaces
+  of the same kind must be distinguishable; no hotspot joins over Wi-Fi.
 
 ### TASK-0007 — M1.4 live operation
 
