@@ -153,6 +153,10 @@ quick check yourself.
    - Reviewers concentrate on correctness, security, privacy, and the
      acceptance criteria. They report a test gap only when a plausible
      defect would go unnoticed, not to complete coverage.
+   - The operator who writes the configuration and reads cuttle's local
+     output is trusted. Security and privacy findings concern remote
+     clients, web content in the browser, other local users, the upstream
+     chain, and what reaches tracked files.
    - Blocking and major findings, and medium findings on security or
      privacy, return the change for one fix round and a re-check of the
      fixes only.
