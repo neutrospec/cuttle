@@ -44,18 +44,16 @@ A closed task becomes one line under Closed:
 ### TASK-0008 — M1.5 interface selection: research and design
 
 - Milestone: M1.5 (new)
-- Status: design
+- Status: review
 - Iteration: 3/3
-- Workers: designer on branch `t3/interface-selection-design`; iteration 2
-  reviewer done
+- Workers: designer done on branch `t3/interface-selection-design`; fresh
+  final re-check pending
 - Base: merge `e0c4979` of `main` at `508f50e`
-- Candidate: `328778b` (tree `1610faf`), approved with minor fixes
-- Evidence: reviewer ran the new T0 dependency and no-cgo checks (pass),
-  verified constants and SDK headers, and scanned MACs and links
-- Findings: open J-R1 (MAC values via TOML syntax errors and `device`),
-  J-R2 (`iface.Source` seam), J-R3 (upstream pools after a definition
-  change), J-R4 (VPN bypass, document only), J-R5-J-R14 (nits)
-- Next action: designer — fix J-R1-J-R14, then a fresh final re-check
+- Candidate: `ee09211` (tree `4033ed7`) on top of `328778b`
+- Evidence: designer docs checks passed; orchestrator link check passed on
+  the candidate tree
+- Findings: J-R1-J-R14 reported fixed, pending the final re-check
+- Next action: reviewer — fresh final re-check of `328778b..ee09211`
 
 Decisions for TASK-0008 from the user (2026-11-25):
 
