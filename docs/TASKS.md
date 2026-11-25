@@ -44,17 +44,19 @@ A closed task becomes one line under Closed:
 ### TASK-0006 — M1.3 upstreams and chaining
 
 - Milestone: M1.3
-- Status: review
-- Iteration: 1/3
-- Workers: implementer done on branch `t3/implement-upstream-chaining`;
-  fresh reviewer pending
+- Status: implement
+- Iteration: 2/3
+- Workers: implementer on branch `t3/implement-upstream-chaining`;
+  iteration 1 reviewer done
 - Base: `8c2e801`
-- Candidate: `00d9465` (tree `360b6bf`)
-- Evidence: implementer ran `scripts/gate t0` and `t1` on `360b6bf`, both
-  pass; nine mutation checks fail their targeted tests
-- Findings: none yet; implementer lists 10 design questions
-- Next action: reviewer — independent review of `8c2e801..00d9465` with a
-  gate rerun
+- Candidate: `00d9465` (tree `360b6bf`), approved with minor fixes
+- Evidence: reviewer reran T0, T1, and `-race -count=5` on the proxy
+  package (pass); no non-disclosure leak found on any probed path
+- Findings: open U-R1 (Connection-listed fields copied back on via
+  routes), U-R2-U-R6 (test and mock gaps), U-R8 (nit); U-R7 and design
+  questions decided below
+- Next action: implementer — fix the findings with the decisions below,
+  rerun T0 and T1, then a fresh re-check
 
 Decisions for TASK-0006 (2026-11-25):
 
@@ -62,6 +64,17 @@ Decisions for TASK-0006 (2026-11-25):
   unreachable hold for plain HTTP), and the M1.3 parts of V4 (recording
   upstreams answer 403 outside `cuttle.test`). G1 and G2 go with any change
   to `internal/proxy/warn.go`.
+- Iteration 2 (orchestrator): the disclosure filter also removes client
+  fields whose names start with `x-forwarded` (with or without a dash) and
+  `forwarded-for`, `x-original-forwarded-for`, `x-client-ip`, and
+  `x-cluster-client-ip`. Decision lines for an upstream status record
+  `upstream_status=<code>`. `upstream_state{upstream,state}` is a 0/1 gauge
+  in 0002 D7. Accepted as built and to be recorded in the design: the
+  upstream `connect_timeout` covers the lookup; a close or reset before the
+  CONNECT answer is 502 `connection_refused` and not held; a relayed
+  pooled response ends a probe; the hold log fields `down` and
+  `failed_fast`; cuttle's own bodies may name the upstream; the V3 wording
+  in 0003 D4.
 
 ## Closed
 
