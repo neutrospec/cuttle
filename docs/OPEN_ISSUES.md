@@ -7,44 +7,47 @@ Move resolved items to Closed with their resolving commit or evidence.
 
 ## Open
 
-### OI-0001 — Real corporate proxy and office VPN behavior
+### OI-0001 — Real egress proxy and private link in the example deployment
 
 - Origin: TASK-0001 design, [0003 assumptions][d3-a] A1–A4 and the
-  [WireGuard cases of 0003 D13][d3-13]; research 0002
+  [private-link cases of 0003 D13][d3-13]; research 0002
   [open question 6][r2-oq].
 - Affected milestone: M3.3.
 - Iterations used: none; recorded in TASK-0001 iteration 1 and revised in
   iteration 2.
-- Responsible step: test, run by the user on the office Mac and at home.
+- Responsible step: test, run by the user on the gateway and edge machines
+  of the example deployment in [0003 D13][d3-13].
 - Status: open.
-- Blocking reason: Only the user can reach the corporate proxy and the VPN,
-  and research was not allowed to contact a real proxy. The user requires
-  that requests reach the corporate proxy without any trace of a proxy, so
-  the design uses `trace = "none"` toward it and assumes the proxy accepts
-  such requests with standard header handling. It also assumes the
-  re-signed leaves meet Safari's requirements, a listener bound to the
-  WireGuard address survives a tunnel restart, and the macOS firewall
-  prompt appears on the first non-loopback bind. Whether the home
-  WireGuard server routes or masquerades home LAN traffic is unknown.
+- Blocking reason: Only the user can reach that egress proxy and private
+  link, and research was not allowed to contact a real proxy. The user
+  requires that requests reach the egress proxy without disclosing an
+  intermediary, so the design uses `disclosure = "none"` toward it and
+  assumes the proxy accepts such requests with standard header handling.
+  It also assumes the re-signed leaves meet Safari's requirements, a
+  listener bound to the private-link address survives a link restart, and
+  the macOS firewall prompt appears on the first non-loopback bind. Whether
+  the edge-side link server routes or masquerades edge LAN traffic is
+  unknown.
 - Next action: tester — give the user steps to:
-  1. Start office cuttle with the placeholder `sources = ["192.0.2.1/32"]`,
-     send one request from the home Mac through home cuttle, and read the
-     office log's rejected-source warning: the home Mac's LAN address means
-     routed, the WireGuard server's tunnel address means NAT. Set `sources`
-     accordingly.
-  2. Confirm `trace = "none"` against the real corporate proxy: load a few
-     office-only sites in office Chrome directly through the corporate
-     proxy, then from home Chrome and curl through home → office cuttle,
-     and record that each succeeds or fails the same way. Before that,
-     point office cuttle's `corp` upstream at a local recording mock once
-     and confirm that the recorded requests carry no trace of the cuttle
-     hops.
-  3. Record how the corporate proxy refuses a site and its `CONNECT`
-     timeout, and run
-     `openssl s_client -proxy <corp>:<port> -connect <site>:443 -showcerts`
+  1. Start the gateway instance with the placeholder
+     `sources = ["192.0.2.1/32"]`, send one request from the edge machine
+     through the edge instance, and read the gateway log's rejected-source
+     warning: the edge machine's LAN address means routed, the link
+     server's address means NAT. Set `sources` accordingly.
+  2. Confirm `disclosure = "none"` against the real egress proxy: load a
+     few restricted destinations in Chrome on the gateway machine directly
+     through the egress proxy, then from Chrome and curl on the edge
+     machine through the edge → gateway chain, and record that each
+     succeeds or fails the same way. Before that, point the gateway
+     instance's `egress` upstream at a local recording mock once and
+     confirm that the recorded requests disclose neither cuttle hop.
+  3. Record how the egress proxy refuses a site and its `CONNECT` timeout,
+     and run
+     `openssl s_client -proxy <egress>:<port> -connect <site>:443 -showcerts`
      to record SAN, EKU, and validity.
-  4. Restart the WireGuard tunnel under a bound office listener and connect
-     from home; note any firewall prompt, also after an upgrade.
+  4. Restart the private link under a bound gateway listener and connect
+     from the edge machine; note any firewall prompt, also after an
+     upgrade.
 
 ### OI-0002 — Safari and CFNetwork behavior unverified
 
@@ -63,7 +66,7 @@ Move resolved items to Closed with their resolving commit or evidence.
   [0007 D8 M3 matrix][d7-8], recording the IPv6 `CONNECT` spelling, the
   error UI for `403`, `502`, and `504`, for `ws://` both the proxy entry
   Safari uses and whether it sends `CONNECT` to port 80 or an absolute-form
-  upgrade, whether Safari bypasses loopback, whether the no-trace
+  upgrade, whether Safari bypasses loopback, whether the non-disclosure
   properties hold for Safari, and whether the admin session cookie is kept;
   restore the settings.
 
@@ -108,15 +111,16 @@ Move resolved items to Closed with their resolving commit or evidence.
   settings and should happen only in a disposable account or VM, with user
   approval.
 - Next action: tester — in a disposable account or VM, mark the mockenv
-  corporate root "Always Trust", load the chain case in Chrome without the
-  SPKI flag and in Safari, and run `/usr/bin/curl` without CA options;
+  inspection root CA "Always Trust", load the chain case in Chrome without
+  the SPKI flag and in Safari, and run `/usr/bin/curl` without CA options;
   record the results for the deployment guide.
 
 ### OI-0006 — Design follow-ups from the TASK-0001 final review
 
 - Origin: TASK-0001 iteration 3 review of candidate `3d33f59`, verdict
-  "approve with minor fixes", findings V1–V12. Landed in `ec577ec`.
-- Affected milestones: M1.2, M1.3, and M1 close; V5 also M3.2.
+  "approve with minor fixes", findings V1–V12. Landed in `ec577ec`. P1
+  comes from the TASK-0002 review.
+- Affected milestones: M1.2, M1.3, and M1 close; V5 also M3.2; P1 M3.3.
 - Iterations used: 3 of 3, so the fixes move to the first M1 task instead of
   another design loop.
 - Responsible step: design for wording and criteria, implementer for tests.
@@ -128,19 +132,19 @@ Move resolved items to Closed with their resolving commit or evidence.
     delivered in M1.3; limit N3 to decisions M1.2 can show. Move the
     roadmap's non-loopback bind retry sentence from M1.2 to M1.4.
   - V2 (implementer): add checks that client-sent `Forwarded` and
-    `X-Forwarded-*` fields pass unchanged on `trace = "via"` routes, on the
-    CONNECT head and the plain-HTTP copy-back (U1, U5). Add an `HTTP_PROXY`
-    environment check to C3 or drop the 0002 D5 claim that every row has a
-    check.
+    `X-Forwarded-*` fields pass unchanged on `disclosure = "via"` routes,
+    on the CONNECT head and the plain-HTTP copy-back (U1, U5). Add an
+    `HTTP_PROXY` environment check to C3 or drop the 0002 D5 claim that
+    every row has a check.
   - V3 (design, implementer): check the unreachable hold in the handler
     before `ReverseProxy`, as for CONNECT, and close idle pooled connections
     when an upstream goes down (0003 D4, D8, U11).
   - V4 (implementer, before M1 close): isolate headless Chrome's background
     requests in the M1 client check. mockenv configs use
     `default = "block"` with rules only for `cuttle.test` and loopback,
-    recording upstreams answer 403 outside `cuttle.test`, `check-trace`
-    compares only the case targets and fails on an unmatched one, and the
-    Block evidence names `blocked.cuttle.test`.
+    recording upstreams answer 403 outside `cuttle.test`,
+    `check-disclosure` compares only the case targets and fails on an
+    unmatched one, and the Block evidence names `blocked.cuttle.test`.
   - V5 (design): Go rejects the bracketless IPv6 CONNECT before any handler,
     so the M3 IPv6 row points the client at the recording mock directly, as
     research 0002 did. Tracked with OI-0002.
@@ -153,11 +157,13 @@ Move resolved items to Closed with their resolving commit or evidence.
   - V7 (implementer): mention Go's 500 header-value cap
     (`DefaultMaxHeaderValueCount`) in 0002 D2 and build the C11 60 KiB head
     from fewer than 500 field lines.
-  - V8 (design, docs): wording fixes in 0002 l.218 (`RequestURI` prefixes
-    `scheme:` for `//` opaque values), 0003 l.150–152 and l.596, OI-0001
-    step 2, the 0007 D7 `check-trace` flags, the 0007 D8 chain evidence,
-    0005 A10 "T2-lite", the COMPATIBILITY curl M3 WebSocket cell, and ragged
-    wraps in 0003.
+  - V8 (design, docs): wording fixes in 0002 D5 (the sentence that
+    `RequestURI()` returns `URL.Opaque` unchanged, although it prefixes
+    `scheme:` for `//` opaque values), 0003 D5 (where the disclosure filter
+    is called), the 0003 alternative "Forwarding request heads byte for
+    byte", OI-0001 step 2, the 0007 D7 `check-disclosure` flags, the 0007
+    D8 chain evidence, 0005 A10 "T2-lite", the COMPATIBILITY curl M3
+    WebSocket cell, and ragged wraps in 0003.
   - V9 (implementer): C4 sends the direct request before the block request,
     because cuttle's own responses close the connection.
   - V10 (implementer): add a `/status?code=` endpoint to the mock origin for
@@ -165,13 +171,20 @@ Move resolved items to Closed with their resolving commit or evidence.
   - V11 (docs): add Consequences sections to records 0003–0007 or relax the
     convention in the design README.
   - V12 (design): note `proxy.remote.ports` in the 0003 D13 deployment notes
-    for office-only sites on ports other than 80 and 443.
-- Next action: orchestrator — include V1–V12 in the first M1 task brief;
-  the producer closes each item with the commit that settles it.
+    for restricted destinations on ports other than 80 and 443.
+  - P1 (from the TASK-0002 review; design): a private link can drop a
+    packet whose inner source address it does not expect; WireGuard, for
+    example, drops one that is not in the peer's `AllowedIPs`. In the
+    routed case of 0003 D13 without the edge LAN listed, the request then
+    never reaches the gateway instance, and the D13 observation step shows
+    no rejected-source warning. This is an inference and was not tested.
+    Do not change the design until the inference is confirmed.
+- Next action: orchestrator — include V1–V12 and P1 in the first M1 task
+  brief; the producer closes each item with the commit that settles it.
 
 ## Closed
 
-[d3-13]: design/0003-upstream-chaining-and-exposure.md#d13-home-office-and-corporate-deployment
+[d3-13]: design/0003-upstream-chaining-and-exposure.md#d13-edge-gateway-and-egress-deployment
 [d3-a]: design/0003-upstream-chaining-and-exposure.md#assumptions
 [d5-a]: design/0005-statistics-and-admin.md#assumptions
 [d6-8]: design/0006-packaging-paths-and-lifecycle.md#d8-tap-and-formula

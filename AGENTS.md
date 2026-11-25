@@ -23,6 +23,8 @@ Korean original only when its exact wording matters, and put the translation
 beside it. Code and tests contain non-English text only as test data that
 requires it, such as an internationalized domain name.
 
+Use the project terms defined in the [glossary](docs/GLOSSARY.md).
+
 ## Orchestration and roles
 
 The orchestrator defines the work, assigns roles, resolves scope questions,
@@ -173,3 +175,9 @@ it.
 Use generated fixtures and controlled test destinations. Keep credentials,
 private keys, real traffic captures, and environment-specific artifacts outside
 Git.
+Tracked files never contain real usernames, machine-specific paths, real
+private hostnames or addresses, local time zones, or names of private
+projects. Documentation uses reserved example names and addresses or
+clearly labelled placeholders. Keep real values in an untracked `.env` file
+at the repository root; `.env.example` lists each variable with a
+placeholder.

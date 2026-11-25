@@ -1,5 +1,10 @@
 # 0002 — Proxy chaining, intercepting upstreams, and admin exposure
 
+> **Terminology.** This note keeps its original wording, such as corporate
+> proxy, home and office cuttle, and `trace`. The
+> [glossary mapping table](../GLOSSARY.md#mapping-from-earlier-wording)
+> gives the current terms.
+
 **Task** — TASK-0001. **Milestone** — M1, with deployment input for M2.
 
 This note covers how cuttle should relay CONNECT and absolute-form requests
@@ -32,9 +37,9 @@ the real corporate proxy were not tested.
 ## 1. CONNECT through chained HTTP proxies
 
 **Controlled setup used in every section.** Observations used endpoints on
-127.0.0.1 started from the scratch directory
-`<scratch>/research-0002/`, which
-is outside Git and may be cleaned up. A Go harness (`harness-bin`) provided:
+127.0.0.1 started from the scratch directory `<scratch>/research-0002/`,
+which is outside Git and may be cleaned up. A Go harness (`harness-bin`)
+provided:
 
 - `origin`: an HTTPS echo origin on :18443 and an HTTP echo origin on :18080.
   Its leaf certificate for `*.cuttle.test` came from a throwaway test CA.
@@ -58,8 +63,8 @@ Clients were macOS 27.2.1 (26B131, arm64) with:
   (CFNetwork 3896.200.61);
 - Go 1.27.4 `net/http`.
 
-Times are local time on 2026-11-25. No system proxy setting, keychain, or
-trust setting was changed. Safari itself was not run.
+Observations were made on 2026-11-25. No system proxy setting, keychain,
+or trust setting was changed. Safari itself was not run.
 
 **Semantics.** Any 2xx response to CONNECT means that the sender and all
 inbound proxies switch to tunnel mode right after the response header
@@ -683,7 +688,7 @@ CFNetwork error 310 is `kCFErrorHTTPSProxyConnectionFailure`
 **Safari** was not run. Inference: CFNetwork exposes neither the status nor
 the body of a failed CONNECT, so Safari can show only a generic failure.
 
-**The 407 incident.** At 07:22:51 the CFNetwork probe ran:
+**The 407 incident.** The CFNetwork probe ran:
 
 ```text
 ./cfnet/probe certs/ca.pem ... https://s407.cuttle.test/cf-c407 ...
@@ -692,13 +697,14 @@ the body of a failed CONNECT, so Safari can show only a generic failure.
 It is a command-line binary that uses a per-session proxy dictionary and
 default handling for authentication challenges. It received 407 with
 `Proxy-Authenticate: Basic` and stalled until its 8-second timeout, which the
-recorder's next request at 07:22:59 confirms. The orchestrator then reported
-a proxy authentication dialog on the user's screen. Inference: CFNetwork's
-default handling of a proxy challenge can raise a system credential prompt,
-even for a non-GUI process.
+recorder's next request, 8 seconds later, confirms. The orchestrator then
+reported a proxy authentication dialog on the user's screen. Inference:
+CFNetwork's default handling of a proxy challenge can raise a system
+credential prompt, even for a non-GUI process.
 
-The earlier 407 runs cannot show a macOS dialog: Go `Transport` at 07:13:55,
-curl at 07:14:20, and headless Chrome with `--use-mock-keychain` at 07:15:58.
+The earlier 407 runs cannot show a macOS dialog. They ran before the
+CFNetwork probe, in this order: Go `Transport`, curl, and headless Chrome
+with `--use-mock-keychain`.
 
 **Implications for reporting a policy block.**
 

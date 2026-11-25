@@ -11,13 +11,13 @@ checks actually performed.
 
 ## Proxy
 
-"No trace" means that `mockenv check-trace` passes: requests a mock
-records through home → office with `trace = "none"` carry no trace field of
-[design 0003 D5][nt], not even one the client sent, and no value with an
-instance name or the home client's address, and they match the direct run
-in method, target, and body bytes.
+"Non-disclosure" means that `mockenv check-disclosure` passes: requests a
+mock records through edge → gateway with `disclosure = "none"` carry no
+disclosure field of [design 0003 D5][nd], not even one the client sent,
+and no value with an instance name or the original client address, and they
+match the direct run in method, target, and body bytes.
 
-| Client | Check | Proxy configuration | Direct HTTPS | Direct HTTP | Upstream HTTPS | WebSocket | Block | Chain through an intercepting proxy | No trace | IPv6 literal | Evidence |
+| Client | Check | Proxy configuration | Direct HTTPS | Direct HTTP | Upstream HTTPS | WebSocket | Block | Chain through a TLS-inspecting proxy | Non-disclosure | IPv6 literal | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Chrome on macOS, headless | M1 | `--headless=new --use-mock-keychain`, throwaway profile, `--proxy-server=http://127.0.0.1:<port>`, `--proxy-bypass-list="<-loopback>"` | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Not in M1 | — |
 | `/usr/bin/curl` | M1 | `--proxy http://127.0.0.1:<port>`, `-g` | Pending | Pending | Pending | Not in M1 | Pending | Pending | Pending | Not in M1 | — |
@@ -53,5 +53,5 @@ these are inputs to the design, not recorded compatibility checks.
 Configuration references: [Chromium proxy support](https://chromium.googlesource.com/chromium/src/+/HEAD/net/docs/proxy.md#manual-proxy-settings), [macOS proxy settings](https://support.apple.com/en-am/guide/mac-help/mchlp2591/27/mac/27), [curl `--proxy`](https://curl.se/docs/manpage.html#-x).
 
 [cc]: design/0007-test-environment-and-gates.md#d8-client-checks
-[nt]: design/0003-upstream-chaining-and-exposure.md#d5-no-trace-toward-the-corporate-upstream
+[nd]: design/0003-upstream-chaining-and-exposure.md#d5-non-disclosure-toward-an-egress-proxy
 [oi-2]: OPEN_ISSUES.md#oi-0002--safari-and-cfnetwork-behavior-unverified

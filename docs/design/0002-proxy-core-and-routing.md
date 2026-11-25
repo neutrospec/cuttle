@@ -13,17 +13,17 @@ XDG directories are named `cuttle`. Each HTTPS `CONNECT` tunnel and each plain
 `http://` request is routed by the same rules to `direct`, an upstream proxy,
 or `block`, and the traffic is counted.
 
-The corporate proxy at the end of the home → office chain must not see any
-trace of having been reached through a proxy. A request toward it carries no
-trace of proxying, not even trace fields the client sent itself
-([0003 D5][d3-5]). Beyond that, cuttle follows standard `net/http`
-handling.
+An egress proxy at the end of an edge → gateway → egress chain must not
+see that a request passed through an intermediary. A request toward it
+discloses no intermediary, not even through disclosure fields the client
+sent itself ([0003 D5][d3-5]). Beyond that, cuttle follows standard
+`net/http` handling. Terms are defined in the [glossary](../GLOSSARY.md).
 
 This record defines the proxy listener, authority normalization, rule
 semantics, forwarding, the responses cuttle generates, byte accounting, live
-counters, and the decision log. Upstream trace modes, loop detection, and
-exposure controls are in [0003](0003-upstream-chaining-and-exposure.md). The
-configuration syntax is in [0004](0004-configuration-and-reload.md). The
+counters, and the decision log. Upstream disclosure modes, loop detection,
+and exposure controls are in [0003](0003-upstream-chaining-and-exposure.md).
+The configuration syntax is in [0004](0004-configuration-and-reload.md). The
 control socket and CLI that read live counters are in
 [0006](0006-packaging-paths-and-lifecycle.md).
 
@@ -194,10 +194,11 @@ order an operator reads is the order cuttle applies. `cuttle explain`
   itself ([0003 D3][d3-3]).
 - **Plain HTTP, any route** — `httputil.ReverseProxy` with a `Rewrite`
   function and the route's `http.Transport`. `Rewrite` keeps the client's
-  `Host`, restores the client's raw target (below), and applies the trace
-  rule of [0003 D5][d3-5]: on `direct` and `trace = "none"` routes it
-  removes the trace fields, and on `trace = "via"` routes it adds cuttle's
-  `Via` entry ([0003 D2][d3-2]). The direct transport writes origin-form;
+  `Host`, restores the client's raw target (below), and applies the
+  disclosure rule of [0003 D5][d3-5]: on `direct` and
+  `disclosure = "none"` routes it removes the disclosure fields, and on
+  `disclosure = "via"` routes it adds cuttle's `Via` entry
+  ([0003 D2][d3-2]). The direct transport writes origin-form;
   an upstream transport, whose `Proxy` is fixed to that upstream, writes
   absolute-form ([research 0002 §2][r2-2]).
 - **Responses** pass through `ReverseProxy`'s standard handling. A `407`
@@ -234,9 +235,9 @@ settings.
 
 Standard `net/http` handling applies to everything else: header-name
 canonicalization and order, removal of hop-by-hop fields including
-`Proxy-Connection`, and the body framing that Go chooses. These are not
-traces of a proxy in the sense of [0003 D5][d3-5]. The defaults that would
-add a trace or change the client's content are switched off:
+`Proxy-Connection`, and the body framing that Go chooses. These do not
+disclose an intermediary in the sense of [0003 D5][d3-5]. The defaults that
+would disclose one or change the client's content are switched off:
 
 | Standard behavior | Effect if left on | cuttle |
 | --- | --- | --- |
@@ -245,7 +246,7 @@ add a trace or change the client's content are switched off:
 | `http.Transport` sends `Proxy-Authorization` from proxy URL userinfo | Credentials | Upstream URLs never carry userinfo |
 | `http.ProxyFromEnvironment` | Environment proxies | The direct transport has `Proxy: nil`; an upstream transport has a fixed URL |
 | `ReverseProxy` `Director`, or `SetXForwarded` in `Rewrite` | Adds `X-Forwarded-For` with the client's address | Only `Rewrite`; `SetXForwarded` is never called |
-| `ReverseProxy` with `Rewrite` drops the client's `Forwarded`, `X-Forwarded-For`, `X-Forwarded-Host`, and `X-Forwarded-Proto` (`reverseproxy.go` l.491–494) | Differs between plain HTTP and `CONNECT` | On `direct` and `trace = "none"` routes the trace filter removes them on both paths anyway. On `trace = "via"` routes `Rewrite` copies the client's own back from `pr.In`, so both paths pass client fields alike ([0003 D5][d3-5]). |
+| `ReverseProxy` with `Rewrite` drops the client's `Forwarded`, `X-Forwarded-For`, `X-Forwarded-Host`, and `X-Forwarded-Proto` (`reverseproxy.go` l.491–494) | Differs between plain HTTP and `CONNECT` | On `direct` and `disclosure = "none"` routes the disclosure filter removes them on both paths anyway. On `disclosure = "via"` routes `Rewrite` copies the client's own back from `pr.In`, so both paths pass client fields alike ([0003 D5][d3-5]). |
 | `cleanQueryParams` and `URL.RequestURI()` | Change the target | `Rewrite` restores the raw target (above) |
 | `http.Transport` HTTP/2 | Different protocol on the wire | `ForceAttemptHTTP2: false`; plain HTTP only |
 | `Max-Forwards` processing on `TRACE` and `OPTIONS` (RFC 9110 §7.6.2) | Decrementing or answering reveals a hop | Not implemented: forwarded unchanged ([0003 D5][d3-5]) |
@@ -351,10 +352,10 @@ cuttle writes one `log/slog` text line per completed decision at level
 `info` ([0006 D7][d6-7]):
 
 ```text
-time=2026-11-25T10:01:02.345Z level=INFO msg=decision id=4f2a
+time=2026-11-25T01:01:02.345Z level=INFO msg=decision id=4f2a
 client=10.8.0.1:51234 source=remote kind=connect
-target=wiki.corp.example.com:443 rule=office-only action=upstream
-upstream=corp outcome=ok status=200 up=5321 down=88410 dur=12.402s
+target=wiki.internal.example:443 rule=restricted action=upstream
+upstream=egress outcome=ok status=200 up=5321 down=88410 dur=12.402s
 ```
 
 The line is wrapped here for width; it is one line in the log. Errors add
@@ -422,7 +423,7 @@ All checks are T1 tests run with the mocks in
 | --- | --- | --- |
 | C1 | `CONNECT` with a `direct` rule reaches the HTTPS origin; Go and curl verify the test-CA certificate; a raw client receives exactly `HTTP/1.1 200 Connection established\r\n\r\n` and nothing else before origin bytes. | `TestConnectDirect`, `TestConnectExact200` |
 | C2 | Bytes pipelined after the `CONNECT` head reach the origin. | `TestConnectPipelinedBytes` |
-| C3 | Plain-HTTP `GET` requests for `http://h/a{b}|c?x=1;y=2&z=%zz`, `http://h/q?b=2&a=1;c=3`, `http://h/p?`, and `http://h//x`, and `POST` requests with a `Content-Length` body and with a chunked body, reach the origin with the client's raw path and query (origin-form, and absolute-form for `//x`), the client's `Host`, the client's other end-to-end fields and values, and the same body bytes. The origin receives no trace field of [0003 D5][d3-5], even when the client sent one, and no `Accept-Encoding` or `User-Agent` the client did not send. The response reaches the client with its status and body. `GET http://h/a%zz` gets Go's `400`. | `TestHTTPDirect`, `TestHTTPRawTarget` |
+| C3 | Plain-HTTP `GET` requests for `http://h/a{b}|c?x=1;y=2&z=%zz`, `http://h/q?b=2&a=1;c=3`, `http://h/p?`, and `http://h//x`, and `POST` requests with a `Content-Length` body and with a chunked body, reach the origin with the client's raw path and query (origin-form, and absolute-form for `//x`), the client's `Host`, the client's other end-to-end fields and values, and the same body bytes. The origin receives no disclosure field of [0003 D5][d3-5], even when the client sent one, and no `Accept-Encoding` or `User-Agent` the client did not send. The response reaches the client with its status and body. `GET http://h/a%zz` gets Go's `400`. | `TestHTTPDirect`, `TestHTTPRawTarget` |
 | C4 | Two plain-HTTP requests on one client connection, to hosts with a `direct` and a `block` rule, take those routes and produce two decision lines. | `TestHTTPReusedConnRoutesPerRequest` (Go and curl) |
 | C5 | A `block` rule and a `block` default answer `403` with `Proxy-Status: <name>; error=http_request_denied`, zero lookups and dials in the test network, and zero counted bytes. | `TestBlockRule`, `TestBlockDefault` |
 | C6 | A local client reaches `localhost:3000`, `127.0.0.1:8443`, and a public test address on port 8443 through `direct`; no port policy applies to local clients. | `TestLocalAnyPort` |
@@ -442,7 +443,7 @@ All checks are T1 tests run with the mocks in
   authority and the stream sizes.
 - Request parsing and framing are Go's well-tested code. cuttle's own
   parsing is limited to the `CONNECT` target, the split of the raw
-  plain-HTTP target, and the trace fields.
+  plain-HTTP target, and the disclosure fields.
 - CFNetwork clients that use IPv6 literals fail until OI-0002 shows whether
   Safari needs that form.
 - Operators write rules by name. A rule never matches a site reached by IP
@@ -453,7 +454,8 @@ All checks are T1 tests run with the mocks in
 - **A front end that reads and forwards raw head bytes.** It would keep
   header case and order and accept the bracketless IPv6 form, but it puts
   custom parsing and framing code on the attack surface. The user confirmed
-  that case and order may change; only traces of a proxy matter.
+  that case and order may change; only disclosure of an intermediary
+  matters.
 - **Glob or regular-expression patterns.** `*.example.com` versus
   `.example.com` conventions differ between tools; separate `hosts` and
   `domains` lists have no ambiguity.
@@ -465,7 +467,7 @@ All checks are T1 tests run with the mocks in
 [d1-alt]: 0001-https-connect-proxy.md#alternatives-considered
 [d3-2]: 0003-upstream-chaining-and-exposure.md#d2-via-entries-and-loop-detection
 [d3-3]: 0003-upstream-chaining-and-exposure.md#d3-connect-through-an-upstream
-[d3-5]: 0003-upstream-chaining-and-exposure.md#d5-no-trace-toward-the-corporate-upstream
+[d3-5]: 0003-upstream-chaining-and-exposure.md#d5-non-disclosure-toward-an-egress-proxy
 [d3-6]: 0003-upstream-chaining-and-exposure.md#d6-upstream-failures-and-proxy-status
 [d3-8]: 0003-upstream-chaining-and-exposure.md#d8-unreachable-upstream-hold
 [d3-10]: 0003-upstream-chaining-and-exposure.md#d10-source-classes-and-remote-policy

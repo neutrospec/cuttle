@@ -49,7 +49,7 @@ config    /Users/me/.config/cuttle/config.toml        XDG_CONFIG_HOME unset
 password  /Users/me/.local/share/cuttle/admin-password  missing
 stats     /Users/me/.local/state/cuttle/stats.db      XDG_STATE_HOME unset
 log       /Users/me/.local/state/cuttle/cuttle.log    XDG_STATE_HOME unset
-control   /var/folders/xy/abc123/T/cuttle/control.sock  TMPDIR
+control   /var/folders/<id>/T/cuttle/control.sock     TMPDIR
 ```
 
 `--json` prints the same as an object.
@@ -85,10 +85,10 @@ control   /var/folders/xy/abc123/T/cuttle/control.sock  TMPDIR
   a plain-HTTP request or a tunnel to port 443. Example:
 
   ```text
-  $ cuttle explain https://wiki.corp.example/
-  target  wiki.corp.example:443 (connect, local client)
-  rule    office-only (#2)
-  action  upstream:office -> 10.8.0.6:3128 (trace via)
+  $ cuttle explain https://wiki.internal.example/
+  target  wiki.internal.example:443 (connect, local client)
+  rule    restricted (#2)
+  action  upstream:gateway -> 10.8.0.6:3128 (disclosure via)
   ```
 
 ### D4. Control socket
@@ -106,14 +106,14 @@ control   /var/folders/xy/abc123/T/cuttle/control.sock  TMPDIR
 | `POST` | `/v1/reload` | `200` with `restart_required` and warnings, or `422` with errors |
 
 ```json
-{"version": "0.1.0", "name": "cuttle-home", "pid": 4242,
- "started_at": "2026-11-25T09:00:00Z",
+{"version": "0.1.0", "name": "cuttle-edge", "pid": 4242,
+ "started_at": "2026-11-25T00:00:00Z",
  "listeners": [{"address": "127.0.0.1:3128", "state": "bound"}],
- "upstreams": [{"name": "office", "state": "down",
-                "since": "2026-11-25T09:58:00Z",
+ "upstreams": [{"name": "gateway", "state": "down",
+                "since": "2026-11-25T00:58:00Z",
                 "last_error": "connection_timeout"}],
  "config": {"path": "/Users/me/.config/cuttle/config.toml",
-            "sha256": "9f2c...", "loaded_at": "2026-11-25T09:00:00Z",
+            "sha256": "9f2c...", "loaded_at": "2026-11-25T00:00:00Z",
             "restart_required": [], "last_reload_error": ""},
  "counters": {"tunnels_active": 3, "connections_active": 5},
  "tunnels": [{"target": "example.com:443", "action": "direct",
