@@ -63,6 +63,25 @@ Decisions for TASK-0002 from the user (2026-11-25):
 - Rename the per-upstream setting `trace` to `disclosure`, keeping the
   values `"via"` and `"none"`.
 
+### TASK-0003 — Remove local information from the tree and history
+
+- Milestone: none (prepares publication)
+- Status: queued until TASK-0002 lands
+- Iteration: 1/3
+- Workers: infra, in the main checkout with no other writer
+- Base: the commit that lands TASK-0002
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: orchestrator — dispatch infra after TASK-0002 lands
+
+Decisions for TASK-0003 from the user (2026-11-25):
+
+- Filter all local information out of tracked files and keep local values
+  in an untracked `.env`, with `.env.example` listing the variables.
+- Remove personal and local information from the commit history too. The
+  author email may stay because it is already public.
+
 ## Closed
 
 - TASK-0001 — Revise goals and design for chaining, admin, packaging, and
