@@ -1,0 +1,13 @@
+# want: 12 interface[2].device: duplicate of interface[1].device
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[interface]]
+name = "eth-a"
+device = "en7"
+kind = "wired"
+
+[[interface]]
+name = "eth-b"
+device = "en7"
+kind = "wired"

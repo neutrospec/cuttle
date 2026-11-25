@@ -1,0 +1,6 @@
+# want: 6 : TOML syntax: invalid value; put it in double quotes
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[notes]
+"00:00:5e:00:53:13" = adapter

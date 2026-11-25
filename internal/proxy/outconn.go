@@ -7,6 +7,8 @@ import (
 	"net/http/httptrace"
 	"strconv"
 	"sync"
+
+	"squid/internal/netx"
 )
 
 // outConn is an outbound connection of a plain-HTTP transport, direct or
@@ -21,13 +23,18 @@ import (
 type outConn struct {
 	net.Conn
 	p *Proxy
+	// info is the dial's description: its binding and skipped field
+	// (design 0008 D15).
+	info netx.Info
 
 	mu    sync.Mutex
 	ex    *exchange
 	meter upMeter
 }
 
-func (p *Proxy) newOutConn(c net.Conn) *outConn { return &outConn{Conn: c, p: p} }
+func (p *Proxy) newOutConn(c net.Conn, info netx.Info) *outConn {
+	return &outConn{Conn: c, p: p, info: info}
+}
 
 // assign hands the connection to the exchange whose request the transport
 // is about to write on it.
@@ -72,6 +79,8 @@ func withOutConnTrace(ctx context.Context, ex *exchange) context.Context {
 	return httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
 		GotConn: func(info httptrace.GotConnInfo) {
 			if oc, ok := info.Conn.(*outConn); ok {
+				// The interface is known before any byte is counted.
+				oc.p.useConn(ex, oc.Conn, oc.info, !info.Reused)
 				oc.assign(ex)
 				ex.out.Store(oc)
 			}

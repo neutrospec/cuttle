@@ -1,0 +1,15 @@
+# warn: 6 proxy.interface_attempt_timeout: at or above proxy.connect_timeout
+name = "cuttle-test"
+[proxy]
+default = "direct"
+connect_timeout = "2s"
+interface_attempt_timeout = "2s"
+interfaces = ["eth-a", "eth-b"]
+
+[[interface]]
+name = "eth-a"
+mac = "00:00:5e:00:53:0a"
+
+[[interface]]
+name = "eth-b"
+mac = "00:00:5e:00:53:0b"

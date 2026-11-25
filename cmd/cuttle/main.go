@@ -30,7 +30,11 @@ commands:
                                             (host:port, http://URL, or https://URL)
   paths [--json]                            print resolved paths
   status [--json]                           show the running service's listeners,
-                                            upstreams, counters, and tunnels
+                                            upstreams, interfaces, counters, and
+                                            tunnels
+  interfaces [--json] [--all] [--watch] [--config PATH]
+                                            list the system interfaces and how they
+                                            match the [[interface]] definitions
   reload                                    ask the running service to reload
                                             its configuration
   version                                   print the version
@@ -66,6 +70,8 @@ func run(args []string, lookup env, stdout, stderr io.Writer) int {
 		return cmdStatus(rest, lookup, stdout, stderr)
 	case "reload":
 		return cmdReload(rest, lookup, stdout, stderr)
+	case "interfaces":
+		return cmdInterfaces(rest, lookup, stdout, stderr)
 	case "version", "--version", "-version":
 		if len(rest) != 0 {
 			fmt.Fprint(stderr, usage)

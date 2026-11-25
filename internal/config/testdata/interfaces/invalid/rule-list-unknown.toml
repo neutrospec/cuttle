@@ -1,0 +1,18 @@
+# want: 18 rule[1].interfaces[1]: not the name of an [[interface]] definition
+name = "cuttle-test"
+[proxy]
+default = "direct"
+
+[[interface]]
+name = "eth-a"
+mac = "00:00:5e:00:53:0a"
+
+[[interface]]
+name = "eth-b"
+mac = "00:00:5e:00:53:0b"
+
+[[rule]]
+name = "pin"
+domains = ["updates.example"]
+action = "direct"
+interfaces = ["phone-a"]

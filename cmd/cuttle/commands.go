@@ -155,8 +155,32 @@ func cmdExplain(args []string, lookup env, stdout, stderr io.Writer) int {
 		action += " (403)"
 	}
 	fmt.Fprintf(w, "action\t%s\n", action)
+	fmt.Fprintf(w, "interfaces\t%s\n", explainInterfaces(cfg, d))
 	w.Flush()
 	return exitOK
+}
+
+// explainInterfaces names the interface list in force and its source: a
+// rule, proxy.interfaces, or an upstream's own list, or system routing
+// when no list applies (design 0008 D15). It reads only the file.
+func explainInterfaces(cfg *config.Config, d policy.Decision) string {
+	const public = "; public addresses only"
+	switch d.Action {
+	case policy.ActionDirect:
+		if len(d.Interfaces) == 0 {
+			break
+		}
+		src := "proxy.interfaces"
+		if d.RuleIndex > 0 && len(cfg.Rules[d.RuleIndex-1].Interfaces) > 0 {
+			src = "rule " + d.Rule
+		}
+		return strings.Join(d.Interfaces, ", ") + " (" + src + ")" + public
+	case policy.ActionUpstream:
+		if u, ok := cfg.Upstream(d.Upstream); ok && len(u.Interfaces) > 0 {
+			return strings.Join(u.Interfaces, ", ") + " (upstream " + u.Name + ")" + public
+		}
+	}
+	return "system routing"
 }
 
 // parseExplainTarget maps host:port to a tunnel, an http:// URL to a

@@ -3,17 +3,21 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/netip"
 	"os"
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/BurntSushi/toml"
 
 	"squid/internal/authority"
+	"squid/internal/iface"
+	"squid/internal/netx"
 	"squid/internal/policy"
 )
 
@@ -21,7 +25,22 @@ var (
 	instanceNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
 	upstreamNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
 	ruleNameRe     = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
+	// Interface definitions (design 0008 D2, D6).
+	interfaceNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+	macRe           = regexp.MustCompile(`^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$`)
+	deviceRe        = regexp.MustCompile(`^[a-z]+[0-9]+$`)
+	loopbackDevRe   = regexp.MustCompile(`^lo[0-9]+$`)
+	// macShaped finds what may be part of a hardware address in a line
+	// with a TOML syntax error: three or more groups of hex digits joined
+	// by colons, dashes, or dots, or twelve hex digits in a row.
+	macShaped = regexp.MustCompile(`(?i)([0-9a-f]{1,4}[:.-]){2,}[0-9a-f]{1,4}|[0-9a-f]{12}`)
+	// quoted finds the double-quoted fragments of a parser message.
+	quoted = regexp.MustCompile(`"(?:[^"\\]|\\.)*"`)
 )
+
+// interfaceSyntaxHint replaces a TOML syntax message that could quote part
+// of a hardware address (design 0008 D6, 0004 D4).
+const interfaceSyntaxHint = "TOML syntax: invalid value; put it in double quotes"
 
 var reservedRuleNames = []string{policy.RuleDefault, policy.RuleRemoteDefault, policy.RulePort, policy.RuleRemoteDirect}
 
@@ -46,7 +65,7 @@ func Parse(data []byte, file string) (*Config, *Report) {
 	if _, err := toml.Decode(string(data), &raw); err != nil {
 		var pe toml.ParseError
 		if errors.As(err, &pe) {
-			r.Errors = append(r.Errors, Issue{File: file, Line: pe.Position.Line, Key: pe.LastKey, Msg: "TOML syntax: " + pe.Message})
+			r.Errors = append(r.Errors, syntaxIssue(pe, data, file))
 		} else {
 			r.Errors = append(r.Errors, Issue{File: file, Msg: "TOML: " + err.Error()})
 		}
@@ -59,6 +78,34 @@ func Parse(data []byte, file string) (*Config, *Report) {
 	}
 	cfg.SHA256 = Digest(data)
 	return cfg, r
+}
+
+// syntaxIssue reports a TOML syntax error without any part of a hardware
+// address (design 0008 D6). The parser quotes the start of an unquoted MAC
+// in its message, so a message whose last key is an interface key, or
+// whose line holds anything MAC-shaped, becomes a fixed hint, and every
+// other message loses its double-quoted fragments. A MAC-shaped last key,
+// possible with a quoted key, is left out too.
+func syntaxIssue(pe toml.ParseError, data []byte, file string) Issue {
+	key := pe.LastKey
+	line := ""
+	if lines := strings.Split(string(data), "\n"); pe.Position.Line >= 1 && pe.Position.Line <= len(lines) {
+		line = lines[pe.Position.Line-1]
+	}
+	msg := "TOML syntax: " + quoted.ReplaceAllString(pe.Message, `"..."`)
+	if interfaceKey(key) || macShaped.MatchString(line) || macShaped.MatchString(key) {
+		msg = interfaceSyntaxHint
+	}
+	if macShaped.MatchString(key) {
+		key = ""
+	}
+	return Issue{File: file, Line: pe.Position.Line, Key: key, Msg: msg}
+}
+
+// interfaceKey reports a key path of an [[interface]] table or an
+// interfaces list.
+func interfaceKey(k string) bool {
+	return k == "interface" || strings.HasPrefix(k, "interface.") || strings.HasSuffix(k, "interfaces")
 }
 
 type validator struct {
@@ -75,6 +122,12 @@ type validator struct {
 	upstreamIdx []int
 	ruleIdx     []int
 	ruleElems   []patternIdx
+	// listed reports, for each upstream and rule, whether it has its own
+	// interfaces key; defined holds the names of the interface
+	// definitions.
+	upstreamListed []bool
+	ruleListed     []bool
+	defined        map[string]bool
 }
 
 // patternIdx holds the written indexes of a rule's accepted hosts,
@@ -382,7 +435,8 @@ func (v *validator) cidrs(m map[string]any, base, key string) []prefixElem {
 
 func (v *validator) config(raw map[string]any) *Config {
 	c := &Config{}
-	v.known(raw, "", "name", "proxy", "upstream", "rule", "admin", "stats", "log")
+	v.known(raw, "", "name", "proxy", "upstream", "rule", "admin", "stats", "log", "interface")
+	v.interfaces(raw, c)
 
 	if name, ok := v.str(raw, "", "name"); ok {
 		if instanceNameRe.MatchString(name) {
@@ -399,7 +453,7 @@ func (v *validator) config(raw map[string]any) *Config {
 	for _, te := range v.tables(raw, "upstream") {
 		um := te.m
 		base := elem("upstream", te.i)
-		v.known(um, base, "name", "address", "disclosure", "connect_timeout", "response_timeout", "unreachable_hold")
+		v.known(um, base, "name", "address", "disclosure", "connect_timeout", "response_timeout", "unreachable_hold", "interfaces")
 		u := Upstream{}
 		if name, ok := v.str(um, base, "name"); ok {
 			switch {
@@ -435,8 +489,13 @@ func (v *validator) config(raw map[string]any) *Config {
 		u.ConnectTimeout = v.duration(um, base, "connect_timeout", 10*time.Second, minTimeout, maxTimeout, false)
 		u.ResponseTimeout = v.duration(um, base, "response_timeout", 60*time.Second, minTimeout, maxTimeout, false)
 		u.UnreachableHold = v.duration(um, base, "unreachable_hold", 5*time.Second, minHold, maxHold, true)
+		list, listed := v.interfaceList(um, base, false)
+		if listed {
+			u.Interfaces = list
+		}
 		c.Upstreams = append(c.Upstreams, u)
 		v.upstreamIdx = append(v.upstreamIdx, te.i)
+		v.upstreamListed = append(v.upstreamListed, listed)
 	}
 
 	v.proxy(raw, c, upstreamNames)
@@ -477,6 +536,8 @@ func (v *validator) proxy(raw map[string]any, c *Config, upstreams map[string]bo
 	p.ResponseTimeout = 60 * time.Second
 	p.IdleTimeout = time.Hour
 	p.MaxConnections = 1024
+	p.InterfaceAttemptTimeout = 3 * time.Second
+	p.InterfaceDemotion = 30 * time.Second
 	p.Remote = Remote{Ports: []uint16{80, 443}, Default: policy.Route{Action: policy.ActionBlock}, MaxConnectionsPerSource: 128}
 
 	pm, ok := v.table(raw, "", "proxy")
@@ -486,7 +547,8 @@ func (v *validator) proxy(raw map[string]any, c *Config, upstreams map[string]bo
 		}
 		return
 	}
-	v.known(pm, "proxy", "listen", "default", "connect_timeout", "response_timeout", "idle_timeout", "max_connections", "remote")
+	v.known(pm, "proxy", "listen", "default", "connect_timeout", "response_timeout", "idle_timeout", "max_connections", "remote",
+		"interfaces", "interface_attempt_timeout", "interface_demotion")
 
 	if raw, present := pm["listen"]; present {
 		// Check every string element, even when another one has the wrong
@@ -532,6 +594,11 @@ func (v *validator) proxy(raw map[string]any, c *Config, upstreams map[string]bo
 	if n, ok := v.integer(pm, "proxy", "max_connections", 16, 65536); ok {
 		p.MaxConnections = n
 	}
+	if list, ok := v.interfaceList(pm, "proxy", true); ok {
+		p.Interfaces = list
+	}
+	p.InterfaceAttemptTimeout = v.duration(pm, "proxy", "interface_attempt_timeout", p.InterfaceAttemptTimeout, minTimeout, maxTimeout, false)
+	p.InterfaceDemotion = v.duration(pm, "proxy", "interface_demotion", p.InterfaceDemotion, time.Second, maxTimeout, true)
 
 	if rm, ok := v.table(pm, "proxy", "remote"); ok {
 		base := "proxy.remote"
@@ -578,7 +645,7 @@ func (v *validator) rules(raw map[string]any, c *Config, upstreams map[string]bo
 	for _, te := range v.tables(raw, "rule") {
 		rm := te.m
 		base := elem("rule", te.i)
-		v.known(rm, base, "name", "hosts", "domains", "cidrs", "ports", "action", "allow_loopback", "allow_private")
+		v.known(rm, base, "name", "hosts", "domains", "cidrs", "ports", "action", "allow_loopback", "allow_private", "interfaces")
 		r := policy.Rule{Name: "rule-" + strconv.Itoa(te.i+1)}
 		var at patternIdx
 		namePath := sub(base, "name")
@@ -657,9 +724,18 @@ func (v *validator) rules(raw map[string]any, c *Config, upstreams map[string]bo
 				r.AllowPrivate = b
 			}
 		}
+		list, listed := v.interfaceList(rm, base, false)
+		if listed {
+			if r.Route.Action != policy.ActionDirect {
+				v.errf(sub(base, "interfaces"), "applies only to rules whose action is \"direct\"; an upstream route uses the upstream's interfaces")
+			} else {
+				r.Interfaces = list
+			}
+		}
 		c.Rules = append(c.Rules, r)
 		v.ruleIdx = append(v.ruleIdx, te.i)
 		v.ruleElems = append(v.ruleElems, at)
+		v.ruleListed = append(v.ruleListed, listed)
 	}
 }
 
@@ -750,6 +826,8 @@ func (v *validator) crossChecks(c *Config) {
 		}
 	}
 
+	v.interfaceWarnings(c)
+
 	// Upstreams that no action uses.
 	used := map[string]bool{}
 	for _, r := range c.Rules {
@@ -761,6 +839,161 @@ func (v *validator) crossChecks(c *Config) {
 		if u.Name != "" && !used[u.Name] {
 			v.warnf(sub(elem("upstream", v.upstreamIdx[i]), "name"), "upstream %q is not used by any action", u.Name)
 		}
+	}
+}
+
+// interfaces reads the [[interface]] definitions (design 0008 D2, D6). No
+// message repeats the value it is about: messages name key paths, lines,
+// and the rule broken, so a MAC never reaches a message, the log, or
+// last_reload_error.
+func (v *validator) interfaces(raw map[string]any, c *Config) {
+	v.defined = map[string]bool{}
+	names := map[string]int{}
+	macs := map[string]int{}
+	devices := map[string]int{}
+	for _, te := range v.tables(raw, "interface") {
+		im := te.m
+		base := elem("interface", te.i)
+		v.known(im, base, "name", "mac", "device", "kind")
+		d := Interface{}
+		if name, ok := v.str(im, base, "name"); ok {
+			path := sub(base, "name")
+			switch {
+			case !interfaceNameRe.MatchString(name):
+				v.errf(path, "does not match ^[a-z][a-z0-9-]{0,31}$")
+			case name == "other":
+				v.errf(path, "is reserved for traffic of no defined interface")
+			default:
+				if i, dup := names[name]; dup {
+					v.errf(path, "duplicate of %s", sub(elem("interface", i), "name"))
+				} else {
+					names[name] = te.i
+					d.Name = name
+					v.defined[name] = true
+				}
+			}
+		} else if _, present := im["name"]; !present {
+			v.errf(sub(base, "name"), "required")
+		}
+		_, hasMAC := im["mac"]
+		_, hasDevice := im["device"]
+		if s, ok := v.str(im, base, "mac"); ok {
+			path := sub(base, "mac")
+			if !macRe.MatchString(s) {
+				v.errf(path, "not a hardware address; use six colon-separated pairs of hex digits as cuttle interfaces prints them")
+			} else {
+				mac, _ := net.ParseMAC(s)
+				switch {
+				case slices.Equal(mac, make(net.HardwareAddr, 6)):
+					v.errf(path, "is all zero, which no interface has")
+				case mac[0]&1 != 0:
+					v.errf(path, "is a group address, which no interface has")
+				default:
+					key := mac.String()
+					if i, dup := macs[key]; dup {
+						v.errf(path, "duplicate of %s", sub(elem("interface", i), "mac"))
+					} else {
+						macs[key] = te.i
+						d.MAC = mac
+					}
+				}
+			}
+		}
+		if s, ok := v.str(im, base, "device"); ok {
+			path := sub(base, "device")
+			switch {
+			case !deviceRe.MatchString(s) || len(s) > 15:
+				v.errf(path, "not a BSD name such as en0")
+			case loopbackDevRe.MatchString(s):
+				v.errf(path, "names a loopback interface, which never carries traffic out")
+			default:
+				if i, dup := devices[s]; dup {
+					v.errf(path, "duplicate of %s", sub(elem("interface", i), "device"))
+				} else {
+					devices[s] = te.i
+					d.Device = s
+				}
+			}
+		}
+		if !hasMAC && !hasDevice {
+			v.errf(base, "needs mac, device, or both")
+		}
+		if s, ok := v.str(im, base, "kind"); ok {
+			if _, ok := iface.ParseKind(s); ok {
+				d.Kind = s
+			} else {
+				v.errf(sub(base, "kind"), "must be wired, wifi, or cellular")
+			}
+		}
+		if d.Device != "" && !hasMAC && d.Kind == "" {
+			v.warnf(sub(base, "device"), "with neither mac nor kind, any interface that takes this BSD name matches; add mac or kind")
+		}
+		c.Interfaces = append(c.Interfaces, d)
+	}
+}
+
+// interfaceList reads an interfaces list. It reports whether the key is
+// present. Each element must name a definition, once; an empty list is an
+// error unless allowEmpty, because in a rule or an upstream it would read
+// as either no interface or the default (design 0008 D6).
+func (v *validator) interfaceList(m map[string]any, base string, allowEmpty bool) ([]string, bool) {
+	x, present := m["interfaces"]
+	if !present {
+		return nil, false
+	}
+	path := sub(base, "interfaces")
+	list, _ := v.strings(m, base, "interfaces")
+	if a, ok := x.([]any); ok && len(a) == 0 && !allowEmpty {
+		v.errf(path, "empty list; list at least one interface, or remove the key")
+	}
+	out := []string{}
+	seen := map[string]int{}
+	for _, e := range list {
+		ep := elem(path, e.i)
+		if i, dup := seen[e.s]; dup {
+			v.errf(ep, "repeats %s", elem(path, i))
+			continue
+		}
+		seen[e.s] = e.i
+		if !v.defined[e.s] {
+			v.errf(ep, "not the name of an [[interface]] definition")
+			continue
+		}
+		out = append(out, e.s)
+	}
+	return out, true
+}
+
+// interfaceWarnings reports the interface warnings of design 0008 D6 that
+// span tables.
+func (v *validator) interfaceWarnings(c *Config) {
+	anyList := len(c.Proxy.Interfaces) > 0
+	for j, r := range c.Rules {
+		if !v.ruleListed[j] {
+			continue
+		}
+		anyList = true
+		base := elem("rule", v.ruleIdx[j])
+		allNonPublic := len(r.CIDRs) > 0 && !slices.ContainsFunc(r.CIDRs, func(p netip.Prefix) bool { return !netx.NonPublic(p) })
+		if r.AllowLoopback || r.AllowPrivate || allNonPublic {
+			v.warnf(sub(base, "interfaces"), "does not apply to loopback and private addresses, which are dialed through system routing")
+		}
+	}
+	for i, u := range c.Upstreams {
+		base := elem("upstream", v.upstreamIdx[i])
+		if !v.upstreamListed[i] {
+			if len(c.Proxy.Interfaces) > 0 {
+				v.warnf(base, "has no interfaces, so its dials follow system routing; proxy.interfaces applies only to direct routes")
+			}
+			continue
+		}
+		anyList = true
+		if a, err := authority.ParseConnect(u.Address); err == nil && a.IsIP() && netx.Classify(a.Addr, nil) != netx.ClassPublic {
+			v.warnf(sub(base, "interfaces"), "the address is a loopback or private literal, which is always dialed through system routing")
+		}
+	}
+	if anyList && c.Proxy.InterfaceAttemptTimeout >= c.Proxy.ConnectTimeout {
+		v.warnf("proxy.interface_attempt_timeout", "is at or above proxy.connect_timeout, so a timeout never moves to the next interface")
 	}
 }
 

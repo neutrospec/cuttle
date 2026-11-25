@@ -61,10 +61,17 @@ func (p *Proxy) newUpstream(u config.Upstream) (*upstream, error) {
 		cfg:    u,
 		target: target,
 		dialer: &netx.UpstreamDialer{
-			Network: p.deps.Network,
-			Timeout: u.ConnectTimeout,
-			Stagger: dialStagger,
-			Self:    p.isListener,
+			Network:    p.deps.Network,
+			Timeout:    u.ConnectTimeout,
+			Stagger:    dialStagger,
+			Self:       p.isListener,
+			SelfAddrs:  p.deps.SelfAddrs,
+			Interfaces: u.Interfaces,
+			Monitor:    p.ifm,
+			// proxy.interface_attempt_timeout of the configuration in
+			// effect, which a reload may change while it keeps the
+			// upstream.
+			AttemptTimeout: p.attemptTimeout,
 		},
 	}
 	up.hold = &hold{
@@ -83,11 +90,11 @@ func (p *Proxy) newUpstream(u config.Upstream) (*upstream, error) {
 		// URL carries no userinfo, so no Proxy-Authorization is sent.
 		Proxy: http.ProxyURL(&url.URL{Scheme: "http", Host: u.Address}),
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			c, err := up.dialHTTP(ctx)
+			c, info, err := up.dialHTTP(ctx)
 			if err != nil {
 				return nil, err
 			}
-			return p.newOutConn(c), nil
+			return p.newOutConn(c, info), nil
 		},
 		DisableCompression:    true,
 		ForceAttemptHTTP2:     false,
@@ -124,10 +131,10 @@ func (u *upstream) retire() {
 // hold: the handler already admitted the request, and a probe ticket lets
 // exactly one dial through after a hold; any other dial is admitted again,
 // because the upstream may have gone down since (design 0003 D4, D8).
-func (u *upstream) dialHTTP(ctx context.Context) (net.Conn, error) {
+func (u *upstream) dialHTTP(ctx context.Context) (net.Conn, netx.Info, error) {
 	ex := exchangeFrom(ctx)
 	if ex == nil {
-		return nil, errors.New("proxy: upstream dial without a decision")
+		return nil, netx.Info{}, errors.New("proxy: upstream dial without a decision")
 	}
 	probe := false
 	if tk := ex.ticket; tk != nil && tk.probe && tk.used.CompareAndSwap(false, true) {
@@ -135,12 +142,12 @@ func (u *upstream) dialHTTP(ctx context.Context) (net.Conn, error) {
 	} else {
 		var held *heldError
 		if probe, held = u.hold.admit(); held != nil {
-			return nil, held
+			return nil, netx.Info{}, held
 		}
 	}
-	c, err := u.dialer.Dial(ctx, u.target)
+	c, info, err := u.dialer.Dial(ctx, u.target)
 	u.hold.done(probe, err)
-	return c, err
+	return c, info, err
 }
 
 // settle resolves a plain-HTTP probe that never dialed, because the
@@ -219,12 +226,13 @@ func (p *Proxy) connectUpstream(w http.ResponseWriter, r *http.Request, ex *exch
 		p.replyHeld(w, ex, held)
 		return
 	}
-	server, err := u.dialer.Dial(r.Context(), u.target)
+	server, info, err := u.dialer.Dial(r.Context(), u.target)
 	u.hold.done(probe, err)
 	if err != nil {
 		p.upstreamDialFailure(w, ex, err)
 		return
 	}
+	p.useConn(ex, server, info, true)
 	head := connectHead(r, ex.snap.cfg.Name, u.cfg.Disclosure)
 	br := bufio.NewReader(server)
 	server.SetDeadline(time.Now().Add(u.cfg.ResponseTimeout))
@@ -318,6 +326,7 @@ func (p *Proxy) upstreamDialFailure(w http.ResponseWriter, ex *exchange, err err
 		p.reply(w, ex, http.StatusInternalServerError, "proxy_internal_error", "upstream dial failed", "internal error", OutcomeInternal)
 		return
 	}
+	ex.skipped.Store(&de.Skipped)
 	if de.ClientGone {
 		ex.outcome, ex.detail = OutcomeClientClosed, de.Detail
 		p.finish(ex)
@@ -325,6 +334,8 @@ func (p *Proxy) upstreamDialFailure(w http.ResponseWriter, ex *exchange, err err
 	}
 	up := ex.d.Upstream
 	switch de.Type {
+	case netx.ErrUnavailable:
+		p.replyNoInterface(w, ex, de, up)
 	case netx.ErrDNS:
 		p.replyHop(w, ex, http.StatusBadGateway, de.Type, up, de.Detail, "cannot resolve upstream "+up, OutcomeDNSError)
 	case netx.ErrLoop:
@@ -543,7 +554,9 @@ func (h *hold) done(probe bool, err error) {
 		return
 	}
 	var de *netx.DialError
-	unreachable := errors.As(err, &de) && !de.ClientGone && de.Type != netx.ErrLoop
+	// A loop and a plan without a usable interface (design 0008 D10, D11)
+	// are no reachability failures and leave the hold unchanged.
+	unreachable := errors.As(err, &de) && !de.ClientGone && de.Type != netx.ErrLoop && de.Type != netx.ErrUnavailable
 	if unreachable {
 		h.lastErr = de.Type
 	}

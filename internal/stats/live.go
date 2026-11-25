@@ -23,6 +23,13 @@ const (
 	// UpstreamState is a gauge per upstream and state: 1 for the current
 	// state, 0 for the others (design 0003 D8).
 	UpstreamState = "upstream_state"
+	// InterfaceState is a gauge per interface and state, online, demoted,
+	// or offline: 1 for the current state, 0 for the others (design 0008
+	// D15).
+	InterfaceState = "interface_state"
+	// InterfaceBytesTotal counts the bytes of each decision whose
+	// interface field is not empty, by interface and direction.
+	InterfaceBytesTotal = "interface_bytes_total"
 )
 
 // Live is a set of counters keyed by name and labels. Labels are bounded:

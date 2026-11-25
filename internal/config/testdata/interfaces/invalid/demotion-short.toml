@@ -1,0 +1,5 @@
+# want: 5 proxy.interface_demotion: out of range 1s-10m0s
+name = "cuttle-test"
+[proxy]
+default = "direct"
+interface_demotion = "500ms"

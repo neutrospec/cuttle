@@ -120,6 +120,33 @@ func printStatus(w io.Writer, st *control.Status, now time.Time) {
 		tw.Flush()
 	}
 
+	if len(st.Interfaces) > 0 {
+		fmt.Fprintln(w, "\ninterfaces")
+		tw = tabwriter.NewWriter(w, 0, 8, 2, ' ', 0)
+		for _, i := range st.Interfaces {
+			device := i.Device
+			if device == "" {
+				device = "-"
+			}
+			line := fmt.Sprintf("  %s\t%s\t%s", i.Name, device, i.State)
+			if i.Reason != "" {
+				line += " (" + i.Reason + ")"
+			}
+			line += fmt.Sprintf("\tsince %s", i.Since.Format(time.RFC3339))
+			if len(i.Families) > 0 {
+				line += "\tfamilies " + strings.Join(i.Families, ",")
+			}
+			if len(i.Primary) > 0 {
+				line += "\tprimary " + strings.Join(i.Primary, ",")
+			}
+			if i.DemotedUntil != "" {
+				line += "\tdemoted until " + i.DemotedUntil
+			}
+			fmt.Fprintln(tw, line)
+		}
+		tw.Flush()
+	}
+
 	fmt.Fprintln(w, "\ncounters")
 	keys := make([]string, 0, len(st.Counters))
 	for k := range st.Counters {
@@ -139,7 +166,11 @@ func printStatus(w io.Writer, st *control.Status, now time.Time) {
 		if t.Upstream != "" {
 			action += ":" + t.Upstream
 		}
-		fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\tage %ds\tup %d\tdown %d\n", t.Target, t.Kind, action, t.Source, t.AgeS, t.Up, t.Down)
+		ifname := t.Interface
+		if ifname == "" {
+			ifname = "-"
+		}
+		fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\tinterface %s\tage %ds\tup %d\tdown %d\n", t.Target, t.Kind, action, t.Source, ifname, t.AgeS, t.Up, t.Down)
 	}
 	tw.Flush()
 

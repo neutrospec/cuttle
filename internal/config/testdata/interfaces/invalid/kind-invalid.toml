@@ -1,0 +1,8 @@
+# want: 8 interface[1].kind: must be wired, wifi, or cellular
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[interface]]
+name = "eth-a"
+mac = "00:00:5e:00:53:0a"
+kind = "ethernet"

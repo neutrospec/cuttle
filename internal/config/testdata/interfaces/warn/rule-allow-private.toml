@@ -1,0 +1,19 @@
+# warn: 19 rule[1].interfaces: does not apply to loopback and private addresses
+name = "cuttle-test"
+[proxy]
+default = "direct"
+
+[[interface]]
+name = "eth-a"
+mac = "00:00:5e:00:53:0a"
+
+[[interface]]
+name = "eth-b"
+mac = "00:00:5e:00:53:0b"
+
+[[rule]]
+name = "lan"
+domains = ["lan"]
+action = "direct"
+allow_private = true
+interfaces = ["eth-a"]

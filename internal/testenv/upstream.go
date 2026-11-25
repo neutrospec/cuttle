@@ -15,6 +15,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"squid/internal/netx"
 )
 
 // Field is one header field line as received: the name as sent and the
@@ -506,7 +508,7 @@ func dialNet(n *Net, host string, port uint16) (net.Conn, error) {
 		}
 		a = addrs[0]
 	}
-	return n.DialContext(ctx, netip.AddrPortFrom(a, port))
+	return n.DialContext(ctx, netip.AddrPortFrom(a, port), netx.Binding{})
 }
 
 // targetHostPort returns the lowercase host and the port of a CONNECT

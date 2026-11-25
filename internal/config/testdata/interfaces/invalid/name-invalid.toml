@@ -1,0 +1,7 @@
+# want: 6 interface[1].name: does not match ^[a-z][a-z0-9-]{0,31}$
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[interface]]
+name = "Eth-A"
+mac = "00:00:5e:00:53:0a"

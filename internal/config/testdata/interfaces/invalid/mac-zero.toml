@@ -1,0 +1,7 @@
+# want: 7 interface[1].mac: is all zero
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[interface]]
+name = "eth-a"
+mac = "00:00:00:00:00:00"

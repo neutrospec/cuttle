@@ -24,11 +24,13 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"squid/internal/config"
+	"squid/internal/iface"
 	"squid/internal/netx"
 	"squid/internal/policy"
 	"squid/internal/stats"
@@ -70,9 +72,21 @@ type Deps struct {
 	Logger *slog.Logger
 	// Live receives the live counters; New creates one when nil.
 	Live *stats.Live
-	// Clock is the time source of the unreachable-upstream hold; nil means
-	// time.Now. Tests inject a clock (design 0003 U11).
+	// Clock is the time source of the unreachable-upstream hold and of
+	// interface state times and demotion; nil means time.Now. Tests inject
+	// a clock (design 0003 U11, 0008 D9).
 	Clock func() time.Time
+	// Interfaces is the interface table source. A configuration that
+	// defines an interface needs it: New fails and a reload is refused
+	// without it (design 0008 Interfaces).
+	Interfaces iface.Source
+	// SelfChanged is called after each successful re-read of the
+	// interface table, so the self address class follows it (design 0008
+	// D5).
+	SelfChanged func()
+	// Timers drives the debounce and safety re-reads of the interface
+	// table; nil means real timers. Tests inject a timer.
+	Timers iface.Timers
 }
 
 // RetryListener is a listener address that could not bind at startup.
@@ -118,6 +132,8 @@ type Proxy struct {
 
 	conns connLimits
 	warn  *warnLimiter
+	// ifm keeps the state of the configured interfaces (design 0008).
+	ifm *iface.Monitor
 
 	// lmu guards the listener states and the bound addresses, which the
 	// upstream self-dial check reads (design 0003 D1).
@@ -197,22 +213,35 @@ func (h *handlerCount) wait(timeout time.Duration) int {
 var sourceClasses = [...]policy.SourceClass{policy.SourceLocal, policy.SourceRemote}
 
 // snapshot is an immutable policy snapshot with a direct transport per
-// client class, so a pooled connection is only reused for the same
-// snapshot, class, host, and port, under the policy that allowed its dial
-// (design 0002 D5). Without the class split, a connection dialed for a
-// local client, for example to a private address through allow_private,
-// would carry a remote client's request to the same host and port. The
+// client class and interface list in force, so a pooled connection is only
+// reused for the same snapshot, class, list, host, and port, under the
+// policy that allowed its dial (design 0002 D5, 0008 D12). Without the
+// class split, a connection dialed for a local client, for example to a
+// private address through allow_private, would carry a remote client's
+// request to the same host and port; without the list split, a connection
+// pooled on one interface would serve a request pinned to another. The
 // upstream table holds one runtime state per configured upstream; a reload
 // keeps the state of an upstream whose settings are unchanged (design
 // 0003 D8, 0004 D6).
 type snapshot struct {
-	cfg       *config.Config
-	policy    *policy.Policy
-	dialer    *netx.Dialer
-	direct    [len(sourceClasses)]*http.Transport
-	rp        [len(sourceClasses)]*httputil.ReverseProxy
+	cfg    *config.Config
+	policy *policy.Policy
+	dialer *netx.Dialer
+	// direct and rp are keyed by listKey of the list in force: "" for no
+	// list, the default list, and each rule's list.
+	direct    map[string]*directTransports
 	upstreams map[string]*upstream
 }
+
+// directTransports are the direct transports of one interface list.
+type directTransports struct {
+	list []string
+	tr   [len(sourceClasses)]*http.Transport
+	rp   [len(sourceClasses)]*httputil.ReverseProxy
+}
+
+// listKey identifies an interface list in force.
+func listKey(list []string) string { return strings.Join(list, ",") }
 
 // New builds a proxy for cfg. It does not start serving.
 func New(cfg *config.Config, deps Deps) (*Proxy, error) {
@@ -248,6 +277,13 @@ func New(cfg *config.Config, deps Deps) (*Proxy, error) {
 		warn:    newWarnLimiter(deps.Logger),
 		done:    make(chan struct{}),
 	}
+	p.ifm = iface.NewMonitor(iface.Options{
+		Source: deps.Interfaces, Logger: deps.Logger, Live: deps.Live, Clock: deps.Clock,
+		Timers: deps.Timers, SelfChanged: deps.SelfChanged, Reconnect: p.reconnect,
+	})
+	if err := p.ifm.Check(cfg.Defs()); err != nil {
+		return nil, fmt.Errorf("proxy: %w", err)
+	}
 	p.lstates = listenerStates(deps.Listeners, deps.Retry, time.Now())
 	for _, l := range deps.Listeners {
 		p.addBoundLocked(l)
@@ -262,6 +298,9 @@ func New(cfg *config.Config, deps Deps) (*Proxy, error) {
 	}
 	if err := checkRoutes(cfg, ups); err != nil {
 		return nil, err
+	}
+	if err := p.ifm.Configure(cfg.Defs(), cfg.Proxy.InterfaceDemotion); err != nil {
+		return nil, fmt.Errorf("proxy: %w", err)
 	}
 	p.snap.Store(p.newSnapshot(cfg, ups))
 	for _, up := range ups {
@@ -384,15 +423,34 @@ func (p *Proxy) newSnapshot(cfg *config.Config, ups map[string]*upstream) *snaps
 		cfg:       cfg,
 		policy:    policy.New(cfg.PolicySettings()),
 		upstreams: ups,
+		direct:    map[string]*directTransports{},
 		dialer: &netx.Dialer{
-			Network:   p.deps.Network,
-			SelfAddrs: p.deps.SelfAddrs,
-			Timeout:   cfg.Proxy.ConnectTimeout,
-			Stagger:   dialStagger,
+			Network:        p.deps.Network,
+			SelfAddrs:      p.deps.SelfAddrs,
+			Timeout:        cfg.Proxy.ConnectTimeout,
+			Stagger:        dialStagger,
+			AttemptTimeout: cfg.Proxy.InterfaceAttemptTimeout,
+			Interfaces:     p.ifm,
 		},
 	}
+	lists := [][]string{nil, cfg.Proxy.Interfaces}
+	for _, r := range cfg.Rules {
+		lists = append(lists, r.Interfaces)
+	}
+	for _, list := range lists {
+		if s.direct[listKey(list)] == nil {
+			s.direct[listKey(list)] = p.newDirectTransports(s, list)
+		}
+	}
+	return s
+}
+
+// newDirectTransports builds the direct transports of one interface list.
+func (p *Proxy) newDirectTransports(s *snapshot, list []string) *directTransports {
+	cfg := s.cfg
+	dt := &directTransports{list: list}
 	for _, class := range sourceClasses {
-		s.direct[class] = &http.Transport{
+		dt.tr[class] = &http.Transport{
 			Proxy: nil, // never http.ProxyFromEnvironment
 			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 				ex := exchangeFrom(ctx)
@@ -404,11 +462,11 @@ func (p *Proxy) newSnapshot(cfg *config.Config, ups map[string]*upstream) *snaps
 					// exchange's class. Fail closed if that ever changes.
 					return nil, fmt.Errorf("proxy: %s dial on the %s transport", ex.d.Source, class)
 				}
-				c, err := s.dialer.Dial(ctx, ex.d)
+				c, info, err := s.dialer.Dial(ctx, ex.d)
 				if err != nil {
 					return nil, err
 				}
-				return p.newOutConn(c), nil
+				return p.newOutConn(c, info), nil
 			},
 			DisableCompression:    true,
 			ForceAttemptHTTP2:     false,
@@ -419,26 +477,79 @@ func (p *Proxy) newSnapshot(cfg *config.Config, ups map[string]*upstream) *snaps
 			ResponseHeaderTimeout: cfg.Proxy.ResponseTimeout,
 			ExpectContinueTimeout: time.Second,
 		}
-		s.rp[class] = &httputil.ReverseProxy{
+		dt.rp[class] = &httputil.ReverseProxy{
 			Rewrite:        rewriteDirect,
-			Transport:      s.direct[class],
+			Transport:      dt.tr[class],
 			ModifyResponse: modifyResponse,
 			ErrorHandler:   p.forwardError,
 			ErrorLog:       slog.NewLogLogger(p.log.Handler(), slog.LevelDebug),
 		}
 	}
-	return s
+	return dt
+}
+
+// closeIdleDirect closes the idle pooled connections of every direct
+// transport.
+func (s *snapshot) closeIdleDirect() {
+	for _, dt := range s.direct {
+		for _, t := range dt.tr {
+			t.CloseIdleConnections()
+		}
+	}
 }
 
 // closeIdle closes the idle pooled connections of every direct and
 // upstream transport.
 func (s *snapshot) closeIdle() {
-	for _, t := range s.direct {
-		t.CloseIdleConnections()
-	}
+	s.closeIdleDirect()
 	for _, u := range s.upstreams {
 		u.transport.CloseIdleConnections()
 	}
+}
+
+// reconnect closes the idle connections of every direct and upstream
+// transport whose list holds the interface, when it comes online or its
+// demotion ends with cause state_changed or connected, so the next
+// plain-HTTP request plans again (design 0008 D12).
+func (p *Proxy) reconnect(name string) {
+	s := p.snap.Load()
+	if s == nil {
+		return
+	}
+	for _, dt := range s.direct {
+		if slices.Contains(dt.list, name) {
+			for _, t := range dt.tr {
+				t.CloseIdleConnections()
+			}
+		}
+	}
+	for _, u := range s.upstreams {
+		if slices.Contains(u.cfg.Interfaces, name) {
+			u.transport.CloseIdleConnections()
+		}
+	}
+}
+
+// InterfaceStatus returns the state of every interface definition in
+// configuration order (design 0008 D15).
+func (p *Proxy) InterfaceStatus() []iface.Status { return p.ifm.Status() }
+
+// upstreamKept reports whether a reload keeps an upstream's runtime state:
+// its settings, interfaces included, are unchanged, and so are the mac,
+// device, and kind of each definition its list names (design 0004 D6, 0008
+// D14).
+func upstreamKept(prev *upstream, u config.Upstream, oldCfg, newCfg *config.Config) bool {
+	if prev == nil || !prev.cfg.Equal(u) {
+		return false
+	}
+	for _, name := range u.Interfaces {
+		a, okA := oldCfg.Interface(name)
+		b, okB := newCfg.Interface(name)
+		if okA != okB || !a.Def().Same(b.Def()) {
+			return false
+		}
+	}
+	return true
 }
 
 // Reload applies a validated configuration (design 0004 D6 steps 2-4). It
@@ -453,11 +564,14 @@ func (s *snapshot) closeIdle() {
 func (p *Proxy) Reload(cfg *config.Config) error {
 	p.reloadMu.Lock()
 	defer p.reloadMu.Unlock()
+	if err := p.ifm.Check(cfg.Defs()); err != nil {
+		return fmt.Errorf("proxy: %w", err)
+	}
 	old := p.snap.Load()
 	ups := make(map[string]*upstream, len(cfg.Upstreams))
 	var fresh []*upstream
 	for _, u := range cfg.Upstreams {
-		if prev := old.upstreams[u.Name]; prev != nil && prev.cfg == u {
+		if prev := old.upstreams[u.Name]; upstreamKept(prev, u, old.cfg, cfg) {
 			ups[u.Name] = prev
 			continue
 		}
@@ -470,6 +584,11 @@ func (p *Proxy) Reload(cfg *config.Config) error {
 	}
 	if err := checkRoutes(cfg, ups); err != nil {
 		return err
+	}
+	// The table is read again before the new snapshot is used (design
+	// 0008 D14).
+	if err := p.ifm.Configure(cfg.Defs(), cfg.Proxy.InterfaceDemotion); err != nil {
+		return fmt.Errorf("proxy: %w", err)
 	}
 	p.snap.Store(p.newSnapshot(cfg, ups))
 	for name, prev := range old.upstreams {
@@ -487,9 +606,7 @@ func (p *Proxy) Reload(cfg *config.Config) error {
 	for _, up := range fresh {
 		up.hold.publish()
 	}
-	for _, t := range old.direct {
-		t.CloseIdleConnections()
-	}
+	old.closeIdleDirect()
 	return nil
 }
 
@@ -598,6 +715,7 @@ func (p *Proxy) Shutdown(ctx context.Context) error {
 		p.log.Warn("shutdown: handlers still running", "count", n, "waited", handlerWait.String())
 	}
 	p.snap.Load().closeIdle()
+	p.ifm.Stop()
 	p.warn.stop()
 	return err
 }
@@ -613,8 +731,11 @@ type TunnelStatus struct {
 	Action   string // direct or upstream
 	Upstream string
 	Source   string // local or remote
-	Started  time.Time
-	Up, Down int64
+	// Interface is the decision-log value of design 0008 D15: a configured
+	// interface name, other, or empty.
+	Interface string
+	Started   time.Time
+	Up, Down  int64
 }
 
 // Tunnels returns up to MaxTunnelList active tunnels and upgraded
@@ -650,4 +771,13 @@ func (p *Proxy) warnSource(a netip.Addr) {
 // address and within the warning budget (design 0003 D12).
 func (p *Proxy) warnLimit(a netip.Addr, key string, limit int) {
 	p.warn.warn(warnKey{a, "limit"}, "connection limit reached", "source", a.String(), "limit", key, "max", strconv.Itoa(limit))
+}
+
+// attemptTimeout is proxy.interface_attempt_timeout of the configuration
+// in effect (design 0008 D8).
+func (p *Proxy) attemptTimeout() time.Duration {
+	if s := p.snap.Load(); s != nil {
+		return s.cfg.Proxy.InterfaceAttemptTimeout
+	}
+	return 3 * time.Second
 }

@@ -32,7 +32,7 @@ ordered rules on host name, domain, IP prefix, and port:
 
 ## Status
 
-Milestone stages M1.1 to M1.4 are implemented: `direct`, `block`, and
+Milestone stages M1.1 to M1.5 are implemented: `direct`, `block`, and
 `upstream:<name>` routes, the starter configuration, the decision log with
 rotation, and `cuttle init`, `check`, `explain`, and `paths`, for local
 clients and for remote clients on non-loopback listeners. Remote clients
@@ -63,12 +63,17 @@ is down, is retried every 30 s and shows as `retrying`. `SIGTERM` drains
 in-flight requests for up to 5 s and closes tunnels. The statistics and
 the admin UI arrive in later stages of the [roadmap](docs/ROADMAP.md).
 
-Interface selection is designed for stage M1.5 and not yet implemented
-([design 0008](docs/design/0008-interface-selection.md)). The
-configuration will name interfaces in `[[interface]]` tables by MAC
-address or BSD name, which a new `cuttle interfaces` command lists, and
-order them in `proxy.interfaces`; a `direct` rule or an upstream can carry
-its own `interfaces` list. Two limits matter in practice. Name lookups
+Interface selection is implemented for stage M1.5
+([design 0008](docs/design/0008-interface-selection.md)); its check on
+real adapters and tethered phones is still to be run with the user
+([OI-0008](docs/OPEN_ISSUES.md#oi-0008--interface-behavior-on-the-users-devices)).
+The configuration names interfaces in `[[interface]]` tables by MAC
+address or BSD name, which `cuttle interfaces` lists, and orders them in
+`proxy.interfaces`; a `direct` rule or an upstream can carry its own
+`interfaces` list. An interface that is not online is skipped, a fast
+local connect failure or a 3 s attempt timeout moves to the next
+interface of the list, and `cuttle status` shows each interface's state.
+Two limits matter in practice. Name lookups
 still go through the interface that macOS treats as primary, so set the
 macOS network service order to match `proxy.interfaces`. When that primary
 interface keeps its link but loses its internet connection, names fail to
@@ -86,6 +91,7 @@ go build -o cuttle ./cmd/cuttle
 ./cuttle init                 # writes ~/.config/cuttle/config.toml
 ./cuttle check
 ./cuttle explain https://example.com/
+./cuttle interfaces           # network interfaces and their MACs
 ./cuttle serve                # proxy on 127.0.0.1:3128; Ctrl-C stops it
 curl -x http://127.0.0.1:3128 https://example.com/
 ./cuttle status               # in another terminal
@@ -107,6 +113,7 @@ repository root with `scripts/gate`, which runs exactly the commands of
 ```sh
 scripts/gate t0   # gofmt, go mod tidy -diff, vet, build, unit tests,
                   # no tracked keys, cmd/cuttle free of test-only packages
+                  # and golang.org/x/net, and a build without cgo
 scripts/gate t1   # every test with -race, including integration and
                   # binary tests; needs /usr/bin/curl (or CUTTLE_CURL)
 ```

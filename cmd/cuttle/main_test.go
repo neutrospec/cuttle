@@ -312,21 +312,21 @@ action = "block"
 		want string
 	}{
 		{[]string{"https://wiki.internal.example/"},
-			"target  wiki.internal.example:443 (connect, local client)\nrule    restricted (#2)\naction  upstream:gateway -> 10.8.0.6:3128 (disclosure via)\n"},
+			"target      wiki.internal.example:443 (connect, local client)\nrule        restricted (#2)\naction      upstream:gateway -> 10.8.0.6:3128 (disclosure via)\ninterfaces  system routing\n"},
 		{[]string{"http://localhost:3000/x?y"},
-			"target  localhost:3000 (http, local client)\nrule    loopback (#1)\naction  direct (allow_loopback)\n"},
+			"target      localhost:3000 (http, local client)\nrule        loopback (#1)\naction      direct (allow_loopback)\ninterfaces  system routing\n"},
 		{[]string{"ads.example.net:443"},
-			"target  ads.example.net:443 (connect, local client)\nrule    ads (#3)\naction  block (403)\n"},
+			"target      ads.example.net:443 (connect, local client)\nrule        ads (#3)\naction      block (403)\ninterfaces  system routing\n"},
 		{[]string{"Example.COM:8443"},
-			"target  example.com:8443 (connect, local client)\nrule    default (proxy.default)\naction  direct\n"},
+			"target      example.com:8443 (connect, local client)\nrule        default (proxy.default)\naction      direct\ninterfaces  system routing\n"},
 		{[]string{"--remote", "https://wiki.internal.example/"},
-			"target  wiki.internal.example:443 (connect, remote client)\nrule    restricted (#2)\naction  upstream:gateway -> 10.8.0.6:3128 (disclosure via)\n"},
+			"target      wiki.internal.example:443 (connect, remote client)\nrule        restricted (#2)\naction      upstream:gateway -> 10.8.0.6:3128 (disclosure via)\ninterfaces  system routing\n"},
 		{[]string{"--remote", "example.com:443"},
-			"target  example.com:443 (connect, remote client)\nrule    remote-default (proxy.remote.default)\naction  block (403)\n"},
+			"target      example.com:443 (connect, remote client)\nrule        remote-default (proxy.remote.default)\naction      block (403)\ninterfaces  system routing\n"},
 		{[]string{"--remote", "wiki.internal.example:22"},
-			"target  wiki.internal.example:22 (connect, remote client)\nrule    port (port 22 is not in proxy.remote.ports)\naction  block (403)\n"},
+			"target      wiki.internal.example:22 (connect, remote client)\nrule        port (port 22 is not in proxy.remote.ports)\naction      block (403)\ninterfaces  system routing\n"},
 		{[]string{"--remote", "http://localhost/"},
-			"target  localhost:80 (http, remote client)\nrule    remote-direct (direct needs proxy.remote.allow_direct)\naction  block (403)\n"},
+			"target      localhost:80 (http, remote client)\nrule        remote-direct (direct needs proxy.remote.allow_direct)\naction      block (403)\ninterfaces  system routing\n"},
 	} {
 		r := sb.Run(10*time.Second, append([]string{"explain"}, c.args...)...)
 		if r.Code != 0 || r.Stdout != c.want {

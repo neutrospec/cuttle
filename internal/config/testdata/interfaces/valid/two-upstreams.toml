@@ -1,0 +1,49 @@
+# Two upstreams with one address, different names, and different lists
+# (design 0008 D11).
+name = "cuttle-test"
+
+[proxy]
+default = "direct"
+interfaces = ["eth-a", "eth-b", "wifi"]
+
+[[interface]]
+name = "eth-a"
+mac = "00:00:5e:00:53:0a"
+kind = "wired"
+
+[[interface]]
+name = "eth-b"
+mac = "00:00:5E:00:53:0B"
+
+[[interface]]
+name = "wifi"
+device = "en0"
+kind = "wifi"
+
+[[upstream]]
+name = "proxy-wired"
+address = "203.0.113.20:3128"
+disclosure = "none"
+interfaces = ["eth-a", "eth-b"]
+
+[[upstream]]
+name = "proxy-any"
+address = "203.0.113.20:3128"
+disclosure = "none"
+interfaces = ["eth-a", "eth-b", "wifi"]
+
+[[rule]]
+name = "system-updates"
+domains = ["updates.example"]
+action = "direct"
+interfaces = ["eth-b"]
+
+[[rule]]
+name = "bulk-mirror"
+domains = ["mirror.example"]
+action = "upstream:proxy-wired"
+
+[[rule]]
+name = "partner"
+domains = ["partner.example"]
+action = "upstream:proxy-any"
