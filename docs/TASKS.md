@@ -44,17 +44,18 @@ A closed task becomes one line under Closed:
 ### TASK-0003 — Remove local information from the tree and history
 
 - Milestone: none (prepares publication)
-- Status: review
-- Iteration: 2/3
-- Workers: infra done in the main checkout; fresh re-check pending
+- Status: implement
+- Iteration: 3/3
+- Workers: infra in the main checkout; iteration 2 reviewer done
 - Base: `745b4e4` (rewritten ID)
-- Candidate: `main` with fixes `de59bc6` (H4, H7, H9) and the orchestrator
-  notes `3dccaa7` (H3, H8) and the scan-pattern note after `de59bc6`
-- Evidence: infra checks on `2b4e6ec` passed (links, whitespace,
-  `check-ignore` samples, local-pattern scan)
-- Findings: H3, H4, H7, H8, H9 reported fixed, pending re-check; H1, H2,
-  H5, H6 accepted by the user
-- Next action: reviewer — fresh re-check of `f6ddf9d..HEAD`
+- Candidate: `02a2781` (tree `29ccdc2`), containing the fixes `de59bc6`
+  (tree `2b4e6ec`), `3dccaa7`, and `0cbc9aa`; returned for revision
+- Evidence: iteration 2 re-check passed checks 1-5 except J1; H3, H4, H7,
+  H8, H9 resolved
+- Findings: J1, J4, J6 fixed on the board by the orchestrator; J2, J3, J5
+  open (infra)
+- Next action: infra — fix J2, J3, J5 and create the local `.env`, then a
+  fresh final re-check
 
 Decisions for TASK-0003 from the user (2026-11-25):
 
@@ -65,15 +66,16 @@ Decisions for TASK-0003 from the user (2026-11-25):
 - After the review (user): commit dates keep their time-zone offset; the
   example private addresses are unrelated to real networks; AGENTS.md keeps
   naming Korean as the user's language; the vendor document cited in
-  research 0002 is unrelated to the user's network. The early board path
-  `~/projects/squid` in history needs no further rewrite.
+  research 0002 is unrelated to the user's network. An early home-relative
+  checkout path in `77530ad` and `c335b45` stays in history.
 
 ## Closed
 
 The history was rewritten on 2026-11-25 (TASK-0003) to remove local
-information. The tree IDs in `gates:` lines of the commits up to the
-TASK-0002 landing merge `7e791a4`, except the three TASK-0002 branch
-commits, name pre-rewrite trees. The tree IDs below are the rewritten ones.
+information. The `gates:` lines of the 25 commits before the TASK-0002
+landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
+`ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
+rewritten ones.
 
 - TASK-0002 — Generalize terminology for a public project — landed
   `7e791a4`, gates: none @ `04c249a`; reviewed tree `bb9dc18` (iteration 2
