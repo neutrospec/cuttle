@@ -44,17 +44,19 @@ A closed task becomes one line under Closed:
 ### TASK-0005 — M1.2 exposure controls
 
 - Milestone: M1.2
-- Status: review
-- Iteration: 1/3
-- Workers: implementer done on branch `t3/add-remote-proxy-exposure`;
-  fresh reviewer pending
+- Status: implement
+- Iteration: 2/3
+- Workers: implementer on branch `t3/add-remote-proxy-exposure`; iteration
+  1 reviewer done
 - Base: `cbf0b07`
-- Candidate: `c7c6217` (tree `ee88b53`)
-- Evidence: implementer ran `scripts/gate t0` and `t1` on `ee88b53`, both
-  pass; an earlier T1 run on `d9bfee7` failed on a test timing bug, fixed
-- Findings: none yet; implementer lists 6 design questions
-- Next action: reviewer — independent review of `cbf0b07..c7c6217` with a
-  gate rerun
+- Candidate: `c7c6217` (tree `ee88b53`), approved with minor fixes
+- Evidence: reviewer reran T0, T1, and `-race -count=5` on the proxy
+  package (pass); mutation runs show each criterion's test fails without
+  its guard
+- Findings: open E1 (rejected-source warnings unbounded in volume), E2
+  (IPv4-mapped sources silently never match), E3-E7 (nits)
+- Next action: implementer — fix E1-E7 with the decisions below, rerun T0
+  and T1, then a fresh re-check
 
 Decisions for TASK-0005 (2026-11-25):
 
@@ -62,6 +64,13 @@ Decisions for TASK-0005 (2026-11-25):
   show; the bind-retry sentence moves to M1.4) and Z1 (validator positions).
 - Ignore the `cuttle` binary that the README quick start builds in the
   repository root.
+- Iteration 2 (orchestrator): rejected-source and limit warnings keep the
+  per-address once-a-minute rule and gain a global budget of 60 lines a
+  minute plus one summary line with the suppressed count; a full map never
+  resets suppression. An IPv4-mapped source prefix is a validation error
+  with a hint. The once-a-minute limit warning (0003 D12, 0006 D7) is
+  ratified. 0007 D3 names a dedicated rejected-source address. The
+  per-request source recheck after reload goes to the M1.4 brief.
 
 ## Closed
 
