@@ -143,3 +143,18 @@ removes entries. Append new entries at the end, oldest first.
 - What to do instead: Background the binary itself (`./cuttle serve &`), or
   record its PID another way, and confirm with `pgrep` that no `cuttle`
   process remains before finishing.
+
+### 2026-11-25 — orchestrator — scripted edits of the task board
+
+- Task: TASK-0001 to TASK-0008, updating and closing entries in
+  docs/TASKS.md with short Python scripts.
+- Attempts: 2 failures of the same kind.
+- What failed: The scripts located text with `s.index(...)` and assumed an
+  order. Once, `s.index('- Status: design')` matched the entry template
+  above the real entry and rewrote the template. Later, closing TASK-0007
+  sliced from `### TASK-0007` to the first `### TASK-0008`, which came
+  earlier in the file, so `s[:start] + s[end:]` duplicated two entries.
+- What to do instead: Search from the start of the target entry, assert
+  that each start index is below its end index and that each heading
+  occurs once, and print the board's headings after every edit before
+  committing.
