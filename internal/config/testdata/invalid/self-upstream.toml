@@ -1,0 +1,9 @@
+# want: 9 upstream[1].address: this instance's own listener
+name = "cuttle-test"
+[proxy]
+listen = ["127.0.0.1:18080"]
+default = "upstream:loop"
+[[upstream]]
+name = "loop"
+disclosure = "via"
+address = "localhost:18080"

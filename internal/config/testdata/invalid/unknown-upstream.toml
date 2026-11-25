@@ -1,0 +1,7 @@
+# want: 7 rule[1].action: unknown upstream "office"
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[rule]]
+domains = ["internal.example"]
+action = "upstream:office"

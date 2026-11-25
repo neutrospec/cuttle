@@ -1,0 +1,9 @@
+# want: 8 rule[1].host: unknown key
+name = "cuttle-test"
+[proxy]
+default = "direct"
+
+[[rule]]
+name = "x"
+host = "example.com"
+action = "block"

@@ -1,0 +1,4 @@
+# want: 2 name: does not match
+name = "Cuttle_Edge"
+[proxy]
+default = "direct"

@@ -1,0 +1,8 @@
+# want: 8 upstream[1].disclosure: is not "via" or "none"
+name = "cuttle-test"
+[proxy]
+default = "upstream:gateway"
+[[upstream]]
+name = "gateway"
+address = "10.8.0.6:3128"
+disclosure = "trace"

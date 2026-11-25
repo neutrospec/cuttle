@@ -1,0 +1,8 @@
+# want: 6 rule[1].name: reserved
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[rule]]
+name = "remote-default"
+domains = ["internal.example"]
+action = "block"

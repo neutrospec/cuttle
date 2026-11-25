@@ -1,0 +1,7 @@
+# want: 7 proxy.remote.default: needs proxy.remote.allow_direct = true
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[proxy.remote]
+sources = ["10.8.0.1/32"]
+default = "direct"

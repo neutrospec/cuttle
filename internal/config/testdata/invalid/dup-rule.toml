@@ -1,0 +1,12 @@
+# want: 10 rule[2].name: duplicate rule name "ads"
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[rule]]
+name = "ads"
+domains = ["ads.example.net"]
+action = "block"
+[[rule]]
+name = "ads"
+domains = ["tracker.example.net"]
+action = "block"

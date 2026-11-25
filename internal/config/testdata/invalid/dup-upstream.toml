@@ -1,0 +1,13 @@
+# want: 11 upstream[2].name: duplicate upstream name "gateway"
+name = "cuttle-test"
+[proxy]
+default = "upstream:gateway"
+[[upstream]]
+name = "gateway"
+address = "10.8.0.6:3128"
+disclosure = "via"
+
+[[upstream]]
+name = "gateway"
+address = "10.8.0.7:3128"
+disclosure = "via"

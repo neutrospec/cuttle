@@ -1,0 +1,5 @@
+# want: 4 proxy.listen[2]: not an IP:port literal; host names are not allowed
+name = "cuttle-test"
+[proxy]
+listen = ["127.0.0.1:18080", "localhost:18081"]
+default = "direct"

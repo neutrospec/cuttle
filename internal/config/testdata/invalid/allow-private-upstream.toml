@@ -1,0 +1,12 @@
+# want: 12 rule[1].allow_private: applies only to rules whose action is "direct"
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[upstream]]
+name = "gateway"
+address = "10.8.0.6:3128"
+disclosure = "via"
+[[rule]]
+domains = ["lan"]
+action = "upstream:gateway"
+allow_private = true

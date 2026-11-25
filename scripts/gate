@@ -1,0 +1,42 @@
+#!/bin/sh
+# Runs the gate commands of design 0007 D7 from the repository root.
+#
+#   scripts/gate t0   formatting, module tidiness, vet, build, unit tests,
+#                     and the key-file and test-dependency checks
+#   scripts/gate t1   integration and binary tests with the race detector;
+#                     needs /usr/bin/curl or CUTTLE_CURL
+#
+# Each command is echoed before it runs. The script stops at the first
+# failing command and exits non-zero.
+set -eu
+
+cd "$(dirname "$0")/.."
+
+t0() {
+	set -x
+	go version
+	test -z "$(gofmt -l .)"
+	go mod tidy -diff
+	go vet ./...
+	go build ./...
+	go test -short -count=1 ./...
+	test -z "$(git ls-files '*.pem' '*.key' '*.crt' '*.p12')"
+	test -z "$(go list -deps ./cmd/cuttle | grep -E 'internal/testenv|x/net/websocket')"
+	{ set +x; } 2>/dev/null
+}
+
+t1() {
+	set -x
+	CUTTLE_REQUIRE_CURL=1 go test -race -count=1 -timeout 10m ./...
+	{ set +x; } 2>/dev/null
+}
+
+case "${1:-}" in
+t0) t0 ;;
+t1) t1 ;;
+*)
+	echo "usage: scripts/gate t0|t1" >&2
+	exit 2
+	;;
+esac
+echo "gate $1: pass"

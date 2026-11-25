@@ -1,0 +1,4 @@
+# want: 4 proxy.default: invalid action
+name = "cuttle-test"
+[proxy]
+default = "deny"

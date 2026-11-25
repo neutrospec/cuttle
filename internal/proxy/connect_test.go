@@ -1,0 +1,522 @@
+package proxy
+
+import (
+	"bufio"
+	"crypto/tls"
+	"encoding/json"
+	"errors"
+	"io"
+	"net"
+	"net/http"
+	"net/netip"
+	"net/url"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"golang.org/x/net/websocket"
+
+	"squid/internal/stats"
+	"squid/internal/testenv"
+)
+
+// tlsGet runs one HTTPS GET over an established tunnel.
+func tlsGet(t *testing.T, c net.Conn, e *env, serverName, path string) (*http.Response, []byte) {
+	t.Helper()
+	tc := tls.Client(c, &tls.Config{ServerName: serverName, RootCAs: e.ca.Pool()})
+	if err := tc.Handshake(); err != nil {
+		t.Fatalf("TLS through the tunnel: %v", err)
+	}
+	io.WriteString(tc, "GET "+path+" HTTP/1.1\r\nHost: "+serverName+"\r\n\r\n")
+	res, err := http.ReadResponse(bufio.NewReader(tc), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	return res, body
+}
+
+// TestConnectDirect checks C1: CONNECT on a direct rule reaches the HTTPS
+// origin, and Go and curl verify the test-CA certificate.
+func TestConnectDirect(t *testing.T) {
+	e := newEnv(t, baseConfig)
+
+	client, tr := e.goClient()
+	res, err := client.Get("https://origin.cuttle.test/echo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rec testenv.Request
+	json.NewDecoder(res.Body).Decode(&rec)
+	res.Body.Close()
+	if res.StatusCode != 200 || res.TLS == nil || rec.URI != "/echo" || rec.Host != "origin.cuttle.test" {
+		t.Fatalf("Go: status %d TLS %v echo %+v", res.StatusCode, res.TLS != nil, rec)
+	}
+	if got := res.TLS.PeerCertificates[0].Issuer.CommonName; got != "cuttle test origin root" {
+		t.Errorf("issuer %q", got)
+	}
+
+	// A Go client that trusts another root fails verification.
+	other := testenv.NewCA(t, "unrelated root")
+	untrusting := &http.Transport{
+		Proxy:           http.ProxyURL(&url.URL{Scheme: "http", Host: e.addr}),
+		TLSClientConfig: &tls.Config{RootCAs: other.Pool()},
+	}
+	defer untrusting.CloseIdleConnections()
+	if _, err := (&http.Client{Transport: untrusting, Timeout: 10 * time.Second}).Get("https://origin.cuttle.test/echo"); err == nil ||
+		!strings.Contains(err.Error(), "certificate") {
+		t.Errorf("untrusted root: %v", err)
+	}
+
+	// curl with the test root succeeds; with another root it fails
+	// verification (exit 60).
+	ca := e.ca.WritePEM(t)
+	r := testenv.Curl(t, "-sS", "--proxy", "http://"+e.addr, "--cacert", ca,
+		"-w", "%{http_connect} %{http_code}", "-o", "/dev/null", "https://origin.cuttle.test/echo")
+	if r.Code != 0 || r.Stdout != "200 200" {
+		t.Errorf("curl: exit %d out %q err %q", r.Code, r.Stdout, r.Stderr)
+	}
+	r = testenv.Curl(t, "-sS", "--proxy", "http://"+e.addr, "--cacert", other.WritePEM(t),
+		"-o", "/dev/null", "https://origin.cuttle.test/echo")
+	if r.Code != 60 {
+		t.Errorf("curl with another root: exit %d err %q", r.Code, r.Stderr)
+	}
+
+	tr.CloseIdleConnections()
+	ds := e.waitDecisions(4)
+	for _, d := range ds {
+		checkDecision(t, d, map[string]string{"kind": "connect", "target": "origin.cuttle.test:443",
+			"rule": "default", "action": "direct", "source": "local", "outcome": "ok", "status": "200"})
+	}
+}
+
+// TestConnectExact200 checks C1: a raw client receives exactly the 200 head
+// and nothing else before origin bytes.
+func TestConnectExact200(t *testing.T) {
+	e := newEnv(t, baseConfig)
+	c := e.dial()
+	io.WriteString(c, "CONNECT origin.cuttle.test:443 HTTP/1.1\r\nHost: origin.cuttle.test:443\r\n\r\n")
+	got := make([]byte, len(connectEstablished))
+	if _, err := io.ReadFull(c, got); err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "HTTP/1.1 200 Connection established\r\n\r\n" {
+		t.Fatalf("got %q", got)
+	}
+	// Nothing follows until the client speaks; the origin waits for the
+	// ClientHello.
+	c.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
+	var one [1]byte
+	if n, err := c.Read(one[:]); n != 0 || !errors.Is(err, errTimeout(err)) {
+		t.Fatalf("extra bytes after the 200: %d %v", n, err)
+	}
+	c.SetReadDeadline(time.Now().Add(10 * time.Second))
+	res, body := tlsGet(t, c, e, "origin.cuttle.test", "/echo")
+	if res.StatusCode != 200 || !strings.Contains(string(body), `"uri":"/echo"`) {
+		t.Fatalf("through the tunnel: %d %s", res.StatusCode, body)
+	}
+}
+
+// errTimeout returns err when it is a timeout, so errors.Is matches only
+// timeouts.
+func errTimeout(err error) error {
+	var ne net.Error
+	if errors.As(err, &ne) && ne.Timeout() {
+		return err
+	}
+	return errors.New("not a timeout")
+}
+
+// pipelineConn sends a CONNECT head together with the first bytes the TLS
+// client writes, and strips the exact 200 before the first read.
+type pipelineConn struct {
+	net.Conn
+	t         *testing.T
+	head      string
+	wroteHead bool
+	readHead  bool
+}
+
+func (c *pipelineConn) Write(b []byte) (int, error) {
+	if !c.wroteHead {
+		c.wroteHead = true
+		if _, err := c.Conn.Write(append([]byte(c.head), b...)); err != nil {
+			return 0, err
+		}
+		return len(b), nil
+	}
+	return c.Conn.Write(b)
+}
+
+func (c *pipelineConn) Read(b []byte) (int, error) {
+	if !c.readHead {
+		c.readHead = true
+		got := make([]byte, len(connectEstablished))
+		if _, err := io.ReadFull(c.Conn, got); err != nil || string(got) != connectEstablished {
+			return 0, errors.New("pipelined CONNECT: got " + string(got))
+		}
+	}
+	return c.Conn.Read(b)
+}
+
+// TestConnectPipelinedBytes checks C2: bytes sent right after the CONNECT
+// head, before the 200, reach the origin.
+func TestConnectPipelinedBytes(t *testing.T) {
+	e := newEnv(t, baseConfig)
+
+	t.Run("plain request", func(t *testing.T) {
+		c := e.dial()
+		io.WriteString(c, "CONNECT plain.cuttle.test:80 HTTP/1.1\r\nHost: plain.cuttle.test:80\r\n\r\n"+
+			"GET /echo HTTP/1.1\r\nHost: plain.cuttle.test\r\nX-Pipelined: yes\r\n\r\n")
+		got := make([]byte, len(connectEstablished))
+		if _, err := io.ReadFull(c, got); err != nil || string(got) != connectEstablished {
+			t.Fatalf("got %q %v", got, err)
+		}
+		res, err := http.ReadResponse(bufio.NewReader(c), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(res.Body)
+		if res.StatusCode != 200 || !strings.Contains(string(body), `"X-Pipelined":["yes"]`) {
+			t.Fatalf("status %d body %s", res.StatusCode, body)
+		}
+	})
+
+	t.Run("TLS ClientHello", func(t *testing.T) {
+		pc := &pipelineConn{Conn: e.dial(), t: t, head: "CONNECT origin.cuttle.test:443 HTTP/1.1\r\nHost: origin.cuttle.test:443\r\n\r\n"}
+		res, body := tlsGet(t, pc, e, "origin.cuttle.test", "/echo")
+		if res.StatusCode != 200 || !strings.Contains(string(body), `"uri":"/echo"`) {
+			t.Fatalf("status %d body %s", res.StatusCode, body)
+		}
+	})
+}
+
+// TestConnectBracketlessIPv6Rejected checks the T1 part of C7: Go's server
+// rejects CFNetwork's bracketless IPv6 CONNECT with its own 400 before any
+// handler runs, so there is no Proxy-Status, no decision, and no lookup.
+func TestConnectBracketlessIPv6Rejected(t *testing.T) {
+	e := newEnv(t, baseConfig)
+	res, _ := e.raw("CONNECT 2001:db8::1:443 HTTP/1.1\r\nHost: 2001:db8::1:443\r\n\r\n")
+	if res.StatusCode != 400 || res.Header.Get("Proxy-Status") != "" {
+		t.Fatalf("status %d Proxy-Status %q", res.StatusCode, res.Header.Get("Proxy-Status"))
+	}
+	e.noDecisionFor(200 * time.Millisecond)
+	if ev := e.net.Events(); len(ev) != 0 {
+		t.Fatalf("network events %v", ev)
+	}
+	// The bracketed form is cuttle's to route.
+	e.net.Route("[2001:db8::1]:443", e.https.Addr)
+	c := e.connectRaw("[2001:db8::1]:443")
+	c.Close()
+	checkDecision(t, e.waitDecisions(1)[0], map[string]string{"target": "[2001:db8::1]:443", "action": "direct"})
+}
+
+// TestLocalAnyPort checks C6: a local client reaches loopback services and a
+// public test address on ports other than 80 and 443; local clients face no
+// port policy.
+func TestLocalAnyPort(t *testing.T) {
+	e := newEnv(t, baseConfig)
+	e.net.Route("127.0.0.1:3000", e.http.Addr)
+	e.net.Route("127.0.0.1:8443", e.https.Addr)
+	e.net.Route("203.0.113.20:8443", e.https.Addr)
+	e.net.Route("203.0.113.20:22", e.http.Addr)
+
+	client, tr := e.goClient()
+	res, err := client.Get("http://localhost:3000/echo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("localhost:3000: %d", res.StatusCode)
+	}
+	res, err = client.Get("https://127.0.0.1:8443/echo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("127.0.0.1:8443: %d", res.StatusCode)
+	}
+	tr.CloseIdleConnections()
+	c := e.connectRaw("203.0.113.20:8443")
+	if res, _ := tlsGet(t, c, e, "origin.cuttle.test", "/echo"); res.StatusCode != 200 {
+		t.Fatalf("203.0.113.20:8443: %d", res.StatusCode)
+	}
+	c.Close()
+	c = e.connectRaw("203.0.113.20:22")
+	c.Close()
+
+	ds := e.waitDecisions(4)
+	for _, w := range []struct{ kind, target, rule string }{
+		{"http", "localhost:3000", "loopback"},
+		{"connect", "127.0.0.1:8443", "loopback"},
+		{"connect", "203.0.113.20:8443", "default"},
+		{"connect", "203.0.113.20:22", "default"},
+	} {
+		checkDecision(t, byTarget(t, ds, w.kind, w.target), map[string]string{"rule": w.rule, "action": "direct", "status": "200", "outcome": "ok"})
+	}
+	wantDials := []netip.AddrPort{
+		netip.MustParseAddrPort("127.0.0.1:3000"),
+		netip.MustParseAddrPort("127.0.0.1:8443"),
+		netip.MustParseAddrPort("203.0.113.20:8443"),
+		netip.MustParseAddrPort("203.0.113.20:22"),
+	}
+	if got := e.net.Dials(); !slices.Equal(got, wantDials) {
+		t.Errorf("dials %v, want %v", got, wantDials)
+	}
+}
+
+// TestDirectAddressPolicy checks 0003 N4.
+func TestDirectAddressPolicy(t *testing.T) {
+	cfg := baseConfig + `
+[[rule]]
+name = "lan"
+domains = ["lan.cuttle.test"]
+action = "direct"
+allow_private = true
+`
+	e := newEnv(t, cfg)
+	n := e.net
+	n.Map("lo.cuttle.test", "127.0.0.1")
+	n.Map("self.cuttle.test", "192.0.2.50")
+	n.Map("ll.cuttle.test", "169.254.1.1")
+	n.Map("ll6.cuttle.test", "fe80::1")
+	n.Map("zero.cuttle.test", "0.0.0.0")
+	n.Map("nas.cuttle.test", "10.20.0.5")
+	n.Map("nas.lan.cuttle.test", "10.20.0.5")
+	n.Route("10.20.0.5:443", e.https.Addr)
+	n.Route("192.0.2.50:443", e.https.Addr)
+	n.Route("127.0.0.1:443", e.https.Addr)
+	n.Route("127.0.0.1:3000", e.http.Addr)
+	n.Route("127.0.0.1:8443", e.https.Addr)
+
+	for _, name := range []string{"lo", "self", "ll", "ll6", "zero", "nas"} {
+		n.Reset()
+		target := name + ".cuttle.test:443"
+		res, body := e.raw("CONNECT " + target + " HTTP/1.1\r\nHost: " + target + "\r\n\r\n")
+		if res.StatusCode != 502 || !strings.HasPrefix(res.Header.Get("Proxy-Status"), "cuttle-test; error=destination_ip_prohibited") {
+			t.Errorf("%s: %d %q %s", target, res.StatusCode, res.Header.Get("Proxy-Status"), body)
+		}
+		if d := n.Dials(); len(d) != 0 {
+			t.Errorf("%s: dials %v", target, d)
+		}
+		if l := n.Lookups(); len(l) != 1 {
+			t.Errorf("%s: lookups %v", target, l)
+		}
+	}
+	ds := e.waitDecisions(6)
+	for _, d := range ds {
+		checkDecision(t, d, map[string]string{"outcome": "prohibited", "status": "502", "error": "destination_ip_prohibited", "up": "0", "down": "0"})
+	}
+	// Unusable literals are refused even through a rule with both flags.
+	n.Reset()
+	if res, _ := e.raw("CONNECT 169.254.1.1:443 HTTP/1.1\r\nHost: x\r\n\r\n"); res.StatusCode != 502 {
+		t.Errorf("link-local literal: %d", res.StatusCode)
+	}
+	if d := n.Dials(); len(d) != 0 {
+		t.Errorf("link-local literal dialed %v", d)
+	}
+
+	// Allowed: a private name through allow_private, private and self
+	// literals without any flag, and loopback through the loopback rule.
+	n.Reset()
+	for _, target := range []string{"nas.lan.cuttle.test:443", "10.20.0.5:443", "192.0.2.50:443", "127.0.0.1:443"} {
+		c := e.connectRaw(target)
+		if res, _ := tlsGet(t, c, e, "origin.cuttle.test", "/echo"); res.StatusCode != 200 {
+			t.Errorf("%s: %d", target, res.StatusCode)
+		}
+		c.Close()
+	}
+	want := []netip.AddrPort{
+		netip.MustParseAddrPort("10.20.0.5:443"),
+		netip.MustParseAddrPort("10.20.0.5:443"),
+		netip.MustParseAddrPort("192.0.2.50:443"),
+		netip.MustParseAddrPort("127.0.0.1:443"),
+	}
+	if got := n.Dials(); !slices.Equal(got, want) {
+		t.Errorf("dials %v, want %v", got, want)
+	}
+
+	// The starter loopback rule: localhost:3000 and 127.0.0.1:8443.
+	client, tr := e.goClient()
+	for _, u := range []string{"http://localhost:3000/echo", "https://127.0.0.1:8443/echo"} {
+		res, err := client.Get(u)
+		if err != nil {
+			t.Fatalf("%s: %v", u, err)
+		}
+		res.Body.Close()
+		if res.StatusCode != 200 {
+			t.Errorf("%s: %d", u, res.StatusCode)
+		}
+	}
+	tr.CloseIdleConnections()
+	all := e.waitDecisions(6 + 1 + 4 + 2)
+	checkDecision(t, byTarget(t, all, "http", "localhost:3000"), map[string]string{"rule": "loopback", "outcome": "ok", "status": "200"})
+	checkDecision(t, byTarget(t, all, "connect", "127.0.0.1:8443"), map[string]string{"rule": "loopback", "outcome": "ok", "status": "200"})
+	checkDecision(t, byTarget(t, all, "connect", "nas.lan.cuttle.test:443"), map[string]string{"rule": "lan", "outcome": "ok"})
+	checkDecision(t, byTarget(t, all, "connect", "nas.cuttle.test:443"), map[string]string{"rule": "default", "outcome": "prohibited"})
+}
+
+// TestNonLoopbackSourceRejected checks the M1.1 source check: a connection
+// from a non-loopback source is closed on accept with no byte read or
+// written, counted with reason "source", and logged, and it produces no
+// decision. Remote clients arrive in M1.2.
+func TestNonLoopbackSourceRejected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test")
+	}
+	cfg := baseConfig
+	logs := &logBuffer{}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pcfg := mustParse(t, cfg)
+	p, err := New(pcfg, Deps{
+		Network:   testenv.NewNet(),
+		SelfAddrs: testenv.SelfAddrs,
+		Listeners: []net.Listener{testenv.SourceListener(ln, netip.MustParseAddr("10.8.0.1"))},
+		Logger:    newTestLogger(logs),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	go p.Serve()
+	defer p.Close()
+	c, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	io.WriteString(c, "CONNECT origin.cuttle.test:443 HTTP/1.1\r\n\r\n")
+	c.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if n, err := c.Read(make([]byte, 64)); n != 0 || err == nil {
+		t.Fatalf("read %d %v", n, err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for p.Live().Get(stats.ConnectionsRejectedTotal, "reason", "source") != 1 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := p.Live().Get(stats.ConnectionsRejectedTotal, "reason", "source"); got != 1 {
+		t.Fatalf("rejected %d", got)
+	}
+	if !strings.Contains(logs.String(), "msg=\"rejected source\" source=10.8.0.1") {
+		t.Errorf("log %q", logs.String())
+	}
+	if len(logs.decisions()) != 0 || p.Live().Get(stats.ConnectionsTotal) != 0 {
+		t.Errorf("decision or accepted connection for a rejected source")
+	}
+}
+
+// TestUnsupportedConfig checks that New refuses what M1.1 cannot serve.
+func TestUnsupportedConfig(t *testing.T) {
+	for _, c := range []struct{ name, cfg string }{
+		{"remote listener", `name = "cuttle-test"
+[proxy]
+listen = ["127.0.0.1:18080", "10.8.0.6:18080"]
+default = "direct"
+[proxy.remote]
+sources = ["10.8.0.1/32"]
+`},
+		{"upstream default", `name = "cuttle-test"
+[proxy]
+default = "upstream:gw"
+[[upstream]]
+name = "gw"
+address = "10.8.0.6:3128"
+disclosure = "via"
+`},
+		{"upstream rule", `name = "cuttle-test"
+[proxy]
+default = "direct"
+[[upstream]]
+name = "gw"
+address = "10.8.0.6:3128"
+disclosure = "via"
+[[rule]]
+domains = ["internal.example"]
+action = "upstream:gw"
+`},
+	} {
+		ln, _ := net.Listen("tcp", "127.0.0.1:0")
+		_, err := New(mustParse(t, c.cfg), Deps{Network: testenv.NewNet(), SelfAddrs: testenv.SelfAddrs, Listeners: []net.Listener{ln}})
+		ln.Close()
+		if !errors.Is(err, ErrUnsupported) {
+			t.Errorf("%s: %v", c.name, err)
+		}
+	}
+}
+
+// TestWebSocket checks C9: a WebSocket echo round trip over CONNECT to port
+// 80, over CONNECT to port 443 (wss), and over an absolute-form upgrade on a
+// direct route.
+func TestWebSocket(t *testing.T) {
+	e := newEnv(t, baseConfig)
+	echo := func(t *testing.T, ws *websocket.Conn) {
+		t.Helper()
+		msg := "hello " + t.Name()
+		if err := websocket.Message.Send(ws, msg); err != nil {
+			t.Fatal(err)
+		}
+		var got string
+		if err := websocket.Message.Receive(ws, &got); err != nil {
+			t.Fatal(err)
+		}
+		if got != msg {
+			t.Fatalf("echo %q", got)
+		}
+	}
+	origin, _ := url.Parse("http://ws.cuttle.test/")
+
+	t.Run("CONNECT port 80", func(t *testing.T) {
+		c := e.connectRaw("ws.cuttle.test:80")
+		loc, _ := url.Parse("ws://ws.cuttle.test/ws")
+		ws, err := websocket.NewClient(&websocket.Config{Location: loc, Origin: origin, Version: websocket.ProtocolVersionHybi13}, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ws.Close()
+		echo(t, ws)
+	})
+
+	t.Run("CONNECT port 443", func(t *testing.T) {
+		c := e.connectRaw("ws.cuttle.test:443")
+		tc := tls.Client(c, &tls.Config{ServerName: "ws.cuttle.test", RootCAs: e.ca.Pool()})
+		loc, _ := url.Parse("wss://ws.cuttle.test/ws")
+		ws, err := websocket.NewClient(&websocket.Config{Location: loc, Origin: origin, Version: websocket.ProtocolVersionHybi13}, tc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ws.Close()
+		echo(t, ws)
+	})
+
+	t.Run("absolute-form upgrade", func(t *testing.T) {
+		before := len(e.http.Requests())
+		c := e.dial()
+		// RequestURI() of this URL is the absolute form http://ws.cuttle.test/ws.
+		loc := &url.URL{Scheme: "http", Opaque: "//ws.cuttle.test/ws", Host: "ws.cuttle.test"}
+		ws, err := websocket.NewClient(&websocket.Config{Location: loc, Origin: origin, Version: websocket.ProtocolVersionHybi13}, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		echo(t, ws)
+		ws.Close()
+		reqs := e.http.Requests()[before:]
+		if len(reqs) == 0 || reqs[0].URI != "/ws" || reqs[0].Header.Get("Upgrade") != "websocket" {
+			t.Fatalf("origin saw %+v", reqs)
+		}
+		raw := string(e.http.Raw(reqs[0].Conn))
+		if !strings.HasPrefix(raw, "GET /ws HTTP/1.1\r\n") {
+			t.Errorf("origin request line %q", firstLine(raw))
+		}
+	})
+
+	ds := e.waitDecisions(3)
+	checkDecision(t, byTarget(t, ds, "connect", "ws.cuttle.test:80"), map[string]string{"outcome": "ok", "status": "200"})
+	checkDecision(t, byTarget(t, ds, "connect", "ws.cuttle.test:443"), map[string]string{"outcome": "ok", "status": "200"})
+	checkDecision(t, byTarget(t, ds, "http", "ws.cuttle.test:80"), map[string]string{"status": "101", "outcome": "ok"})
+}

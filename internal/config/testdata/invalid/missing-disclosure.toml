@@ -1,0 +1,7 @@
+# want: 5 upstream[1].disclosure: required
+name = "cuttle-test"
+[proxy]
+default = "upstream:gateway"
+[[upstream]]
+name = "gateway"
+address = "10.8.0.6:3128"

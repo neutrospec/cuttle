@@ -1,0 +1,7 @@
+# want: 5 rule[1]: has none of hosts, domains, cidrs, or ports
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[rule]]
+name = "everything"
+action = "block"

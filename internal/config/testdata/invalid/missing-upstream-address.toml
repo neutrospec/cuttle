@@ -1,0 +1,7 @@
+# want: 5 upstream[1].address: required
+name = "cuttle-test"
+[proxy]
+default = "upstream:gateway"
+[[upstream]]
+name = "gateway"
+disclosure = "via"
