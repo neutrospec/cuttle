@@ -69,6 +69,8 @@ Decisions for TASK-0008 from the user (2026-11-25):
   interface, so cost may depend on the network, not only the interface.
 - "Online" means the link is up with a usable address; a fast connect
   failure moves to the next interface. No periodic probe traffic.
+- The user has two Ethernet interfaces and two tethering connections;
+  interfaces of the same kind must be distinguishable.
 
 ### TASK-0007 — M1.4 live operation
 
