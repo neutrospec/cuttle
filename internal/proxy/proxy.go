@@ -2,9 +2,10 @@
 // handler, tunnels, plain-HTTP forwarding, cuttle's own responses, live
 // counters, and the decision log (design 0002 D2-D8).
 //
-// M1.1 serves local clients on loopback listeners with direct and block
-// routes. Remote sources, upstream routes, reload, and the control socket
-// arrive in later stages; New refuses configurations that need them.
+// M1.2 serves local clients and allowlisted remote clients with direct and
+// block routes, on loopback and non-loopback listeners (design 0003 D9-D12).
+// Upstream routes, reload, and the control socket arrive in later stages;
+// New refuses configurations that need upstream routes.
 package proxy
 
 import (
@@ -17,6 +18,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/netip"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -57,22 +59,31 @@ type Proxy struct {
 	snap atomic.Pointer[snapshot]
 	srv  *http.Server
 
+	conns connLimits
+	warn  *warnLimiter
+
 	mu       sync.Mutex
 	tunnels  map[*tunnel]struct{}
-	warned   map[netip.Addr]time.Time
 	closing  bool
 	serveErr chan error
 }
 
-// snapshot is an immutable policy snapshot with its own direct transport,
-// so a pooled connection is only reused under the policy that allowed its
-// dial (design 0002 D5).
+// sourceClasses lists the client classes; each has its own direct
+// transport.
+var sourceClasses = [...]policy.SourceClass{policy.SourceLocal, policy.SourceRemote}
+
+// snapshot is an immutable policy snapshot with a direct transport per
+// client class, so a pooled connection is only reused for the same
+// snapshot, class, host, and port, under the policy that allowed its dial
+// (design 0002 D5). Without the class split, a connection dialed for a
+// local client, for example to a private address through allow_private,
+// would carry a remote client's request to the same host and port.
 type snapshot struct {
 	cfg    *config.Config
 	policy *policy.Policy
 	dialer *netx.Dialer
-	direct *http.Transport
-	rp     *httputil.ReverseProxy
+	direct [len(sourceClasses)]*http.Transport
+	rp     [len(sourceClasses)]*httputil.ReverseProxy
 }
 
 // ErrUnsupported marks configurations that need a later stage.
@@ -103,7 +114,7 @@ func New(cfg *config.Config, deps Deps) (*Proxy, error) {
 		log:     deps.Logger,
 		live:    deps.Live,
 		tunnels: map[*tunnel]struct{}{},
-		warned:  map[netip.Addr]time.Time{},
+		warn:    newWarnLimiter(deps.Logger),
 	}
 	p.snap.Store(p.newSnapshot(cfg))
 	p.srv = &http.Server{
@@ -123,18 +134,15 @@ func New(cfg *config.Config, deps Deps) (*Proxy, error) {
 	return p, nil
 }
 
-// CheckSupported refuses settings that this version cannot serve:
-// non-loopback listeners need the remote-client policy of M1.2, and upstream
-// routes need M1.3. A configuration may still declare upstreams that no
-// local route uses.
+// CheckSupported refuses settings that this version cannot serve: upstream
+// routes need M1.3, for local and remote clients alike. A configuration may
+// still declare upstreams that no route uses.
 func CheckSupported(cfg *config.Config) error {
-	for _, l := range cfg.Proxy.Listen {
-		if !netx.IsLoopbackListener(l) {
-			return fmt.Errorf("proxy.listen: %s: listeners for remote clients are %w", l, ErrUnsupported)
-		}
-	}
 	if cfg.Proxy.Default.Action == policy.ActionUpstream {
 		return fmt.Errorf("proxy.default: %s: upstream routes are %w", cfg.Proxy.Default, ErrUnsupported)
+	}
+	if cfg.Proxy.Remote.Default.Action == policy.ActionUpstream {
+		return fmt.Errorf("proxy.remote.default: %s: upstream routes are %w", cfg.Proxy.Remote.Default, ErrUnsupported)
 	}
 	for i, r := range cfg.Rules {
 		if r.Route.Action == policy.ActionUpstream {
@@ -155,32 +163,46 @@ func (p *Proxy) newSnapshot(cfg *config.Config) *snapshot {
 			Stagger:   dialStagger,
 		},
 	}
-	s.direct = &http.Transport{
-		Proxy: nil, // never http.ProxyFromEnvironment
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			ex := exchangeFrom(ctx)
-			if ex == nil {
-				return nil, errors.New("proxy: dial without a decision")
-			}
-			return s.dialer.Dial(ctx, ex.d)
-		},
-		DisableCompression:    true,
-		ForceAttemptHTTP2:     false,
-		TLSNextProto:          map[string]func(string, *tls.Conn) http.RoundTripper{},
-		MaxIdleConns:          256,
-		MaxIdleConnsPerHost:   16,
-		IdleConnTimeout:       90 * time.Second,
-		ResponseHeaderTimeout: cfg.Proxy.ResponseTimeout,
-		ExpectContinueTimeout: time.Second,
-	}
-	s.rp = &httputil.ReverseProxy{
-		Rewrite:        rewriteDirect,
-		Transport:      s.direct,
-		ModifyResponse: modifyResponse,
-		ErrorHandler:   p.forwardError,
-		ErrorLog:       slog.NewLogLogger(p.log.Handler(), slog.LevelDebug),
+	for _, class := range sourceClasses {
+		s.direct[class] = &http.Transport{
+			Proxy: nil, // never http.ProxyFromEnvironment
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				ex := exchangeFrom(ctx)
+				if ex == nil {
+					return nil, errors.New("proxy: dial without a decision")
+				}
+				if ex.d.Source != class {
+					// Never reached: forward picks the transport by the
+					// exchange's class. Fail closed if that ever changes.
+					return nil, fmt.Errorf("proxy: %s dial on the %s transport", ex.d.Source, class)
+				}
+				return s.dialer.Dial(ctx, ex.d)
+			},
+			DisableCompression:    true,
+			ForceAttemptHTTP2:     false,
+			TLSNextProto:          map[string]func(string, *tls.Conn) http.RoundTripper{},
+			MaxIdleConns:          256,
+			MaxIdleConnsPerHost:   16,
+			IdleConnTimeout:       90 * time.Second,
+			ResponseHeaderTimeout: cfg.Proxy.ResponseTimeout,
+			ExpectContinueTimeout: time.Second,
+		}
+		s.rp[class] = &httputil.ReverseProxy{
+			Rewrite:        rewriteDirect,
+			Transport:      s.direct[class],
+			ModifyResponse: modifyResponse,
+			ErrorHandler:   p.forwardError,
+			ErrorLog:       slog.NewLogLogger(p.log.Handler(), slog.LevelDebug),
+		}
 	}
 	return s
+}
+
+// closeIdle closes the idle pooled connections of every direct transport.
+func (s *snapshot) closeIdle() {
+	for _, t := range s.direct {
+		t.CloseIdleConnections()
+	}
 }
 
 // Live returns the live counters.
@@ -222,7 +244,8 @@ func (p *Proxy) Shutdown(ctx context.Context) error {
 	for _, t := range ts {
 		t.shutdown()
 	}
-	p.snap.Load().direct.CloseIdleConnections()
+	p.snap.Load().closeIdle()
+	p.warn.stop()
 	return err
 }
 
@@ -233,30 +256,14 @@ func (p *Proxy) Close() error {
 	return p.Shutdown(ctx)
 }
 
-// maxWarnedSources bounds the memory of warnSource.
-const maxWarnedSources = 1024
-
-// warnSource logs a rejected source at most once per minute per address.
-// The map of recent warnings is pruned, and reset when every entry is still
-// recent, so it never holds more than maxWarnedSources addresses.
+// warnSource logs a rejected source, at most once per minute per address
+// and within the warning budget (design 0003 D10, D12).
 func (p *Proxy) warnSource(a netip.Addr) {
-	now := time.Now()
-	p.mu.Lock()
-	if last, seen := p.warned[a]; seen && now.Sub(last) < time.Minute {
-		p.mu.Unlock()
-		return
-	}
-	if len(p.warned) >= maxWarnedSources {
-		for k, t := range p.warned {
-			if now.Sub(t) >= time.Minute {
-				delete(p.warned, k)
-			}
-		}
-		if len(p.warned) >= maxWarnedSources {
-			clear(p.warned)
-		}
-	}
-	p.warned[a] = now
-	p.mu.Unlock()
-	p.log.Warn("rejected source", "source", a.String(), "reason", "remote clients are not supported in this version")
+	p.warn.warn(warnKey{a, "source"}, "rejected source", "source", a.String(), "reason", "not in proxy.remote.sources")
+}
+
+// warnLimit logs a connection over a limit, at most once per minute per
+// address and within the warning budget (design 0003 D12).
+func (p *Proxy) warnLimit(a netip.Addr, key string, limit int) {
+	p.warn.warn(warnKey{a, "limit"}, "connection limit reached", "source", a.String(), "limit", key, "max", strconv.Itoa(limit))
 }

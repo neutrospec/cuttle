@@ -1,0 +1,22 @@
+# want: 11 upstream[1]: must be a table
+# want: 12 upstream[2].connect_timeout: out of range
+# want: 12 upstream[2].address: is this instance's own listener
+# warn: 13 upstream[3].name: upstream "spare" is not used by any action
+# want: 16 rule[1]: must be a table
+# want: 17 rule[2].allow_loopback: applies only to rules whose action is "direct"
+# warn: 18 rule[3].domains[1]: "internal.example" repeats rule "first"
+name = "cuttle-test"
+# Messages name tables as written, after the skipped non-table elements.
+upstream = [
+  "gateway",
+  { name = "self", address = "127.0.0.1:18080", disclosure = "via", connect_timeout = "1ms" },
+  { name = "spare", address = "10.8.0.6:3128", disclosure = "via" },
+]
+rule = [
+  5,
+  { name = "first", domains = ["internal.example"], action = "upstream:self", allow_loopback = true },
+  { name = "later", domains = ["internal.example"], action = "direct" },
+]
+[proxy]
+listen = ["127.0.0.1:18080"]
+default = "direct"

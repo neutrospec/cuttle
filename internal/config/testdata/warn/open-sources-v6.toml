@@ -1,0 +1,7 @@
+# warn: 7 proxy.remote.sources[2]: ::/0 admits every address
+name = "cuttle-test"
+[proxy]
+listen = ["127.0.0.1:18080", "[2001:db8::6]:18080"]
+default = "direct"
+[proxy.remote]
+sources = ["2001:db8::1/128", "::/0"]

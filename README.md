@@ -28,13 +28,21 @@ ordered rules on host name, domain, IP prefix, and port:
 
 ## Status
 
-Milestone stage M1.1 is implemented: `direct` and `block` routes for local
-clients on loopback listeners, the starter configuration, the decision log
-with rotation, and `cuttle init`, `check`, `explain`, and `paths`. Upstream
-routes, listeners for remote clients, `cuttle reload` and `status`, the
-statistics, and the admin UI arrive in later stages of the
-[roadmap](docs/ROADMAP.md); `cuttle serve` refuses a configuration that
-needs them.
+Milestone stages M1.1 and M1.2 are implemented: `direct` and `block`
+routes, the starter configuration, the decision log with rotation, and
+`cuttle init`, `check`, `explain`, and `paths`, for local clients and for
+remote clients on non-loopback listeners. Remote clients need an address in
+`proxy.remote.sources` and get their own ports, default, and connection
+limits ([0003 D9–D12](docs/design/0003-upstream-chaining-and-exposure.md#d9-listeners)).
+cuttle tells remote from local clients only by the peer address, so a
+relay that hands remote connections to cuttle from loopback, such as an
+`ssh -L` forward or a VPN client that delivers connections from loopback,
+gives them a local client's full reach; such setups are unsupported
+([0003 D13](docs/design/0003-upstream-chaining-and-exposure.md#d13-edge-gateway-and-egress-deployment)).
+Upstream routes, `cuttle reload` and `status`, the retry of a listener that
+cannot bind, the statistics, and the admin UI arrive in later stages of the
+[roadmap](docs/ROADMAP.md); `cuttle serve` refuses upstream routes, and
+every listener must bind at startup.
 
 Try it from a checkout:
 

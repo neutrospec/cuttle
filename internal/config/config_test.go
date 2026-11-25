@@ -18,10 +18,12 @@ import (
 	"squid/internal/policy"
 )
 
-// expectation is the first line of a sample file:
-// "# want: LINE KEY: MESSAGE" or "# warn: LINE KEY: MESSAGE". An empty KEY
-// is not checked.
+// expectation is one header line of a sample file:
+// "# want: LINE KEY: MESSAGE" for an error or "# warn: LINE KEY: MESSAGE"
+// for a warning. A sample starts with one or more such lines; the first
+// names the issue the sample is for. An empty KEY is not checked.
 type expectation struct {
+	kind string // "want" or "warn"
 	line int
 	key  string
 	msg  string
@@ -29,19 +31,26 @@ type expectation struct {
 
 var expectRe = regexp.MustCompile(`^# (want|warn): (\d+) ([^ :]*): (.+)$`)
 
-func readExpectation(t *testing.T, path string) (string, expectation, []byte) {
+// readExpectations returns the header lines of a sample and its content.
+func readExpectations(t *testing.T, path string) ([]expectation, []byte) {
 	t.Helper()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, _, _ := strings.Cut(string(data), "\n")
-	m := expectRe.FindStringSubmatch(first)
-	if m == nil {
-		t.Fatalf("%s: first line %q does not document the expected issue", path, first)
+	var out []expectation
+	for _, line := range strings.Split(string(data), "\n") {
+		m := expectRe.FindStringSubmatch(line)
+		if m == nil {
+			break
+		}
+		n, _ := strconv.Atoi(m[2])
+		out = append(out, expectation{m[1], n, m[3], m[4]})
 	}
-	n, _ := strconv.Atoi(m[2])
-	return m[1], expectation{n, m[3], m[4]}, data
+	if len(out) == 0 {
+		t.Fatalf("%s: first line does not document the expected issue", path)
+	}
+	return out, data
 }
 
 func findIssue(issues []Issue, e expectation) bool {
@@ -53,27 +62,41 @@ func findIssue(issues []Issue, e expectation) bool {
 	return false
 }
 
+// checkExpectations looks up every header line of a sample in the report.
+func checkExpectations(t *testing.T, path string, want []expectation, r *Report) {
+	t.Helper()
+	for _, e := range want {
+		list, kind := r.Errors, "error"
+		if e.kind == "warn" {
+			list, kind = r.Warnings, "warning"
+		}
+		if !findIssue(list, e) {
+			t.Errorf("%s: want %s line %d key %q message %q; got:\n%s", path, kind, e.line, e.key, e.msg, issues(list))
+		}
+	}
+}
+
 // TestConfigValidation checks that each design 0004 D4 error has a sample
 // file that fails with the documented key path and line, and that each
-// warning is reported without failing validation (K1).
+// warning is reported without failing validation (K1). Samples whose
+// header lists more issues also check those, such as warnings that must
+// name an element as written even when an earlier element was refused.
 func TestConfigValidation(t *testing.T) {
 	invalid, _ := filepath.Glob("testdata/invalid/*.toml")
 	if len(invalid) < 40 {
 		t.Fatalf("only %d invalid samples", len(invalid))
 	}
 	for _, path := range invalid {
-		kind, want, data := readExpectation(t, path)
-		if kind != "want" {
-			t.Fatalf("%s: invalid sample with %q", path, kind)
+		want, data := readExpectations(t, path)
+		if want[0].kind != "want" {
+			t.Fatalf("%s: invalid sample with %q", path, want[0].kind)
 		}
 		cfg, r := Parse(data, path)
 		if cfg != nil || len(r.Errors) == 0 {
 			t.Errorf("%s: accepted", path)
 			continue
 		}
-		if !findIssue(r.Errors, want) {
-			t.Errorf("%s: want line %d key %q message %q; got:\n%s", path, want.line, want.key, want.msg, issues(r.Errors))
-		}
+		checkExpectations(t, path, want, r)
 		for _, e := range r.Errors {
 			if !strings.HasPrefix(e.String(), path) {
 				t.Errorf("%s: message does not name the file: %s", path, e)
@@ -81,22 +104,22 @@ func TestConfigValidation(t *testing.T) {
 		}
 	}
 	warn, _ := filepath.Glob("testdata/warn/*.toml")
-	if len(warn) != 3 {
-		t.Fatalf("want 3 warning samples, have %d", len(warn))
+	if len(warn) != 4 {
+		t.Fatalf("want 4 warning samples, have %d", len(warn))
 	}
 	for _, path := range warn {
-		kind, want, data := readExpectation(t, path)
-		if kind != "warn" {
-			t.Fatalf("%s: warning sample with %q", path, kind)
+		want, data := readExpectations(t, path)
+		for _, e := range want {
+			if e.kind != "warn" {
+				t.Fatalf("%s: warning sample with %q", path, e.kind)
+			}
 		}
 		cfg, r := Parse(data, path)
 		if cfg == nil || len(r.Errors) > 0 {
 			t.Errorf("%s: rejected:\n%s", path, issues(r.Errors))
 			continue
 		}
-		if !findIssue(r.Warnings, want) {
-			t.Errorf("%s: want warning line %d key %q message %q; got:\n%s", path, want.line, want.key, want.msg, issues(r.Warnings))
-		}
+		checkExpectations(t, path, want, r)
 	}
 }
 
@@ -464,5 +487,70 @@ action = 'block'
 	// Input the TOML parser would refuse never makes the scanner loop.
 	for _, bad := range []string{"=", "a = [}", "a = {]", "[", "a = \"unterminated", "]]]"} {
 		indexLines(bad)
+	}
+}
+
+// TestConfigExposure checks 0003 N1: validation rejects wildcard and
+// host-name listeners, an IPv4-mapped wildcard included, a non-loopback
+// listener without proxy.remote.sources, proxy.remote.default = "direct"
+// without allow_direct, an upstream without disclosure, and IPv4-mapped
+// sources, which could never match (0004 D4); 0.0.0.0/0 and
+// ::/0 in sources are warnings that cuttle check prints (TestCheckCommand
+// runs the warning samples).
+func TestConfigExposure(t *testing.T) {
+	const head = "name = \"cuttle-test\"\n[proxy]\ndefault = \"direct\"\n"
+	remote := func(listen string) string {
+		return head + "listen = [\"127.0.0.1:18080\", " + listen + "]\n[proxy.remote]\nsources = [\"10.8.0.1/32\"]\n"
+	}
+	for _, c := range []struct{ name, src, key, msg string }{
+		{"IPv4 wildcard", remote(`"0.0.0.0:18081"`), "proxy.listen[2]", "wildcard address"},
+		{"IPv6 wildcard", remote(`"[::]:18081"`), "proxy.listen[2]", "wildcard address"},
+		{"IPv4-mapped wildcard", remote(`"[::ffff:0.0.0.0]:18081"`), "proxy.listen[2]", "wildcard address"},
+		{"host name", remote(`"gateway.internal.example:18081"`), "proxy.listen[2]", "host names are not allowed"},
+		{"localhost", remote(`"localhost:18081"`), "proxy.listen[2]", "host names are not allowed"},
+		{"no sources", head + "listen = [\"127.0.0.1:18080\", \"10.8.0.6:18081\"]\n", "proxy.listen[2]", "needs proxy.remote.sources"},
+		{"no IPv6 sources", head + "listen = [\"[2001:db8::6]:18081\"]\n", "proxy.listen[1]", "needs proxy.remote.sources"},
+		{"empty sources", head + "listen = [\"10.8.0.6:18081\"]\n[proxy.remote]\nsources = []\n", "proxy.listen[1]", "needs proxy.remote.sources"},
+		{"remote direct default", head + "[proxy.remote]\nsources = [\"10.8.0.1/32\"]\ndefault = \"direct\"\n", "proxy.remote.default", "needs proxy.remote.allow_direct = true"},
+		{"remote direct default, allow_direct false", head + "[proxy.remote]\ndefault = \"direct\"\nallow_direct = false\n", "proxy.remote.default", "needs proxy.remote.allow_direct = true"},
+		{"upstream without disclosure", head + "[[upstream]]\nname = \"gw\"\naddress = \"10.8.0.6:3128\"\n", "upstream[1].disclosure", "required"},
+		{"IPv4-mapped source", head + "listen = [\"10.8.0.6:18081\"]\n[proxy.remote]\nsources = [\"::ffff:10.8.0.1/128\"]\n", "proxy.remote.sources[1]", `IPv4-mapped prefix, which never matches because cuttle compares IPv4 addresses in plain form; use "10.8.0.1/32"`},
+		{"IPv4-mapped source range", head + "[proxy.remote]\nsources = [\"::ffff:0:0/96\"]\n", "proxy.remote.sources[1]", `use "0.0.0.0/0"`},
+	} {
+		cfg, r := Parse([]byte(c.src), "x.toml")
+		if cfg != nil {
+			t.Errorf("%s: accepted", c.name)
+			continue
+		}
+		found := false
+		for _, e := range r.Errors {
+			found = found || (e.Key == c.key && strings.Contains(e.Msg, c.msg))
+		}
+		if !found {
+			t.Errorf("%s: want %s: %s; got:\n%s", c.name, c.key, c.msg, issues(r.Errors))
+		}
+	}
+
+	for _, open := range []string{"0.0.0.0/0", "::/0"} {
+		src := head + "listen = [\"10.8.0.6:18081\"]\n[proxy.remote]\nsources = [\"10.8.0.1/32\", \"" + open + "\"]\n"
+		cfg, r := Parse([]byte(src), "x.toml")
+		if cfg == nil {
+			t.Fatalf("%s: rejected:\n%s", open, issues(r.Errors))
+		}
+		if len(r.Warnings) != 1 || r.Warnings[0].Key != "proxy.remote.sources[2]" || !strings.Contains(r.Warnings[0].Msg, open+" admits every address") {
+			t.Errorf("%s: warnings:\n%s", open, issues(r.Warnings))
+		}
+	}
+
+	// Accepted: explicit non-loopback listeners with sources, and a remote
+	// direct default with allow_direct.
+	src := head + "listen = [\"127.0.0.1:18080\", \"10.8.0.6:18081\", \"[2001:db8::6]:18081\"]\n" +
+		"[proxy.remote]\nsources = [\"10.8.0.1/32\", \"2001:db8::1/128\"]\ndefault = \"direct\"\nallow_direct = true\n"
+	cfg, r := Parse([]byte(src), "x.toml")
+	if cfg == nil {
+		t.Fatalf("remote listeners rejected:\n%s", issues(r.Errors))
+	}
+	if len(cfg.Proxy.Listen) != 3 || len(cfg.Proxy.Remote.Sources) != 2 || len(r.Warnings) != 0 {
+		t.Errorf("listen %v sources %v warnings %v", cfg.Proxy.Listen, cfg.Proxy.Remote.Sources, r.Warnings)
 	}
 }

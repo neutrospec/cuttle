@@ -18,7 +18,8 @@ import (
 var errProxyAuth = errors.New("next hop answered 407")
 
 // forward relays a plain-HTTP request on a direct route through
-// httputil.ReverseProxy (design 0002 D5).
+// httputil.ReverseProxy and the direct transport of the client's class
+// (design 0002 D5).
 func (p *Proxy) forward(w http.ResponseWriter, r *http.Request, ex *exchange) {
 	r = r.WithContext(context.WithValue(r.Context(), exchangeKey{}, ex))
 	if r.Body != nil && r.Body != http.NoBody {
@@ -44,7 +45,7 @@ func (p *Proxy) forward(w http.ResponseWriter, r *http.Request, ex *exchange) {
 			panic(v)
 		}
 	}()
-	ex.snap.rp.ServeHTTP(cw, r)
+	ex.snap.rp[ex.source].ServeHTTP(cw, r)
 	if ex.outcome == "" {
 		ex.status = cw.status
 		ex.outcome = OutcomeOK

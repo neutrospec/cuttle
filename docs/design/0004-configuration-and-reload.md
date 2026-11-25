@@ -154,6 +154,11 @@ Errors:
   address in `hosts` or `domains`. The message suggests the correct field
   or the A-label form.
 - An invalid CIDR, or a CIDR with host bits set.
+- An IPv4-mapped CIDR, such as `::ffff:10.8.0.1/128` or `::ffff:0:0/96`, in
+  `proxy.remote.sources` or a rule's `cidrs`. Peers and targets are
+  compared in plain IPv4 form, so it would never match. The message
+  suggests the IPv4 prefix, such as `10.8.0.1/32`, and an IP address given
+  where a CIDR belongs gets the same plain form in its suggestion.
 - `allow_loopback` or `allow_private` on a rule whose action is not
   `direct`.
 - The exposure errors of [0003 D9][d3-9] and [D10][d3-10].

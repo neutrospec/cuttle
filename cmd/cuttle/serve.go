@@ -127,6 +127,20 @@ func cmdServe(args []string, lookup env, stdout, stderr io.Writer) int {
 // serve binds the listeners, runs the proxy, and handles signals (design
 // 0006 D5 steps 7-8 and D6).
 func (s *serveState) serve(stderr io.Writer) int {
+	signals := make(chan os.Signal, 4)
+	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
+	defer signal.Stop(signals)
+	return s.run(stderr, net.Listen, signals)
+}
+
+// run is serve with the bind function and the signal channel passed in, so
+// a test can serve a non-loopback listener address on a loopback port and
+// stop the proxy without signalling the test process.
+//
+// Every configured listener, loopback or not, must bind, or startup stops
+// with exit status 1. Retrying a non-loopback listener that cannot bind
+// (design 0003 D9) arrives in M1.4.
+func (s *serveState) run(stderr io.Writer, listen func(network, address string) (net.Listener, error), signals <-chan os.Signal) int {
 	fail := func(msg string, err error) int {
 		s.log.Error(msg, "error", err.Error())
 		fmt.Fprintf(stderr, "cuttle: %s: %v\n", msg, err)
@@ -135,9 +149,6 @@ func (s *serveState) serve(stderr io.Writer) int {
 	if err := proxy.CheckSupported(s.cfg); err != nil {
 		return fail("configuration not supported", err)
 	}
-	signals := make(chan os.Signal, 4)
-	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
-	defer signal.Stop(signals)
 
 	var listeners []net.Listener
 	closeAll := func() {
@@ -146,7 +157,7 @@ func (s *serveState) serve(stderr io.Writer) int {
 		}
 	}
 	for _, addr := range s.cfg.Proxy.Listen {
-		l, err := net.Listen("tcp", addr.String())
+		l, err := listen("tcp", addr.String())
 		if err != nil {
 			closeAll()
 			return fail("bind "+addr.String(), err)

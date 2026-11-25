@@ -70,6 +70,7 @@ A refused upstream is an address whose port the test bound and closed.
 | `127.0.0.1`, `::1` | loopback | Rebinding tests and the `loopback` rule |
 | `169.254.1.1`, `fe80::1`, `0.0.0.0` | unusable | Prohibited destination tests |
 | `192.0.2.50` | self | Returned by the injected `SelfAddrs` |
+| `198.51.100.0/24` | — | Rejected remote sources: peers outside every allowlist, reported by listener wrappers and never dialed; `198.51.100.7` in single-source tests |
 
 Only `Network` and `SelfAddrs` are injected. The address classifier and all
 policy code are production code. `cmd/cuttle` wires the real resolver and

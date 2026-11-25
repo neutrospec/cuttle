@@ -95,3 +95,17 @@ removes entries. Append new entries at the end, oldest first.
   editing a scratch copy of the script with `sed`, for example
   `go list -deps ./cmd/no-such-pkg`. If a wrapper is unavoidable, point it
   at an absolute path that you have checked is the real binary.
+
+### 2026-11-25 — implementer — unquoted grep patterns again
+
+- Task: TASK-0005, searching the tree for identifiers while implementing
+  M1.2.
+- Attempts: 2, recorded because the 2026-11-25 researcher entry already
+  covers the failure and it still recurred.
+- What failed: `grep -rn PATTERN docs README.md --include=*.md` and
+  `grep -rn PATTERN --include=*.go .` both stopped with
+  `(eval):1: no matches found: --include=*.md` before grep ran, because
+  the Bash tool's zsh expands the unquoted glob in the current directory.
+- What to do instead: Quote every `--include` value, as in
+  `grep -rn 'PATTERN' --include='*.go' .`, every time, also in quick
+  one-off searches.

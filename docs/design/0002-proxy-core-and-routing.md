@@ -353,6 +353,11 @@ overview and live pages ([0005 D9][d5-9]).
 | `upstream_state` | `upstream`; value `up`, `down`, or `probing` with its start time ([0003 D8][d3-8]) |
 | `stats_write_errors_total`, `stats_folded_total` | — (M2, [0005 D4][d5-4]) |
 
+`connections_total` and `connections_active` count only accepted
+connections. A connection that the source check or a connection limit
+closes on accept counts only in `connections_rejected_total`
+([0003 D10][d3-10], [D12][d3-12]).
+
 Labels are bounded: hosts never appear in counters. Per-host data lives in
 the log and in statistics ([0005](0005-statistics-and-admin.md)). The status
 response also lists active tunnels with authority, route, source, age, and

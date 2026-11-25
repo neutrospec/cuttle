@@ -179,9 +179,15 @@ status 2 and writes to stderr, which launchd sends to
   first failure of each run of log failures, and runtime panics, so it
   stays small without rotation.
 - Levels: `debug` adds tunnel-open and connection events; `info` has
-  decisions and lifecycle events; `warn` has rejected sources (rate
-  limited), retrying listeners, and statistics write errors; `error` has
-  failures that stop a component.
+  decisions and lifecycle events; `warn` has rejected sources and
+  connection limits, retrying listeners, and statistics write errors;
+  `error` has failures that stop a component. Rejected-source and limit
+  warnings come at most once per source per minute and at most 60 per
+  minute in all. One `warnings suppressed` line per minute then gives the
+  `count` of rejected or limited connections that got no warning line and
+  were not covered by a line of the same kind for the same source within
+  the last minute, which also shows the size of a flood
+  ([0003 D12][d3-12]).
 - Privacy rules are in [0002 D8][d2-8].
 
 ### D8. Tap and formula
@@ -323,6 +329,7 @@ and the log.
 [d2-7]: 0002-proxy-core-and-routing.md#d7-byte-accounting-and-live-counters
 [d2-8]: 0002-proxy-core-and-routing.md#d8-decision-log
 [d3-9]: 0003-upstream-chaining-and-exposure.md#d9-listeners
+[d3-12]: 0003-upstream-chaining-and-exposure.md#d12-connection-limits
 [d4-5]: 0004-configuration-and-reload.md#d5-starter-configuration
 [d4-6]: 0004-configuration-and-reload.md#d6-reload
 [d4-7]: 0004-configuration-and-reload.md#d7-atomic-write

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
-	"net/netip"
 	"strings"
 	"testing"
 
@@ -143,29 +142,5 @@ func TestRequestWithoutSourceClass(t *testing.T) {
 	}
 	if got := p.Live().Get(stats.DecisionsTotal, "kind", "connect", "action", "none") + p.Live().Get(stats.DecisionsTotal, "kind", "http", "action", "none"); got != 2 {
 		t.Errorf("decisions_total{action=none} = %d", got)
-	}
-}
-
-// TestWarnedSourcesBounded checks that the rejected-source warnings are rate
-// limited per address and that their memory stays bounded.
-func TestWarnedSourcesBounded(t *testing.T) {
-	logs := &logBuffer{}
-	p := newUnitProxy(t, testenv.NewNet(), logs)
-	a := netip.MustParseAddr("10.8.0.1")
-	p.warnSource(a)
-	p.warnSource(a)
-	if got := strings.Count(logs.String(), "rejected source"); got != 1 {
-		t.Errorf("warnings for one source %d", got)
-	}
-	for i := range 5000 {
-		// 10.20.0.0/16 is the private destination range of the test address
-		// plan (design 0007 D3).
-		p.warnSource(netip.AddrFrom4([4]byte{10, 20, byte(i >> 8), byte(i)}))
-		p.mu.Lock()
-		size := len(p.warned)
-		p.mu.Unlock()
-		if size > maxWarnedSources {
-			t.Fatalf("warned map holds %d addresses", size)
-		}
 	}
 }

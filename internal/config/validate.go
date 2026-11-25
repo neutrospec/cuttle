@@ -68,6 +68,19 @@ type validator struct {
 	// listenIdx holds, for each accepted proxy listener, its index in
 	// proxy.listen as written. It is empty when proxy.listen is absent.
 	listenIdx []int
+	// upstreamIdx and ruleIdx hold, for each entry of Config.Upstreams and
+	// Config.Rules, its index in the array as written, and ruleElems the
+	// written indexes of each rule's accepted patterns, so that cross checks
+	// name the elements the user wrote even after others were skipped.
+	upstreamIdx []int
+	ruleIdx     []int
+	ruleElems   []patternIdx
+}
+
+// patternIdx holds the written indexes of a rule's accepted hosts,
+// domains, and cidrs, parallel to the policy.Rule lists.
+type patternIdx struct {
+	hosts, domains, cidrs []int
 }
 
 // listenPath names the proxy.listen element of accepted listener i.
@@ -268,19 +281,29 @@ func (v *validator) table(m map[string]any, base, key string) (map[string]any, b
 	return t, ok
 }
 
-func (v *validator) tables(m map[string]any, key string) []map[string]any {
+// tableElem is one table of an array of tables with its index in the file.
+type tableElem struct {
+	i int
+	m map[string]any
+}
+
+func (v *validator) tables(m map[string]any, key string) []tableElem {
 	x, ok := m[key]
 	if !ok {
 		return nil
 	}
 	switch t := x.(type) {
 	case []map[string]any:
-		return t
+		out := make([]tableElem, len(t))
+		for i, mt := range t {
+			out[i] = tableElem{i, mt}
+		}
+		return out
 	case []any:
-		out := make([]map[string]any, 0, len(t))
+		out := make([]tableElem, 0, len(t))
 		for i, e := range t {
 			if mt, ok := e.(map[string]any); ok {
-				out = append(out, mt)
+				out = append(out, tableElem{i, mt})
 			} else {
 				v.errf(elem(key, i), "must be a table, not %s", typeName(e))
 			}
@@ -308,14 +331,29 @@ func (v *validator) route(m map[string]any, base, key string, upstreams map[stri
 	return r, true
 }
 
-func (v *validator) cidrs(m map[string]any, base, key string) []netip.Prefix {
+// prefixElem is one accepted CIDR with its index in the file.
+type prefixElem struct {
+	i int
+	p netip.Prefix
+}
+
+func prefixes(list []prefixElem) []netip.Prefix {
+	out := make([]netip.Prefix, len(list))
+	for k, e := range list {
+		out[k] = e.p
+	}
+	return out
+}
+
+func (v *validator) cidrs(m map[string]any, base, key string) []prefixElem {
 	list, _ := v.strings(m, base, key)
-	out := make([]netip.Prefix, 0, len(list))
+	out := make([]prefixElem, 0, len(list))
 	for _, e := range list {
 		i, s := e.i, e.s
 		p, err := netip.ParsePrefix(s)
 		if err != nil {
 			if a, aerr := netip.ParseAddr(s); aerr == nil {
+				a = a.Unmap() // suggest the form that can match
 				bits := 32
 				if a.Is6() {
 					bits = 128
@@ -326,11 +364,18 @@ func (v *validator) cidrs(m map[string]any, base, key string) []netip.Prefix {
 			}
 			continue
 		}
+		if a := p.Masked().Addr(); a.Is4In6() && p.Bits() >= 96 {
+			// Peers and targets are unmapped before they are compared, so an
+			// IPv4-mapped prefix such as ::ffff:10.8.0.1/128 never matches.
+			v.errf(elem(sub(base, key), i), "%q is an IPv4-mapped prefix, which never matches because cuttle compares IPv4 addresses in plain form; use %q",
+				s, netip.PrefixFrom(a.Unmap(), p.Bits()-96).String())
+			continue
+		}
 		if p != p.Masked() {
 			v.errf(elem(sub(base, key), i), "CIDR %q has host bits set; use %q", s, p.Masked().String())
 			continue
 		}
-		out = append(out, p)
+		out = append(out, prefixElem{i, p})
 	}
 	return out
 }
@@ -351,8 +396,9 @@ func (v *validator) config(raw map[string]any) *Config {
 
 	// Upstreams first, so actions can refer to them.
 	upstreamNames := map[string]bool{}
-	for i, um := range v.tables(raw, "upstream") {
-		base := elem("upstream", i)
+	for _, te := range v.tables(raw, "upstream") {
+		um := te.m
+		base := elem("upstream", te.i)
 		v.known(um, base, "name", "address", "disclosure", "connect_timeout", "response_timeout", "unreachable_hold")
 		u := Upstream{}
 		if name, ok := v.str(um, base, "name"); ok {
@@ -390,6 +436,7 @@ func (v *validator) config(raw map[string]any) *Config {
 		u.ResponseTimeout = v.duration(um, base, "response_timeout", 60*time.Second, minTimeout, maxTimeout, false)
 		u.UnreachableHold = v.duration(um, base, "unreachable_hold", 5*time.Second, minHold, maxHold, true)
 		c.Upstreams = append(c.Upstreams, u)
+		v.upstreamIdx = append(v.upstreamIdx, te.i)
 	}
 
 	v.proxy(raw, c, upstreamNames)
@@ -459,7 +506,10 @@ func (v *validator) proxy(raw map[string]any, c *Config, upstreams map[string]bo
 				v.errf(path, "%q is not an IP:port literal; host names are not allowed", s)
 			case ap.Addr().Zone() != "":
 				v.errf(path, "%q has a zone; use an address without one", s)
-			case ap.Addr().IsUnspecified():
+			case ap.Addr().Unmap().IsUnspecified():
+				// Unmapped first: [::ffff:0.0.0.0] is not unspecified to
+				// netip, but Go listens on it with a dual-stack wildcard
+				// socket, on every IPv4 and IPv6 address.
 				v.errf(path, "%q is a wildcard address; listen on explicit addresses only", s)
 			case ap.Port() == 0:
 				v.errf(path, "%q needs a port 1-65535", s)
@@ -487,10 +537,11 @@ func (v *validator) proxy(raw map[string]any, c *Config, upstreams map[string]bo
 		base := "proxy.remote"
 		v.known(rm, base, "sources", "ports", "default", "allow_direct", "max_connections_per_source")
 		if _, present := rm["sources"]; present {
-			p.Remote.Sources = v.cidrs(rm, base, "sources")
-			for i, s := range p.Remote.Sources {
-				if s.Bits() == 0 {
-					v.warnf(elem(sub(base, "sources"), i), "%s admits every address that can reach a non-loopback listener", s)
+			sources := v.cidrs(rm, base, "sources")
+			p.Remote.Sources = prefixes(sources)
+			for _, e := range sources {
+				if e.p.Bits() == 0 {
+					v.warnf(elem(sub(base, "sources"), e.i), "%s admits every address that can reach a non-loopback listener", e.p)
 				}
 			}
 		}
@@ -524,10 +575,12 @@ func unmapAP(ap netip.AddrPort) netip.AddrPort {
 
 func (v *validator) rules(raw map[string]any, c *Config, upstreams map[string]bool) {
 	names := map[string]bool{}
-	for i, rm := range v.tables(raw, "rule") {
-		base := elem("rule", i)
+	for _, te := range v.tables(raw, "rule") {
+		rm := te.m
+		base := elem("rule", te.i)
 		v.known(rm, base, "name", "hosts", "domains", "cidrs", "ports", "action", "allow_loopback", "allow_private")
-		r := policy.Rule{Name: "rule-" + strconv.Itoa(i+1)}
+		r := policy.Rule{Name: "rule-" + strconv.Itoa(te.i+1)}
+		var at patternIdx
 		namePath := sub(base, "name")
 		if name, ok := v.str(rm, base, "name"); ok {
 			switch {
@@ -560,6 +613,7 @@ func (v *validator) rules(raw map[string]any, c *Config, upstreams map[string]bo
 				continue
 			}
 			r.Hosts = append(r.Hosts, h)
+			at.hosts = append(at.hosts, e.i)
 		}
 		domains, _ := v.strings(rm, base, "domains")
 		for _, e := range domains {
@@ -569,9 +623,13 @@ func (v *validator) rules(raw map[string]any, c *Config, upstreams map[string]bo
 				continue
 			}
 			r.Domains = append(r.Domains, d)
+			at.domains = append(at.domains, e.i)
 		}
 		if hasCIDRs {
-			r.CIDRs = v.cidrs(rm, base, "cidrs")
+			for _, e := range v.cidrs(rm, base, "cidrs") {
+				r.CIDRs = append(r.CIDRs, e.p)
+				at.cidrs = append(at.cidrs, e.i)
+			}
 		}
 		if ports, ok := v.ports(rm, base, "ports"); ok {
 			r.Ports = ports
@@ -600,6 +658,8 @@ func (v *validator) rules(raw map[string]any, c *Config, upstreams map[string]bo
 			}
 		}
 		c.Rules = append(c.Rules, r)
+		v.ruleIdx = append(v.ruleIdx, te.i)
+		v.ruleElems = append(v.ruleElems, at)
 	}
 }
 
@@ -654,7 +714,7 @@ func (v *validator) crossChecks(c *Config) {
 			same := a.Port == l.Port() &&
 				((a.IsIP() && a.Addr == l.Addr()) || (a.Host == "localhost" && l.Addr().IsLoopback()))
 			if same {
-				v.errf(sub(elem("upstream", i), "address"), "%s is this instance's own listener", u.Address)
+				v.errf(sub(elem("upstream", v.upstreamIdx[i]), "address"), "%s is this instance's own listener", u.Address)
 			}
 		}
 	}
@@ -663,6 +723,8 @@ func (v *validator) crossChecks(c *Config) {
 	// names.
 	for j := range c.Rules {
 		later := &c.Rules[j]
+		at := v.ruleElems[j]
+		path := func(key string, k int) string { return elem(sub(elem("rule", v.ruleIdx[j]), key), k) }
 		for i := 0; i < j; i++ {
 			earlier := &c.Rules[i]
 			covers := len(earlier.Ports) == 0 ||
@@ -672,17 +734,17 @@ func (v *validator) crossChecks(c *Config) {
 			}
 			for k, h := range later.Hosts {
 				if slices.Contains(earlier.Hosts, h) {
-					v.warnf(elem(sub(elem("rule", j), "hosts"), k), "%q repeats rule %q, which matches first, so it can never match", h, earlier.Name)
+					v.warnf(path("hosts", at.hosts[k]), "%q repeats rule %q, which matches first, so it can never match", h, earlier.Name)
 				}
 			}
 			for k, d := range later.Domains {
 				if slices.Contains(earlier.Domains, d) {
-					v.warnf(elem(sub(elem("rule", j), "domains"), k), "%q repeats rule %q, which matches first, so it can never match", d, earlier.Name)
+					v.warnf(path("domains", at.domains[k]), "%q repeats rule %q, which matches first, so it can never match", d, earlier.Name)
 				}
 			}
 			for k, p := range later.CIDRs {
 				if slices.Contains(earlier.CIDRs, p) {
-					v.warnf(elem(sub(elem("rule", j), "cidrs"), k), "%q repeats rule %q, which matches first, so it can never match", p.String(), earlier.Name)
+					v.warnf(path("cidrs", at.cidrs[k]), "%q repeats rule %q, which matches first, so it can never match", p.String(), earlier.Name)
 				}
 			}
 		}
@@ -697,7 +759,7 @@ func (v *validator) crossChecks(c *Config) {
 	used[c.Proxy.Remote.Default.Upstream] = true
 	for i, u := range c.Upstreams {
 		if u.Name != "" && !used[u.Name] {
-			v.warnf(sub(elem("upstream", i), "name"), "upstream %q is not used by any action", u.Name)
+			v.warnf(sub(elem("upstream", v.upstreamIdx[i]), "name"), "upstream %q is not used by any action", u.Name)
 		}
 	}
 }

@@ -329,9 +329,3 @@ func errReason(err error) string {
 	}
 	return "error"
 }
-
-// IsLoopbackListener reports whether a configured listener address is a
-// loopback address.
-func IsLoopbackListener(ap netip.AddrPort) bool {
-	return ap.Addr().Unmap().IsLoopback()
-}

@@ -370,66 +370,20 @@ allow_private = true
 	checkDecision(t, byTarget(t, all, "connect", "nas.cuttle.test:443"), map[string]string{"rule": "default", "outcome": "prohibited"})
 }
 
-// TestNonLoopbackSourceRejected checks the M1.1 source check: a connection
-// from a non-loopback source is closed on accept with no byte read or
-// written, counted with reason "source", and logged, and it produces no
-// decision. Remote clients arrive in M1.2.
-func TestNonLoopbackSourceRejected(t *testing.T) {
-	if testing.Short() {
-		t.Skip("integration test")
-	}
-	cfg := baseConfig
-	logs := &logBuffer{}
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	pcfg := mustParse(t, cfg)
-	p, err := New(pcfg, Deps{
-		Network:   testenv.NewNet(),
-		SelfAddrs: testenv.SelfAddrs,
-		Listeners: []net.Listener{testenv.SourceListener(ln, netip.MustParseAddr("10.8.0.1"))},
-		Logger:    newTestLogger(logs),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	go p.Serve()
-	defer p.Close()
-	c, err := net.Dial("tcp", ln.Addr().String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer c.Close()
-	io.WriteString(c, "CONNECT origin.cuttle.test:443 HTTP/1.1\r\n\r\n")
-	c.SetReadDeadline(time.Now().Add(5 * time.Second))
-	if n, err := c.Read(make([]byte, 64)); n != 0 || err == nil {
-		t.Fatalf("read %d %v", n, err)
-	}
-	deadline := time.Now().Add(5 * time.Second)
-	for p.Live().Get(stats.ConnectionsRejectedTotal, "reason", "source") != 1 && time.Now().Before(deadline) {
-		time.Sleep(5 * time.Millisecond)
-	}
-	if got := p.Live().Get(stats.ConnectionsRejectedTotal, "reason", "source"); got != 1 {
-		t.Fatalf("rejected %d", got)
-	}
-	if !strings.Contains(logs.String(), "msg=\"rejected source\" source=10.8.0.1") {
-		t.Errorf("log %q", logs.String())
-	}
-	if len(logs.decisions()) != 0 || p.Live().Get(stats.ConnectionsTotal) != 0 {
-		t.Errorf("decision or accepted connection for a rejected source")
-	}
-}
-
-// TestUnsupportedConfig checks that New refuses what M1.1 cannot serve.
+// TestUnsupportedConfig checks that New refuses upstream routes, which M1.3
+// delivers, for local and remote clients.
 func TestUnsupportedConfig(t *testing.T) {
 	for _, c := range []struct{ name, cfg string }{
-		{"remote listener", `name = "cuttle-test"
+		{"upstream remote default", `name = "cuttle-test"
 [proxy]
-listen = ["127.0.0.1:18080", "10.8.0.6:18080"]
 default = "direct"
 [proxy.remote]
 sources = ["10.8.0.1/32"]
+default = "upstream:gw"
+[[upstream]]
+name = "gw"
+address = "10.8.0.6:3128"
+disclosure = "via"
 `},
 		{"upstream default", `name = "cuttle-test"
 [proxy]
