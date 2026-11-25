@@ -44,18 +44,19 @@ A closed task becomes one line under Closed:
 ### TASK-0008 — M1.5 interface selection: research and design
 
 - Milestone: M1.5 (new)
-- Status: review
-- Iteration: 1/3
-- Workers: designer done on branch `t3/interface-selection-design`; fresh
-  reviewer pending
-- Base: `c7ef543`
-- Candidate: `12c6fd0` (tree `b473181`): record 0008, ROADMAP M1.5, design
-  index, glossary, compatibility rows
-- Evidence: designer docs checks passed; orchestrator link check passed on
-  the candidate tree
-- Findings: none yet; 26 changes to other records and 2 open-issue items
-  listed in 0008 for the orchestrator to apply after TASK-0007 lands
-- Next action: reviewer — independent review of `c7ef543..12c6fd0`
+- Status: design
+- Iteration: 2/3
+- Workers: designer on branch `t3/interface-selection-design`; iteration 1
+  reviewer done
+- Base: `c7ef543`; the designer merges current `main` (M1.4 landed) into
+  the branch
+- Candidate: `12c6fd0` (tree `b473181`), returned for revision
+- Evidence: iteration 1 review "revise": pin and restrict hold, destination
+  checks hold, platform constants verified
+- Findings: open I-R1-I-R3 (major), I-R4-I-R14 (minor), I-R15-I-R20
+  (nits); user decisions below
+- Next action: designer — merge main, revise 0008, apply the changes to
+  records 0002-0007, README, and OPEN_ISSUES, then a fresh review
 
 Decisions for TASK-0008 from the user (2026-11-25):
 
@@ -73,6 +74,13 @@ Decisions for TASK-0008 from the user (2026-11-25):
   of the same kind must be distinguishable; no hotspot joins over Wi-Fi.
 - cuttle supports macOS only, so darwin-only mechanisms are acceptable; cgo
   remains a cost to weigh against pure-Go options.
+- Iteration 2 (user): a 3 s connect timeout fails over to the next
+  interface; after a later interface connects, the failed one goes last
+  in every list for 30 s (global demotion, accepting its cost effect); a
+  primary interface with a live link but a dead uplink fails names at DNS,
+  which stays a documented limitation with per-interface DNS under Later;
+  per-destination interface needs on upstream routes use two `[[upstream]]`
+  entries with the same address.
 
 ### TASK-0008 — M1.5 interface selection: research and design
 
