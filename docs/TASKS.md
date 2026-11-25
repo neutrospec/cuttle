@@ -44,20 +44,21 @@ A closed task becomes one line under Closed:
 ### TASK-0009 — M1.5 interface selection implementation
 
 - Milestone: M1.5
-- Status: review
-- Iteration: 1/3
-- Workers: implementer done on branch `t3/interface-selection`; fresh
-  reviewer pending
+- Status: implement
+- Iteration: 2/3
+- Workers: implementer on branch `t3/interface-selection`; iteration 1
+  reviewer done
 - Base: `8161b53`
-- Candidate: `b6aa8de` (tree `1c2d912`)
-- Evidence: implementer ran `scripts/gate t0` and `t1` on `1c2d912`, both
-  pass; 41 code mutations and 3 gate controls each fail their targeted
-  test
-- Findings: none yet; implementer lists 13 design questions, including a
-  hand-written route parser because `syscall.ParseRoutingMessage` fails
-  checkptr under `-race`
-- Next action: reviewer — independent review of `8161b53..b6aa8de` with a
-  gate rerun
+- Candidate: `b6aa8de` (tree `1c2d912`), approved with minor fixes
+- Evidence: reviewer reran T0, T1, and `-race -count=5` over internal and
+  cmd (pass); 60 s fuzzing of each parser found no panic; no correctness
+  bug in routing, failover, demotion, pools, upstreams, or reload
+- Findings: open N-R1 (MAC-shaped keys in unknown-key errors, medium),
+  N-R2 (`interfaces --watch` can drop a change for 30 s, medium), N-R3,
+  N-R4 (test gaps), N-R5 (gate cgo check), N-R6, N-R7 (nits), N-R8 (design
+  text)
+- Next action: implementer — fix N-R1-N-R8, rerun T0 and T1, then a fresh
+  re-check
 
 Decisions for TASK-0009 (2026-11-25):
 
@@ -68,6 +69,10 @@ Decisions for TASK-0009 (2026-11-25):
   `Read`; stop reading a socket after a persistent error and rely on the
   30 s re-read) from the TASK-0008 final re-check, and OI-0006 M-R1, M-R3,
   and M-R4 where the touched code allows.
+- Iteration 2 (orchestrator): validation messages replace any MAC-shaped
+  key segment or value with a placeholder, using a pattern that never
+  matches an IPv4 address; other echoed values stay as they are. The gate
+  also requires that `cmd/cuttle` has no cgo files in the default build.
 
 ## Closed
 
