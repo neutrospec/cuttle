@@ -232,6 +232,11 @@ truth. On resume, reconcile the board with them before acting.
   or hand it to infra. Check branch status and cleanliness before an
   authorized push. When a remote target exists, verify whether it has commits
   missing locally before choosing a plain push or integrating its changes.
+- The public remote `origin` receives only `main` and release tags, never
+  `refs/t3/*` or any other ref. Before each push, push `main` and the tags
+  to a scratch bare repository and run `scripts/publish-scan` on it with
+  the untracked `.env`, then run it on the remote after the push. Only the
+  matches that [OI-0004](docs/OPEN_ISSUES.md) accepts may remain.
 
 ## Evidence by Git tree
 

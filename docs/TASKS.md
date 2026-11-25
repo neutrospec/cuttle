@@ -41,27 +41,6 @@ A closed task becomes one line under Closed:
 
 ## Active
 
-### TASK-0016 — Publish v0.1.0
-
-- Milestone: M3.1
-- Status: approval
-- Iteration: 1/3
-- Workers: orchestrator on `main`
-- Base: `d9eeb98`
-- Candidate: `main` with tag `v0.1.0`
-- Evidence: pre-push scan of a scratch bare repository with `main` at
-  `8b6acea` and `v0.1.0`: exit 1 with only the two accepted matches
-  (OI-0004)
-- Findings: none
-- Next action: orchestrator — create `neutrospec/cuttle`, push `main` and
-  `v0.1.0`, scan the remote, update the tap, run the final P8, and start
-  the service
-
-Decisions for TASK-0016 (2026-11-26):
-
-- Publication follows OI-0004 rules 1–6; the final P8 (OI-0003) runs
-  against the real tap after the push.
-
 ## Closed
 
 The history was rewritten on 2026-11-25 (TASK-0003) to remove local
@@ -70,6 +49,10 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0016 — Publish v0.1.0 — landed: `main` and `v0.1.0` (`8b6acea`)
+  pushed to `neutrospec/cuttle`, tap `c54ee0c`, gates: none @ `4c76d26`;
+  the remote scan shows only the two accepted matches (OI-0004); final P8
+  passed and the user's service runs (OI-0003)
 - TASK-0015 — M3.1 Homebrew formula and service — landed `d9eeb98`, gates:
   T0 T1 @ `5d9525a`; reviewed tree `82d51e5` (iteration 2 of 3); service
   checks passed with a throwaway tap; final P8 after publication in
