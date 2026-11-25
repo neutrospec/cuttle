@@ -317,8 +317,9 @@ plain HTTP, the edge relays the gateway's `503` unchanged (D6).
 - `proxy.listen` is a list of `IP:port` literals. Host names and the
   wildcard addresses `0.0.0.0` and `::` are configuration errors, and so is
   the IPv4-mapped `[::ffff:0.0.0.0]`, which `net/netip` does not report as
-  unspecified but which binds `0.0.0.0`. A wildcard on a gateway machine
-  would expose an unauthenticated proxy on that machine's LAN
+  unspecified but on which Go listens with a dual-stack wildcard socket,
+  on every IPv4 and IPv6 address. A wildcard on a gateway machine would
+  expose an unauthenticated proxy on that machine's LAN
   ([research 0002 §7][r2-7]).
 - A loopback listener that fails to bind stops startup with exit status 1.
 - A non-loopback listener requires a non-empty `proxy.remote.sources`. If it
@@ -334,8 +335,10 @@ plain HTTP, the edge relays the gateway's `503` unchanged (D6).
 - On accept, before `net/http` reads a byte, cuttle unmaps the peer address
   and classifies it. Loopback sources are `local`. Sources inside
   `proxy.remote.sources` are `remote`. Anything else is closed at once and
-  counted in `connections_rejected_total{reason="source"}`. A warning
-  naming the source address is logged at most once per source per minute.
+  counted in `connections_rejected_total{reason="source"}`, including a
+  peer address with an IPv6 zone, which no prefix contains. A warning
+  naming the source address is logged at most once per source per minute,
+  within the warning budget of D12.
 - The handler checks the source again for each request, so after a reload
   removes a source, the next request on a kept-alive connection gets no
   response and the connection is closed.
@@ -441,6 +444,14 @@ allow_private = true
   counted in `connections_rejected_total{reason="limit"}`. A warning naming
   the source address and the limit is logged at most once per source per
   minute.
+- Rejected-source warnings (D10) and limit warnings share a budget of 60
+  lines per minute, so connections from many addresses cannot fill the
+  log. Warnings over the budget are counted, and one summary line per
+  minute, `msg="warnings suppressed"` with their `count`, is written when
+  the minute ends, or at shutdown if that comes first. The per-source
+  memory is bounded; when it is full, a new source is counted as
+  suppressed, and the sources already in it stay suppressed for their
+  minute.
 - Each tunnel uses two descriptors, and pooled outbound connections add
   more. Go raises the soft `RLIMIT_NOFILE` to the hard limit at start;
   `cuttle status` reports the effective limit. Assumption A5 covers
@@ -494,10 +505,15 @@ address means routed; the server's link address means NAT. A second device
 on the edge LAN shows the same address only under NAT. Then set `sources`
 and run `cuttle reload`.
 
-A forwarding that delivers connections to the gateway listener from the
-gateway machine's own loopback, such as `ssh -L` terminating on the
-gateway, makes the edge a local client, which bypasses the remote-client
-policy (D10). Such a setup is unsupported.
+cuttle classifies a client only by its peer address (D10). Any relay on
+the gateway machine that connects to a listener from loopback therefore
+turns every client behind it into a local client, with a local client's
+full reach and none of the remote ports, default, or per-source limit.
+Examples are an `ssh -L` forward that terminates on the gateway, a VPN or
+overlay client that hands incoming connections over from loopback, and a
+local TCP forwarder. Such setups are unsupported: the private link must
+deliver connections to a non-loopback listener with the remote peer's own
+address.
 
 Edge `~/.config/cuttle/config.toml`:
 

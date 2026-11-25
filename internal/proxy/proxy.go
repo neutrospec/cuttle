@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/netip"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -59,18 +60,12 @@ type Proxy struct {
 	srv  *http.Server
 
 	conns connLimits
+	warn  *warnLimiter
 
 	mu       sync.Mutex
 	tunnels  map[*tunnel]struct{}
-	warned   map[warnKey]time.Time
 	closing  bool
 	serveErr chan error
-}
-
-// warnKey identifies a rate-limited warning: one per address and reason.
-type warnKey struct {
-	addr   netip.Addr
-	reason string
 }
 
 // sourceClasses lists the client classes; each has its own direct
@@ -119,7 +114,7 @@ func New(cfg *config.Config, deps Deps) (*Proxy, error) {
 		log:     deps.Logger,
 		live:    deps.Live,
 		tunnels: map[*tunnel]struct{}{},
-		warned:  map[warnKey]time.Time{},
+		warn:    newWarnLimiter(deps.Logger),
 	}
 	p.snap.Store(p.newSnapshot(cfg))
 	p.srv = &http.Server{
@@ -250,6 +245,7 @@ func (p *Proxy) Shutdown(ctx context.Context) error {
 		t.shutdown()
 	}
 	p.snap.Load().closeIdle()
+	p.warn.stop()
 	return err
 }
 
@@ -260,37 +256,14 @@ func (p *Proxy) Close() error {
 	return p.Shutdown(ctx)
 }
 
-// maxWarnedSources bounds the memory of warnOnce.
-const maxWarnedSources = 1024
-
-// warnSource logs a rejected source at most once per minute per address
-// (design 0003 D10).
+// warnSource logs a rejected source, at most once per minute per address
+// and within the warning budget (design 0003 D10, D12).
 func (p *Proxy) warnSource(a netip.Addr) {
-	p.warnOnce(a, "source", "rejected source", "source", a.String(), "reason", "not in proxy.remote.sources")
+	p.warn.warn(warnKey{a, "source"}, "rejected source", "source", a.String(), "reason", "not in proxy.remote.sources")
 }
 
-// warnOnce logs msg with args at most once per minute per address and
-// reason. The map of recent warnings is pruned, and reset when every entry
-// is still recent, so it never holds more than maxWarnedSources entries.
-func (p *Proxy) warnOnce(a netip.Addr, reason, msg string, args ...any) {
-	now := time.Now()
-	key := warnKey{a, reason}
-	p.mu.Lock()
-	if last, seen := p.warned[key]; seen && now.Sub(last) < time.Minute {
-		p.mu.Unlock()
-		return
-	}
-	if len(p.warned) >= maxWarnedSources {
-		for k, t := range p.warned {
-			if now.Sub(t) >= time.Minute {
-				delete(p.warned, k)
-			}
-		}
-		if len(p.warned) >= maxWarnedSources {
-			clear(p.warned)
-		}
-	}
-	p.warned[key] = now
-	p.mu.Unlock()
-	p.log.Warn(msg, args...)
+// warnLimit logs a connection over a limit, at most once per minute per
+// address and within the warning budget (design 0003 D12).
+func (p *Proxy) warnLimit(a netip.Addr, key string, limit int) {
+	p.warn.warn(warnKey{a, "limit"}, "connection limit reached", "source", a.String(), "limit", key, "max", strconv.Itoa(limit))
 }

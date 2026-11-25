@@ -353,6 +353,7 @@ func (v *validator) cidrs(m map[string]any, base, key string) []prefixElem {
 		p, err := netip.ParsePrefix(s)
 		if err != nil {
 			if a, aerr := netip.ParseAddr(s); aerr == nil {
+				a = a.Unmap() // suggest the form that can match
 				bits := 32
 				if a.Is6() {
 					bits = 128
@@ -361,6 +362,13 @@ func (v *validator) cidrs(m map[string]any, base, key string) []prefixElem {
 			} else {
 				v.errf(elem(sub(base, key), i), "invalid CIDR %q", s)
 			}
+			continue
+		}
+		if a := p.Masked().Addr(); a.Is4In6() && p.Bits() >= 96 {
+			// Peers and targets are unmapped before they are compared, so an
+			// IPv4-mapped prefix such as ::ffff:10.8.0.1/128 never matches.
+			v.errf(elem(sub(base, key), i), "%q is an IPv4-mapped prefix, which never matches because cuttle compares IPv4 addresses in plain form; use %q",
+				s, netip.PrefixFrom(a.Unmap(), p.Bits()-96).String())
 			continue
 		}
 		if p != p.Masked() {
@@ -499,7 +507,9 @@ func (v *validator) proxy(raw map[string]any, c *Config, upstreams map[string]bo
 			case ap.Addr().Zone() != "":
 				v.errf(path, "%q has a zone; use an address without one", s)
 			case ap.Addr().Unmap().IsUnspecified():
-				// Unmapped first: [::ffff:0.0.0.0] would bind 0.0.0.0.
+				// Unmapped first: [::ffff:0.0.0.0] is not unspecified to
+				// netip, but Go listens on it with a dual-stack wildcard
+				// socket, on every IPv4 and IPv6 address.
 				v.errf(path, "%q is a wildcard address; listen on explicit addresses only", s)
 			case ap.Port() == 0:
 				v.errf(path, "%q needs a port 1-65535", s)

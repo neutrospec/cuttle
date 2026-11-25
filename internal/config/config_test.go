@@ -493,7 +493,8 @@ action = 'block'
 // TestConfigExposure checks 0003 N1: validation rejects wildcard and
 // host-name listeners, an IPv4-mapped wildcard included, a non-loopback
 // listener without proxy.remote.sources, proxy.remote.default = "direct"
-// without allow_direct, and an upstream without disclosure; 0.0.0.0/0 and
+// without allow_direct, an upstream without disclosure, and IPv4-mapped
+// sources, which could never match (0004 D4); 0.0.0.0/0 and
 // ::/0 in sources are warnings that cuttle check prints (TestCheckCommand
 // runs the warning samples).
 func TestConfigExposure(t *testing.T) {
@@ -513,6 +514,8 @@ func TestConfigExposure(t *testing.T) {
 		{"remote direct default", head + "[proxy.remote]\nsources = [\"10.8.0.1/32\"]\ndefault = \"direct\"\n", "proxy.remote.default", "needs proxy.remote.allow_direct = true"},
 		{"remote direct default, allow_direct false", head + "[proxy.remote]\ndefault = \"direct\"\nallow_direct = false\n", "proxy.remote.default", "needs proxy.remote.allow_direct = true"},
 		{"upstream without disclosure", head + "[[upstream]]\nname = \"gw\"\naddress = \"10.8.0.6:3128\"\n", "upstream[1].disclosure", "required"},
+		{"IPv4-mapped source", head + "listen = [\"10.8.0.6:18081\"]\n[proxy.remote]\nsources = [\"::ffff:10.8.0.1/128\"]\n", "proxy.remote.sources[1]", `IPv4-mapped prefix, which never matches because cuttle compares IPv4 addresses in plain form; use "10.8.0.1/32"`},
+		{"IPv4-mapped source range", head + "[proxy.remote]\nsources = [\"::ffff:0:0/96\"]\n", "proxy.remote.sources[1]", `use "0.0.0.0/0"`},
 	} {
 		cfg, r := Parse([]byte(c.src), "x.toml")
 		if cfg != nil {

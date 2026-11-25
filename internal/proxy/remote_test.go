@@ -173,18 +173,18 @@ func TestRemoteSourceRejected(t *testing.T) {
 	}
 
 	t.Run("outside the allowlist", func(t *testing.T) {
-		in := start(remoteConfig, "10.20.0.9", "10.8.0.1")
+		in := start(remoteConfig, "198.51.100.7", "10.8.0.1")
 		for i := range 2 {
-			expectClosed(t, dial(in.addr["10.20.0.9"]))
+			expectClosed(t, dial(in.addr["198.51.100.7"]))
 			waitFor(t, "rejection", func() bool { return rejected(in) == int64(i+1) })
 		}
-		cl := in.counters["10.20.0.9"]
+		cl := in.counters["198.51.100.7"]
 		if cl.accepted.Load() != 2 || cl.reads.Load() != 0 || cl.writes.Load() != 0 {
 			t.Errorf("rejected connections: accepted %d, reads %d, writes %d", cl.accepted.Load(), cl.reads.Load(), cl.writes.Load())
 		}
 		// The warning follows the counter, so wait for it.
-		waitForLog(t, in.logs, `msg="rejected source" source=10.20.0.9 reason="not in proxy.remote.sources"`)
-		if got := strings.Count(in.logs.String(), `msg="rejected source" source=10.20.0.9 `); got != 1 {
+		waitForLog(t, in.logs, `msg="rejected source" source=198.51.100.7 reason="not in proxy.remote.sources"`)
+		if got := strings.Count(in.logs.String(), `msg="rejected source" source=198.51.100.7 `); got != 1 {
 			t.Errorf("%d warnings for the source, want 1:\n%s", got, in.logs.String())
 		}
 		if len(in.logs.decisions()) != 0 || in.p.Live().Get(stats.ConnectionsTotal) != 0 || len(in.net.Events()) != 0 {

@@ -1,0 +1,14 @@
+# want: 10 proxy.remote.sources[1]: IPv4-mapped prefix, which never matches because cuttle compares IPv4 addresses in plain form; use "10.8.0.1/32"
+# want: 11 proxy.remote.sources[2]: IPv4-mapped prefix, which never matches because cuttle compares IPv4 addresses in plain form; use "0.0.0.0/0"
+# want: 12 proxy.remote.sources[3]: IPv4-mapped prefix, which never matches because cuttle compares IPv4 addresses in plain form; use "10.8.0.0/24"
+# want: 13 proxy.remote.sources[4]: is an address, not a CIDR; use "10.8.0.1/32"
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[proxy.remote]
+sources = [
+  "::ffff:10.8.0.1/128",
+  "::ffff:0:0/96",
+  "::ffff:10.8.0.0/120",
+  "::ffff:10.8.0.1",
+]

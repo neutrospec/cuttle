@@ -279,8 +279,9 @@ Move resolved items to Closed with their resolving commit or evidence.
     and add samples. Settled in TASK-0005 (M1.2): the validator keeps the
     written index of every table, rule pattern, and source, and the samples
     `sources-index.toml`, `repeat-index.toml`, and `table-index.toml` list
-    each position, which the base code got wrong. Z2 (docs): the 0002 D7 `decisions_total` row also
-    counts `action=none` for a connection without a source class. Z3
+    each position, which the base code got wrong. Z2 (docs): the 0002 D7
+    `decisions_total` row also counts `action=none` for a connection
+    without a source class. Z3
     (docs, status half at M1.4): 0006 D7 should say that lines written to
     a deleted log file before the next rotation are lost, that a deleted
     log directory is recreated only after restart, and whether the
@@ -290,7 +291,10 @@ Move resolved items to Closed with their resolving commit or evidence.
 - Next action: orchestrator — include V1–V12, P1, and W1–W3 in the first M1
   task brief; the producer closes each item with the commit that settles
   it. Include R5 and the C13 remainder of 0002 D7 (socket-exact plain-HTTP
-  `up`, exact totals after a `101`) in the M1.4 brief.
+  `up`, exact totals after a `101`) in the M1.4 brief. Also include the
+  per-request source recheck of 0003 D10, second bullet, with N5: M1.2
+  (TASK-0005) classifies sources only on accept, because nothing can
+  change the allowlist before `cuttle reload` exists.
 
 ## Closed
 

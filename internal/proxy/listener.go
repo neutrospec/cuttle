@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net"
 	"net/netip"
-	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -45,10 +44,10 @@ func (l *listener) Accept() (net.Conn, error) {
 			p.warnSource(peer)
 			continue
 		}
-		if key, max, ok := p.conns.admit(peer, src, cfg); !ok {
+		if key, limit, ok := p.conns.admit(peer, src, cfg); !ok {
 			c.Close()
 			p.live.Add(1, stats.ConnectionsRejectedTotal, "reason", "limit")
-			p.warnOnce(peer, "limit", "connection limit reached", "source", peer.String(), "limit", key, "max", strconv.Itoa(max))
+			p.warnLimit(peer, key, limit)
 			continue
 		}
 		p.live.Add(1, stats.ConnectionsTotal)
@@ -59,9 +58,10 @@ func (l *listener) Accept() (net.Conn, error) {
 
 // classify returns the source class of a peer address, which must already
 // be unmapped: loopback addresses are local, addresses inside sources are
-// remote, and anything else, an invalid address included, is refused.
+// remote, and anything else is refused, an invalid address and an address
+// with an IPv6 zone included.
 func classify(peer netip.Addr, sources []netip.Prefix) (policy.SourceClass, bool) {
-	if !peer.IsValid() {
+	if !peer.IsValid() || peer.Zone() != "" {
 		return 0, false
 	}
 	if peer.IsLoopback() {
@@ -97,12 +97,12 @@ type connLimits struct {
 func (l *connLimits) admit(peer netip.Addr, src policy.SourceClass, cfg *config.Config) (string, int, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if max := cfg.Proxy.MaxConnections; l.active >= max {
-		return "proxy.max_connections", max, false
+	if limit := cfg.Proxy.MaxConnections; l.active >= limit {
+		return "proxy.max_connections", limit, false
 	}
 	if src == policy.SourceRemote {
-		if max := cfg.Proxy.Remote.MaxConnectionsPerSource; l.perSource[peer] >= max {
-			return "proxy.remote.max_connections_per_source", max, false
+		if limit := cfg.Proxy.Remote.MaxConnectionsPerSource; l.perSource[peer] >= limit {
+			return "proxy.remote.max_connections_per_source", limit, false
 		}
 		if l.perSource == nil {
 			l.perSource = map[netip.Addr]int{}

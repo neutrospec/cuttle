@@ -1,0 +1,8 @@
+# want: 7 rule[1].cidrs[1]: IPv4-mapped prefix, which never matches because cuttle compares IPv4 addresses in plain form; use "10.0.0.0/8"
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[rule]]
+name = "lan"
+cidrs = ["::ffff:10.0.0.0/104"]
+action = "block"
