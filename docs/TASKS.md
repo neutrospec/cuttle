@@ -44,18 +44,18 @@ A closed task becomes one line under Closed:
 ### TASK-0008 — M1.5 interface selection: research and design
 
 - Milestone: M1.5 (new)
-- Status: design
+- Status: review
 - Iteration: 1/3
-- Workers: researcher done (note 0003 landed in `df894eb`); designer on a
-  T3 worktree branch, limited to a new record 0008, the ROADMAP M1.5 row,
-  the design index, and the glossary, so it does not collide with
-  TASK-0007
-- Base: `bb36ea5` plus this board update
-- Candidate: none
-- Evidence: research note 0003; OI-0007 opened for local network privacy
-- Findings: none
-- Next action: designer — write design record 0008 and the M1.5 roadmap row
-  and return the candidate commit for review
+- Workers: designer done on branch `t3/interface-selection-design`; fresh
+  reviewer pending
+- Base: `c7ef543`
+- Candidate: `12c6fd0` (tree `b473181`): record 0008, ROADMAP M1.5, design
+  index, glossary, compatibility rows
+- Evidence: designer docs checks passed; orchestrator link check passed on
+  the candidate tree
+- Findings: none yet; 26 changes to other records and 2 open-issue items
+  listed in 0008 for the orchestrator to apply after TASK-0007 lands
+- Next action: reviewer — independent review of `c7ef543..12c6fd0`
 
 Decisions for TASK-0008 from the user (2026-11-25):
 
