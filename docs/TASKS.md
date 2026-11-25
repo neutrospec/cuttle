@@ -44,20 +44,18 @@ A closed task becomes one line under Closed:
 ### TASK-0004 — M1.1 direct and block for local clients
 
 - Milestone: M1.1
-- Status: implement
+- Status: review
 - Iteration: 2/3
-- Workers: implementer on branch `t3/direct-block-local-clients`;
-  iteration 1 reviewer done
+- Workers: implementer done on branch `t3/direct-block-local-clients`;
+  fresh re-check pending
 - Base: `8612a74`
-- Candidate: `3cc612a` (tree `65514d8`), returned for revision
-- Evidence: reviewer reran `scripts/gate t0` and `t1` on `65514d8` (pass)
-  and `-race -count=6` (no flakes); every M1.1 criterion's test proves it
-- Findings: open M1 (empty lists bypass the catch-all check, major), M2,
-  M3, M10 (minor), M6, M7, M9 (nits), M8 (OI-0006 update); design items M4,
-  M11, and deviation wording 2, 4, 5, 6, 8 decided by the orchestrator; M5
-  to record for M1.4
-- Next action: implementer — fix the findings in new commits, rerun T0 and
-  T1, then a fresh re-check
+- Candidate: `636fdac` (tree `b517193`); history `8af7956`, `3cc612a`,
+  `8aa35cf`, `636fdac`
+- Evidence: implementer ran `scripts/gate t0`, `t1`, and `-race -count=3`
+  on `b517193`, all pass
+- Findings: M1-M4, M6-M11 and the decisions reported fixed; M5 recorded in
+  OI-0006 for M1.4
+- Next action: reviewer — fresh re-check of `3cc612a..636fdac`
 
 Decisions for TASK-0004 (2026-11-25):
 
