@@ -211,7 +211,7 @@ Move resolved items to Closed with their resolving commit or evidence.
   [assumptions][d8-a] F1–F5, F7, and F8; the review of TASK-0008
   iteration 1 (I-R2, I-R3).
 - Affected milestones: M1.5 and M1 close.
-- Iterations used: 2 of 3 in TASK-0008, for the design; the check itself
+- Iterations used: 3 of 3 in TASK-0008, for the design; the check itself
   has not run.
 - Responsible step: test, with the user.
 - Status: open.

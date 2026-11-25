@@ -82,8 +82,9 @@ timer that drives the notice debounce and the safety re-read.
 | `198.18.0.0/15` | public | Addresses of injected interface rows, outside `SelfAddrs` ([0008 acceptance criteria][d8-ac]) |
 | `198.51.100.0/24` | — | Rejected remote sources: peers outside every allowlist, reported by listener wrappers and never dialed; `198.51.100.7` in single-source tests |
 
-Only `Network`, `SelfAddrs`, the interface source, and its timer are
-injected. The address classifier and all policy code are production code.
+Only `Network`, `SelfAddrs`, `SelfChanged`, the interface source, and its
+timer are injected. The address classifier and all policy code are
+production code.
 `cmd/cuttle` wires the real resolver and dialer; internal packages have no
 default `Network`, so a test cannot reach real DNS by accident. T0 and T1
 use no real DNS, internet, or proxy.

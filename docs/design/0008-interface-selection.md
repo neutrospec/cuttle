@@ -676,9 +676,11 @@ for width.
   re-read finds, with a timestamp, the device, and the changed fields, such
   as `2026-11-25T01:02:03.456Z en7 media active->inactive`. It does not
   decode notices. Ctrl-C ends it.
-- Outside the configuration file and its editor, MACs and interface
-  addresses appear only in this command's terminal output, because the
-  user needs them to write and check the configuration.
+- Outside the configuration file and its editor, MACs and the addresses
+  of interface table rows appear only in this command's terminal output,
+  because the user needs them to write and check the configuration.
+  Configured listener addresses still appear in `cuttle status` and the
+  listener log lines, as in M1.4.
 - Exit status 0 on success, 1 when the table cannot be read, 2 on a usage
   error.
 
@@ -705,15 +707,18 @@ list applies. `explain` reads only the file, never the live state.
     every failed dial), and when the destination address is `loopback` or
     `self`, whose traffic never leaves the Mac.
 - `skipped` lists, in list order as `name:reason` pairs separated by
-  commas, the interfaces of the list in force that the dial did not use:
-  every interface the plan passed over or tried without a connection, and
-  every demoted interface that comes earlier in the list than the one that
-  carried the connection. Its reasons are:
+  commas, the interfaces of the list in force that the dial did not use
+  and that come earlier in list order than the interface that carried the
+  connection, or that ended a failed dial. Offline, passed-over, and
+  demoted interfaces later in the list are not listed, so unplugged
+  devices at the end of the list leave no trace on every decision line. A
+  failed dial that ran out of interfaces lists every interface of the
+  list. Its reasons are:
   - the D4 reasons and `no_family`, for an interface the plan passed over;
   - `demoted`, for a demoted interface placed after the one that carried
     the connection and never tried;
   - `unreachable` (a failover error) or `timeout`, for an interface tried
-    without a connection; for a demoted interface that was tried last and
+    without a connection; for a demoted interface that was tried and
     failed, the failure reason replaces `demoted`;
   - `refused` (`ECONNREFUSED`, `ECONNRESET`) or `error` (any other error),
     for the interface whose error ended a failed dial.
@@ -979,7 +984,7 @@ injected `SelfAddrs`.
 | I3 | Plans follow D7 and D11: list order, a rule list replacing the default list, group 0 first with `loopback`, `self`, and `private` addresses and the public addresses after it, family filtering with `no_family`, offline interfaces skipped with their reasons, demoted interfaces last in their relative order, no group giving D10, and an upstream's private address in group 0. | T0 `TestDialPlan` |
 | I4 | Each failover error of D8 moves to the next group; `ECONNREFUSED`, `ECONNRESET`, `EACCES`, `EPERM`, and an unknown error end the dial; a group with one refused and one unreachable attempt ends the dial; group 0 passes to the next group on any error; deadlines give every group but the last `interface_attempt_timeout` and the last the rest of the budget. | T0 `TestFailover` |
 | I5 | A real socket gets the option. A `tcp4` dial bound to `lo0`'s index connects to a listener on `127.0.0.1`, and one to `192.0.2.1:9` fails with `ENETUNREACH` within 100 ms. A `tcp6` dial bound with `IPV6_BOUND_IF` connects to `[::1]`, and one to `[2001:db8::1]:9` fails at once with `ENETUNREACH` or `EHOSTUNREACH`. An index that names no interface fails with `ENXIO`, classified as a failover error. Where `getsockopt` supports the option, it returns the index. No packet leaves the host, and this settles the no-route half of research open question 1 for TCP. | T1 `TestBoundDial` |
-| I6 | With `proxy.interfaces = ["eth-a", "eth-b", "wifi"]`, `interface_attempt_timeout = "300ms"`, and `connect_timeout = "2s"`, a direct `CONNECT`: (a) with all reachable dials once, bound to `eth-a`, and logs `interface=eth-a` without `skipped`; (b) with `eth-a` `link_down` makes no `eth-a` dial and logs `skipped=eth-a:link_down`; (c) with `eth-a` failing `ENETUNREACH` starts the `eth-b` dial within 50 ms; (d) with `eth-a` blackholed starts `eth-b` 300 ± 100 ms after `eth-a` and logs `skipped=eth-a:timeout`; (e) with `eth-a` refusing gets `502 connection_refused`, no `eth-b` or `wifi` dial, an empty `interface`, and `skipped=eth-a:refused`; (f) with `eth-a` failing `EPERM` gets `502`, no other dial, and `skipped=eth-a:error`; (g) with all three blackholed gets `504 connection_timeout` after 2 s ± 200 ms, the `wifi` group having the rest of the budget. Cases (a), (b), and (d) also pass for plain HTTP. | `TestInterfaceFailover` |
+| I6 | With `proxy.interfaces = ["eth-a", "eth-b", "wifi"]`, `interface_attempt_timeout = "300ms"`, and `connect_timeout = "2s"`, a direct `CONNECT`: (a) with all reachable dials once, bound to `eth-a`, and logs `interface=eth-a` without `skipped`, also when `wifi` is `link_down`; (b) with `eth-a` `link_down` makes no `eth-a` dial and logs `skipped=eth-a:link_down`; (c) with `eth-a` failing `ENETUNREACH` starts the `eth-b` dial within 50 ms; (d) with `eth-a` blackholed starts `eth-b` 300 ± 100 ms after `eth-a` and logs `skipped=eth-a:timeout`; (e) with `eth-a` refusing gets `502 connection_refused`, no `eth-b` or `wifi` dial, an empty `interface`, and `skipped=eth-a:refused`; (f) with `eth-a` failing `EPERM` gets `502`, no other dial, and `skipped=eth-a:error`; (g) with all three blackholed gets `504 connection_timeout` after 2 s ± 200 ms, the `wifi` group having the rest of the budget. Cases (a), (b), and (d) also pass for plain HTTP. | `TestInterfaceFailover` |
 | I7 | A rule with `interfaces = ["eth-b"]` dials only `eth-b` while `eth-a` is online. With `eth-b` absent a local client gets `503` with `Proxy-Status: <name>; error=destination_unavailable; details="no usable interface (eth-b: absent)"`, outcome `no_interface`, and no dial, and a remote client with `allow_direct` gets the same without `details`. A rule with `["eth-b", "eth-a"]` uses `eth-a` when `eth-b` is `link_down`. With `proxy.interfaces` unset, a request whose rule has no list dials unbound. | `TestInterfacePinning` |
 | I8 | After I6 (d), with `interface_demotion = "1s"`, the next request to another destination connects through `eth-b` without an `eth-a` dial and logs `skipped=eth-a:demoted`, `interface_state{interface="eth-a",state="demoted"}` is 1, and one `interface demoted` line with `reason=timeout` is logged. After the injected clock passes 1 s, the next request plans `eth-a` first, and one `interface restored` line with `cause=expired` is logged at that request. A notice that changes `eth-a`'s row ends a demotion at once with `cause=state_changed`. A dial in which every group timed out demotes nothing. | `TestInterfaceDemotion` |
 | I9 | With every listed interface offline, the starter `loopback` rule's targets, the literals `10.20.0.5` and `192.0.2.50` (`self` from the injected `SelfAddrs`), and a name resolving to `10.20.0.5` through an `allow_private` rule are dialed unbound, while `198.18.0.10`, a row's own address, is classified `public` and gets D10. With `eth-a` online for IPv4 only and `eth-b` for both, a name with AAAA and A records gets only the IPv4 attempt on `eth-a`, an IPv6-only name skips `eth-a` with `no_family` and connects on `eth-b`, and with no interface online for IPv6 it gets D10. A name behind an `allow_private` rule that resolves to `10.20.0.5`, which refuses, and to a public address connects through `eth-a` on the public address, as in M1.4, and so it does when the private attempt fails with `EPERM`. | `TestInterfaceAddressClasses` |
@@ -1082,8 +1087,11 @@ Iteration 2 applied these changes directly, on the text that M1.4 landed:
 Iteration 3 changed: 0002 D7 (no `interface_dials_total`) and Interfaces
 (`Binding`); 0003 D8 and 0004 D6 (a changed named definition changes an
 upstream); 0004 D4 (no MAC in messages, including TOML syntax errors);
-0007 D3 (wrapping); README.md (VPN routes); OPEN_ISSUES.md (OI-0008
-origin).
+0007 D3 (wrapping and the injected `SelfChanged`); README.md (VPN
+routes); COMPATIBILITY.md (device-check rows); OPEN_ISSUES.md (OI-0008
+origin). At landing, D15 limited `skipped` to interfaces before the one
+that carried or ended the dial, and narrowed the address claim to
+interface table rows.
 
 ## Consequences
 
