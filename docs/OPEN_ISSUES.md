@@ -105,8 +105,10 @@ Move resolved items to Closed with their resolving commit or evidence.
   TASK-0003 history rewrite left pre-rewrite history in local refs and
   files:
   1. Before the first push, run `git config --get-regexp '^remote\.'` and
-     confirm that no remote is a mirror and none has a `remote.*.push`
-     entry or a `refs/*` refspec.
+     confirm that no remote has `mirror` set and that there is no push or
+     mirror refspec whose source is `refs/*` or `refs/t3/*` (for example
+     `+refs/*:refs/*`). The default fetch refspec,
+     `+refs/heads/*:refs/remotes/<name>/*`, is fine.
   2. Push only `refs/heads/main` and tags, never `--mirror`, a `refs/*`
      refspec, or anything else that syncs `refs/t3/*`.
   3. Keep `refs/t3/*` private permanently. They contain pre-rewrite
@@ -115,11 +117,30 @@ Move resolved items to Closed with their resolving commit or evidence.
   4. The reflogs, `.git/filter-repo/`, the backup bundle, and the commit
      map hold pre-rewrite history. Never copy or share the working folder
      or the bundle.
-  5. After pushing, check that `git ls-remote` lists only `refs/heads/main`
-     and tags, and re-run the TASK-0003 history scan on a fresh clone of
-     the remote. The scan patterns include local values, so they live in
-     the untracked `.env` (for example `CUTTLE_PUBLISH_SCAN_PATTERNS`), not
-     in a tracked file.
+  5. After pushing, check that `git ls-remote <remote>` lists only `HEAD`,
+     `refs/heads/main`, and tags. Then scan a fresh clone of the remote:
+     the file contents of every commit, the commit messages without the
+     author and committer lines (the author email is allowed), the tag
+     messages, and the tip tree. The patterns are local values, so they
+     live in `CUTTLE_PUBLISH_SCAN_PATTERNS` in the untracked root `.env`
+     (see [`.env.example`](../.env.example)). Run the commands from the
+     main checkout's root. Each count must be 0; leave out `| wc -l` to see
+     the matching lines.
+
+     ```sh
+     set -a; . ./.env; set +a
+     p=$CUTTLE_PUBLISH_SCAN_PATTERNS
+     d=$(mktemp -d)
+     git clone -q <remote-url> "$d/clone" && cd "$d/clone"
+     git rev-list --all | while read -r r; do
+       git grep -I -i -E -e "$p" "$r" --
+     done | wc -l
+     git log --all --format=%B | grep -i -E -e "$p" | wc -l
+     git for-each-ref --format='%(contents)' refs/tags |
+       grep -i -E -e "$p" | wc -l
+     git grep -I -i -E -e "$p" HEAD -- | wc -l
+     cd - >/dev/null && rm -rf "$d"
+     ```
   6. Delete or securely store the bundle and the commit map once the user
      approves.
 
