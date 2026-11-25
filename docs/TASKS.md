@@ -44,17 +44,20 @@ A closed task becomes one line under Closed:
 ### TASK-0004 — M1.1 direct and block for local clients
 
 - Milestone: M1.1
-- Status: review
-- Iteration: 1/3
-- Workers: implementer done on branch `t3/direct-block-local-clients`;
-  fresh reviewer pending
+- Status: implement
+- Iteration: 2/3
+- Workers: implementer on branch `t3/direct-block-local-clients`;
+  iteration 1 reviewer done
 - Base: `8612a74`
-- Candidate: `3cc612a` (tree `65514d8`); history `8af7956`, `3cc612a`
-- Evidence: implementer ran `scripts/gate t0` and `t1` on `65514d8`, both
-  pass (macOS 27.2.1, go1.27.4, `/usr/bin/curl` 8.7.1)
-- Findings: none yet; implementer lists 10 design questions or deviations
-- Next action: reviewer — independent review of `8612a74..3cc612a` with a
-  gate rerun
+- Candidate: `3cc612a` (tree `65514d8`), returned for revision
+- Evidence: reviewer reran `scripts/gate t0` and `t1` on `65514d8` (pass)
+  and `-race -count=6` (no flakes); every M1.1 criterion's test proves it
+- Findings: open M1 (empty lists bypass the catch-all check, major), M2,
+  M3, M10 (minor), M6, M7, M9 (nits), M8 (OI-0006 update); design items M4,
+  M11, and deviation wording 2, 4, 5, 6, 8 decided by the orchestrator; M5
+  to record for M1.4
+- Next action: implementer — fix the findings in new commits, rerun T0 and
+  T1, then a fresh re-check
 
 Decisions for TASK-0004 (2026-11-25):
 
@@ -63,6 +66,13 @@ Decisions for TASK-0004 (2026-11-25):
 - OI-0006 items settled in this task: V2 (the `HTTP_PROXY` part, C3), V7
   (C11), V9 (C4), V10 (C10). Documentation wording items (V8, V11, W1–W3)
   wait for a docs pass.
+- Iteration 2 (orchestrator): after a response head or the `200` reaches
+  the client, a tunnel that ends with an error still logs `ok`, and a
+  plain-HTTP body that fails logs `upstream_protocol` with the status sent;
+  `up` and `down` count bytes accepted by the socket write, not bytes
+  buffered. Disclosure field names match case-insensitively with `_`
+  treated as `-`. `scripts/gate` fails when a command inside `test -z
+  "$(…)"` fails.
 
 ## Closed
 
