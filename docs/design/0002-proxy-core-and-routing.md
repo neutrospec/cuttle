@@ -60,7 +60,8 @@ Any other dependency needs a design change.
 | `internal/config` | Schema, validation, starter file, atomic write |
 | `internal/authority` | Request-target parsing and normalization |
 | `internal/policy` | Rule compilation and matching; no I/O |
-| `internal/netx` | `Network` seam, address classes, direct dialer |
+| `internal/netx` | `Network` seam, address classes, direct dialer, bound dials ([0008 D7][d8-7]) |
+| `internal/iface` | Interface definitions, matching, online state, notice monitor (darwin), dial plans, demotion ([0008][d8]) |
 | `internal/proxy` | Listener, handler, tunnels, forwarding, chaining |
 | `internal/stats` | Live counters, aggregator, SQLite store |
 | `internal/admin` | Admin HTTP server, sessions, templates |
@@ -268,10 +269,12 @@ Every row has a check in C3, C9, or [0003 U5 and U12][d3-ac].
 
 Outbound connection pools:
 
-- Direct transports exist per policy snapshot and per client class (local or
-  remote). A pooled connection is reused only for requests with the same
-  snapshot, class, host, and port, so a later request never inherits a dial
-  that a different policy allowed.
+- Direct transports exist per policy snapshot, per client class (local or
+  remote), and per interface list in force ([0008 D12][d8-12]). A pooled
+  connection is reused only for requests with the same snapshot, class,
+  list, host, and port, so a later request never inherits a dial that a
+  different policy allowed, and a connection pooled under one interface
+  list never serves a request under another.
 - Each upstream has one transport, kept across reloads while its settings
   are unchanged ([0004 D6][d4-6]). Its connections are shared by all
   clients.
@@ -290,8 +293,9 @@ Every response cuttle generates has a reason phrase, `Proxy-Status`
 `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`,
 `Connection: close`, and a one-line body such as
 `cuttle: blocked by rule "ads" (ads.example.net:443)`. Only the normalized
-authority, the rule name, and an upstream's configured name, as in
-`cuttle: upstream gateway answered 403 (wiki.internal.example:443)`, are
+authority, the rule name, an upstream's configured name, as in
+`cuttle: upstream gateway answered 403 (wiki.internal.example:443)`, and,
+for local clients, configured interface names ([0008 D10][d8-10]) are
 reflected. These responses go to the client
 only. Browsers discard the body of a failed `CONNECT` and show a generic
 error ([research 0002 §6][r2-6]); the decision log and the admin UI explain
@@ -308,6 +312,7 @@ it.
 | TCP connect timed out | 504 | `connection_timeout` | `timeout` |
 | No response head within the response timeout | 504 | `http_response_timeout` | `timeout` |
 | Upstream held as unreachable ([0003 D8][d3-8]) | 503 | `destination_unavailable` | `unavailable` |
+| No usable interface in the list in force ([0008 D10][d8-10]) | 503 | `destination_unavailable` | `no_interface` |
 | Upstream answered `CONNECT` with non-2xx, or any `407` | 502, or 504 when it sent 504 | none; `received-status=<code>` | `upstream_status` |
 | Response unparsable | 502 | `http_protocol_error` | `upstream_protocol` |
 | Internal error | 500 | `proxy_internal_error` | `internal` |
@@ -375,10 +380,13 @@ overview and live pages ([0005 D9][d5-9]).
 | `connections_total` | — |
 | `connections_rejected_total` | `reason` = `source`, `limit` |
 | `decisions_total` | `kind` = `connect`, `http`; `action`, or `none` for a refused target (D3) |
-| `outcomes_total` | `outcome` (D6, plus `ok`, `client_closed`, `shutdown`) |
+| `outcomes_total` | `outcome` (D6, including `no_interface`, plus `ok`, `client_closed`, `shutdown`) |
 | `bytes_total` | `action`, `direction` = `up`, `down` |
 | `upstream_outcomes_total` | `upstream`, `outcome` |
 | `upstream_state` | `upstream`, `state` = `up`, `down`, `probing`; a 0/1 gauge that is 1 for the upstream's current state and 0 for the others. The state's start time and the last error are reported with the status ([0003 D8][d3-8]) |
+| `interface_state` | `interface`, `state` = `online`, `demoted`, `offline`; a 0/1 gauge like `upstream_state` ([0008 D15][d8-15]) |
+| `interface_bytes_total` | `interface`, `direction` = `up`, `down`; the bytes of each decision whose `interface` field is not empty |
+| `interface_dials_total` | `interface`, `result` = `ok`, `unreachable`, `timeout`, `refused`, `error`; one count per interface tried by a bound dial |
 | `stats_write_errors_total`, `stats_folded_total` | — (M2, [0005 D4][d5-4]) |
 
 `connections_total` and `connections_active` count only accepted
@@ -386,13 +394,16 @@ connections. A connection that the source check or a connection limit
 closes on accept counts only in `connections_rejected_total`
 ([0003 D10][d3-10], [D12][d3-12]).
 
-Labels are bounded: hosts never appear in counters. Per-host data lives in
-the log and in statistics ([0005](0005-statistics-and-admin.md)). The status
-response also lists active tunnels and upgraded connections with
-authority, kind (`connect` or `upgrade`), route, source, age, and bytes,
-capped at 500 entries, oldest first. `tunnels_active` counts `CONNECT`
-tunnels only; an upgraded connection stays in `http_requests_active`
-until it ends.
+Labels are bounded: hosts never appear in counters, and the `interface`
+label takes only configured interface names and `other`. Without any
+`[[interface]]` definition the `interface_*` counters do not exist.
+Per-host data lives in the log and in statistics
+([0005](0005-statistics-and-admin.md)). The status response also lists
+active tunnels and upgraded connections with authority, kind (`connect`
+or `upgrade`), route, source, interface (D8), age, and bytes, capped at
+500 entries, oldest first. `tunnels_active` counts `CONNECT` tunnels
+only; an upgraded connection stays in `http_requests_active` until it
+ends.
 
 ### D8. Decision log
 
@@ -403,10 +414,15 @@ cuttle writes one `log/slog` text line per completed decision at level
 time=2026-11-25T01:01:02.345Z level=INFO msg=decision id=4f2a
 client=10.8.0.1:51234 source=remote kind=connect
 target=wiki.internal.example:443 rule=restricted action=upstream
-upstream=egress outcome=ok status=200 up=5321 down=88410 dur=12.402s
+upstream=egress interface= outcome=ok status=200 up=5321 down=88410
+dur=12.402s
 ```
 
-The line is wrapped here for width; it is one line in the log. Errors add
+The line is wrapped here for width; it is one line in the log. The
+`interface` field follows `upstream` on every line and names the
+interface that carried the outbound connection, `other`, or nothing;
+`skipped` follows it when the plan passed over interfaces of the list in
+force. [0008 D15][d8-15] defines both. Errors add
 `error=<Proxy-Status type>` and `detail`. A request whose status cuttle
 mapped from the next hop's answer, which is every decision with outcome
 `upstream_status`, adds `upstream_status=<code>` after `status`: a non-2xx
@@ -435,7 +451,10 @@ header values, bodies, or TLS contents.
 // Tests replace it (0007 D3).
 type Network interface {
     LookupNetIP(ctx context.Context, host string) ([]netip.Addr, error)
-    DialContext(ctx context.Context, addr netip.AddrPort) (net.Conn, error)
+    // b binds the dial to one interface; the zero value follows system
+    // routing (0008 D7).
+    DialContext(ctx context.Context, addr netip.AddrPort,
+        b netx.Binding) (net.Conn, error)
 }
 
 type Decision struct {
@@ -448,6 +467,8 @@ type Decision struct {
     Upstream      string              // set when Action is Upstream
     AllowLoopback bool
     AllowPrivate  bool
+    Interfaces    []string            // list in force for a direct route
+                                      // (0008 D6); empty: system routing
 }
 
 // Decide is pure: no I/O and no DNS.
@@ -464,6 +485,8 @@ tests can supply listeners that report chosen remote addresses
 
 - Policy failures answer before any DNS lookup or dial.
 - Direct-route failures map to D6 and never retry another route.
+  Interface failover ([0008 D8][d8-8]) retries the same route through
+  another interface of its list; it is not route failover.
 - Once the `200` or a response head has reached the client, the status
   cannot change and a failure can only close the connection. A tunnel that
   then ends with an error still logs outcome `ok`, because a tunnel has no
@@ -547,6 +570,12 @@ All checks are T1 tests run with the mocks in
 [d6-6]: 0006-packaging-paths-and-lifecycle.md#d6-signals-and-shutdown
 [d6-7]: 0006-packaging-paths-and-lifecycle.md#d7-logging-and-rotation
 [d7-4]: 0007-test-environment-and-gates.md#d4-instances-chains-and-loops
+[d8]: 0008-interface-selection.md
+[d8-7]: 0008-interface-selection.md#d7-dial-plan
+[d8-8]: 0008-interface-selection.md#d8-failover
+[d8-10]: 0008-interface-selection.md#d10-no-usable-interface
+[d8-12]: 0008-interface-selection.md#d12-connection-pools-and-tunnels
+[d8-15]: 0008-interface-selection.md#d15-status-command-line-logging-counters-and-statistics
 [oi]: ../OPEN_ISSUES.md
 [r1-1]: ../research/0001-homebrew-launchd-xdg.md#1-homebrew-formula-for-a-go-program-in-a-personal-tap
 [r1-6]: ../research/0001-homebrew-launchd-xdg.md#6-go-sqlite-drivers

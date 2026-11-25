@@ -110,10 +110,12 @@ commits and the research notes use older wording; the
 - **Primary interface.** The interface that holds the unscoped default
   route. It carries name lookups and unbound dials ([0008 D13][d8-13]).
 - **Failover.** Moving to the next interface in the list in force after a
-  fast connect failure or an attempt timeout ([0008 D8][d8-8]).
+  fast connect failure or an attempt timeout ([0008 D8][d8-8]). It keeps
+  the route: it is neither a fallback from an upstream to `direct` nor a
+  move to another upstream.
 - **Demotion.** Placing an interface after the others in every list for a
   short period after it failed while a later interface connected
-  ([0008 D9][d8-9]).
+  ([0008 D9][d8-9]). It applies to all destinations at once.
 
 ## Testing
 

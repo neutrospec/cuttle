@@ -61,6 +61,15 @@ A refused upstream is an address whose port the test bound and closed.
   blocks until the context deadline.
 - Every lookup and dial is recorded in order, so a test can assert that a
   block or an upstream failure made zero direct dials.
+- `DialContext` takes the interface binding of [0008 D7][d8-7] and records
+  it with the dial. A test can give an interface and address its own
+  behavior: route, refuse, fail with a chosen errno, or blackhole. Without
+  one, a bound dial behaves like an unbound dial to that address.
+
+`testenv.Interfaces` is the injected interface source of
+[0008](0008-interface-selection.md#interfaces): the test sets its rows,
+sends change notices, and can make its `Read` fail. Tests also inject the
+timer that drives the notice debounce and the safety re-read.
 
 | Addresses | Class | Use |
 | --- | --- | --- |
@@ -70,9 +79,11 @@ A refused upstream is an address whose port the test bound and closed.
 | `127.0.0.1`, `::1` | loopback | Rebinding tests and the `loopback` rule |
 | `169.254.1.1`, `fe80::1`, `0.0.0.0` | unusable | Prohibited destination tests |
 | `192.0.2.50` | self | Returned by the injected `SelfAddrs` |
+| `198.18.0.0/15` | public | Addresses of injected interface rows, outside `SelfAddrs` ([0008 acceptance criteria][d8-ac]) |
 | `198.51.100.0/24` | — | Rejected remote sources: peers outside every allowlist, reported by listener wrappers and never dialed; `198.51.100.7` in single-source tests |
 
-Only `Network` and `SelfAddrs` are injected. The address classifier and all
+Only `Network`, `SelfAddrs`, the interface source, and its timer are
+injected. The address classifier and all
 policy code are production code. `cmd/cuttle` wires the real resolver and
 dialer; internal packages have no default `Network`, so a test cannot reach
 real DNS by accident. T0 and T1 use no real DNS, internet, or proxy.
@@ -172,8 +183,9 @@ test -z "$out"
 deps=$(mktemp)
 go list -deps ./cmd/cuttle >"$deps"
 rc=0
-grep -E 'internal/testenv|x/net/websocket' "$deps" || rc=$?
+grep -E 'internal/testenv|^golang\.org/x/net/' "$deps" || rc=$?
 test "$rc" -eq 1
+CGO_ENABLED=0 go build -o /dev/null ./cmd/cuttle
 ```
 
 Output that must be empty is captured first, by an assignment or into a
@@ -181,7 +193,11 @@ file that the script removes on exit: under `set -e` both fail with their
 command, while a failure inside `test -z "$(...)"` or on the left of `&&`
 would not stop the gate. The dependency check passes only on `grep`'s exit
 status 1, no match; status 0 lists a forbidden package, and status 2 means
-`grep` itself failed.
+`grep` itself failed. The pattern forbids every package of the
+`golang.org/x/net` module, while the standard library's own
+`vendor/golang.org/x/net/...` packages, which every `net/http` program
+links, do not start with `golang.org` and pass. The last command shows
+that cuttle still builds without cgo ([0008 D16][d8-16]).
 
 T1:
 
@@ -199,7 +215,9 @@ CUTTLE_REQUIRE_CURL=1 go test -race -count=1 -timeout 10m ./...
 - T2 at M1 close: the D8 M1 client check with headless Chrome and curl,
   ending with
   `go run ./tools/mockenv check-disclosure -dir <session directory>` for
-  each client. This is the milestone acceptance that AGENTS.md requires.
+  each client, and the [0008 device check][d8-dc] on the user's Mac with
+  the user's interfaces. This is the milestone acceptance that AGENTS.md
+  requires.
 - T2 at M2 close: the headless Chrome admin check
   ([0005](0005-statistics-and-admin.md#acceptance-criteria) A10).
 - T2 at M3 close and every later milestone: the D8 M3 matrix, the Homebrew
@@ -283,7 +301,7 @@ macOS versions, the tested commit, and evidence links.
 | ID | Criterion | Check |
 | --- | --- | --- |
 | E1 | Mock self-tests pass: the inspecting egress mock's leaves have a SAN, the serverAuth EKU, and at most 825 days of validity; the recording upstream records requests byte for byte per connection; `testenv.Net` records lookups and dials. | T1 `go test ./internal/testenv/...` |
-| E2 | `cmd/cuttle` links neither `internal/testenv` nor `x/net/websocket`. | T0 command above |
+| E2 | `cmd/cuttle` links neither `internal/testenv` nor any package of the `golang.org/x/net` module, `x/net/websocket` included, and builds with `CGO_ENABLED=0`. | T0 commands above |
 | E3 | Git tracks no key or certificate file. | T0 command above |
 | E4 | `tools/mockenv` rejects any `407` mode. | T1 `TestMockenvRefuses407` |
 | E5 | The full T1 run completes within its 10-minute timeout. | T1 command above |
@@ -305,6 +323,10 @@ macOS versions, the tested commit, and evidence links.
 [d2-ac]: 0002-proxy-core-and-routing.md#acceptance-criteria
 [d3-5]: 0003-upstream-chaining-and-exposure.md#d5-non-disclosure-toward-an-egress-proxy
 [d3-ac]: 0003-upstream-chaining-and-exposure.md#acceptance-criteria
+[d8-7]: 0008-interface-selection.md#d7-dial-plan
+[d8-16]: 0008-interface-selection.md#d16-dependencies-and-platform-code
+[d8-ac]: 0008-interface-selection.md#acceptance-criteria
+[d8-dc]: 0008-interface-selection.md#device-check-i20
 [oi]: ../OPEN_ISSUES.md
 [r2-5]: ../research/0002-proxy-chaining-and-interception.md#5-how-macos-clients-choose-and-talk-to-the-proxy
 [r2-6]: ../research/0002-proxy-chaining-and-interception.md#6-what-clients-show-for-proxy-generated-failures

@@ -19,7 +19,8 @@ and settings management. Live counters are defined in
 
 ### D1. Recorded data
 
-cuttle aggregates per hour, host, action, upstream, rule, and source class.
+cuttle aggregates per hour, host, action, upstream, rule, source class, and
+interface.
 
 | Field | Meaning |
 | --- | --- |
@@ -27,9 +28,10 @@ cuttle aggregates per hour, host, action, upstream, rule, and source class.
 | `action`, `upstream` | Route taken; `upstream` is empty unless the action is `upstream` |
 | `rule` | Rule name, or `default`, `remote-default`, `port`, `remote-direct` |
 | `source` | `local` or `remote` ([0003 D10][d3-10]) |
+| `interface` | The interface that carried the outbound connection: a configured interface name, `other`, or empty without one, with the decision-log value of [0008 D15][d8-15] |
 | `connects` | `CONNECT` decisions |
 | `http_requests` | Plain-HTTP decisions |
-| `failures` | Decisions with outcome `loop`, `dns_error`, `prohibited`, `refused`, `timeout`, `unavailable`, `upstream_status`, `upstream_protocol`, or `internal` |
+| `failures` | Decisions with outcome `loop`, `dns_error`, `prohibited`, `refused`, `timeout`, `unavailable`, `no_interface`, `upstream_status`, `upstream_protocol`, or `internal` |
 | `bytes_up`, `bytes_down` | Bytes per [0002 D7][d2-7] |
 | `first_seen`, `last_seen` | Unix seconds of the first and last decision or byte transfer in the hour |
 
@@ -58,6 +60,7 @@ CREATE TABLE host_hour (
   upstream      TEXT    NOT NULL DEFAULT '',
   rule          TEXT    NOT NULL,
   source        TEXT    NOT NULL CHECK (source IN ('local', 'remote')),
+  interface     TEXT    NOT NULL DEFAULT '',
   connects      INTEGER NOT NULL DEFAULT 0,
   http_requests INTEGER NOT NULL DEFAULT 0,
   failures      INTEGER NOT NULL DEFAULT 0,
@@ -65,15 +68,18 @@ CREATE TABLE host_hour (
   bytes_down    INTEGER NOT NULL DEFAULT 0,
   first_seen    INTEGER NOT NULL,
   last_seen     INTEGER NOT NULL,
-  PRIMARY KEY (bucket, host, action, upstream, rule, source)
+  PRIMARY KEY (bucket, host, action, upstream, rule, source, interface)
 ) STRICT, WITHOUT ROWID;
 ```
 
-Each flushed key is one upsert:
+Each flushed key is one upsert, with the values in column order:
+`bucket`, `host`, `action`, `upstream`, `rule`, `source`, `interface`,
+then the counts and times:
 
 ```sql
-INSERT INTO host_hour VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT (bucket, host, action, upstream, rule, source) DO UPDATE SET
+INSERT INTO host_hour VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (bucket, host, action, upstream, rule, source, interface)
+DO UPDATE SET
   connects      = connects      + excluded.connects,
   http_requests = http_requests + excluded.http_requests,
   failures      = failures      + excluded.failures,
@@ -108,13 +114,18 @@ untouched.
 - `stats.max_hosts_per_hour` (default 1,000) bounds distinct hosts per hour
   (D4).
 
-Expected size, assuming about 100 bytes per row on disk (assumption B3):
+Expected size, assuming about 110 bytes per row on disk (assumption B3),
+which includes a short interface name:
 
 | Case | Rows | Size |
 | --- | --- | --- |
-| Typical: 300 hosts an hour for 12 hours a day, 30 days | 108,000 | about 11 MB |
-| Cap: 1,000 hosts every hour, 30 days | 720,000 | about 72 MB |
-| Cap with 90-day retention | 2,160,000 | about 216 MB |
+| Typical: 300 hosts an hour for 12 hours a day, 30 days | 108,000 | about 12 MB |
+| Cap: 1,000 hosts every hour, 30 days | 720,000 | about 79 MB |
+| Cap with 90-day retention | 2,160,000 | about 238 MB |
+
+A host that used several interfaces in one hour, for example after a
+failover ([0008 D8][d8-8]), has one row per interface, so the typical case
+can grow slightly; the cap bounds hosts, not rows.
 
 The WAL file is checkpointed automatically and stays small at this write
 rate.
@@ -136,9 +147,9 @@ rate.
   a minute.
 - More than 20,000 pending keys, or a host beyond `max_hosts_per_hour` for
   its hour, folds into host `*` with the same hour, action, upstream, rule,
-  and source; `stats_folded_total` counts it. The host cap counts hosts
-  seen since start, so after a restart within an hour it may admit up to
-  twice the cap for that hour.
+  source, and interface; `stats_folded_total` counts it. The host cap
+  counts hosts seen since start, so after a restart within an hour it may
+  admit up to twice the cap for that hour.
 - If the database cannot be opened, migrated, or written at start, cuttle
   logs the reason and runs without statistics. `cuttle status` and the
   dashboard show `stats: unavailable` with the reason. Forwarding never
@@ -237,8 +248,8 @@ exact range.
 | `GET` | `/login` | Host check | Login form; sets `cuttle_login` |
 | `POST` | `/login` | Host check, login token | Verify the password, start a session |
 | `POST` | `/logout` | Session, CSRF | End the session |
-| `GET` | `/` | Session | Overview: totals per route, top hosts, live counters, upstream states, configuration and statistics status |
-| `GET` | `/domains` | Session | Host table filtered by `route`, `source`, and window |
+| `GET` | `/` | Session | Overview: totals per route and per interface, top hosts, live counters, upstream and interface states, configuration and statistics status |
+| `GET` | `/domains` | Session | Host table filtered by `route`, `source`, `interface`, and window |
 | `GET` | `/live` | Session | Active tunnels; refreshes every 5 s with `<meta http-equiv="refresh">` |
 | `GET` | `/settings` | Session | Configuration editor (D10) |
 | `POST` | `/settings/validate` | Session, CSRF | Validate text without saving |
@@ -246,8 +257,10 @@ exact range.
 | `GET` | `/static/*` | Host check | Embedded styles |
 
 `route` is `direct`, `upstream` (all upstreams), `upstream:<name>`,
-`block`, or `all`. The overview answers the operator's questions directly:
-domains sent to each upstream, domains sent direct, and domains blocked.
+`block`, or `all`. `interface` is a configured interface name, `other`,
+`none` for rows without an interface, or `all`. The overview answers the
+operator's questions directly: domains sent to each upstream, domains sent
+direct, and domains blocked.
 The domain table shows host, route, rules, requests (`connects` plus
 `http_requests`), failures, bytes in each direction, and first and last
 seen. A host that took several routes appears once per route. Bars drawn
@@ -286,12 +299,12 @@ timeouts.
 
 | ID | Criterion | Check |
 | --- | --- | --- |
-| S1 | After a scripted mix of direct `CONNECT` to two hosts, plain HTTP through upstream `gateway`, and blocked requests, `host_hour` rows match the expected counts and bytes and agree with the live counters. | `TestStatsRowsMatchTraffic` |
+| S1 | After a scripted mix of direct `CONNECT` to two hosts, one of them through a test interface of [0008][d8], plain HTTP through upstream `gateway`, and blocked requests, `host_hour` rows match the expected counts, bytes, and interfaces and agree with the live counters. | `TestStatsRowsMatchTraffic` |
 | S2 | While another connection holds `BEGIN EXCLUSIVE` on the database, 100 proxied requests complete before the lock is released; the pending batch is written afterwards. | `TestStatsNeverBlocksForwarding` |
 | S3 | A tunnel open across an hour boundary splits its bytes between the two hours within one flush interval of data. | `TestStatsHourAttribution` |
 | S4 | Rows older than the retention are deleted; hosts beyond `max_hosts_per_hour` and keys beyond 20,000 pending fold into `*`. | `TestStatsRetentionAndFolding` |
 | S5 | With an unopenable database or a newer `user_version`, the proxy serves and status reports `stats: unavailable`. | `TestStatsUnavailable` |
-| S6 | 100,000 synthetic rows take at most 150 bytes per row after a checkpoint; the test reports the figure. | `TestStatsRowSize` |
+| S6 | 100,000 synthetic rows, each with an 8-byte interface name, take at most 160 bytes per row after a checkpoint; the test reports the figure. | `TestStatsRowSize` |
 | S7 | Bytes of tunnels closed by shutdown are in the database after the process exits. | `TestStatsShutdownFlush` |
 | A1 | `Host: evil.example:3129` gets `403` before authentication; `127.0.0.1:<port>` and `localhost:<port>` are served. | `TestAdminHostAllowlist` |
 | A2 | `cuttle admin passwd --stdin` writes a 0600 Argon2id PHC string with `m=19456,t=2,p=1` and refuses an 11-byte password. Login with it sets `cuttle_session` with `HttpOnly` and `SameSite=Strict`; a wrong password gets `401` with the generic message. | `TestAdminPassword`, `TestAdminLogin` |
@@ -310,7 +323,7 @@ timeouts.
 | --- | --- | --- |
 | B1 | Chrome and Safari keep a non-`Secure`, `SameSite=Strict` cookie for `http://127.0.0.1`. | A10 for Chrome; Safari login in M3 ([OI-0002][oi]) |
 | B2 | Argon2id with these parameters takes under 200 ms on the target Macs. | T0 benchmark `BenchmarkPasswordHash`, reported in M2 evidence |
-| B3 | A row takes about 100 bytes on disk. | S6 |
+| B3 | A row takes about 110 bytes on disk, including the interface name. | S6 |
 
 ## Alternatives considered
 
@@ -338,6 +351,9 @@ timeouts.
 [d6-1]: 0006-packaging-paths-and-lifecycle.md#d1-paths
 [d6-3]: 0006-packaging-paths-and-lifecycle.md#d3-command-line
 [d7-7]: 0007-test-environment-and-gates.md#d7-gates
+[d8]: 0008-interface-selection.md
+[d8-8]: 0008-interface-selection.md#d8-failover
+[d8-15]: 0008-interface-selection.md#d15-status-command-line-logging-counters-and-statistics
 [oi]: ../OPEN_ISSUES.md
 [r1-3]: ../research/0001-homebrew-launchd-xdg.md#3-xdg-base-directory-specification
 [r1-6]: ../research/0001-homebrew-launchd-xdg.md#6-go-sqlite-drivers
