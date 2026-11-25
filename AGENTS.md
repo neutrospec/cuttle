@@ -25,6 +25,47 @@ requires it, such as an internationalized domain name.
 
 Use the project terms defined in the [glossary](docs/GLOSSARY.md).
 
+## Reporting to the user
+
+The orchestrator reports in Korean prose. It adds a rendered HTML view only
+when the structure is the message and prose or a Markdown table would hide
+it:
+
+- topology and flow, such as an edge → gateway → egress chain, the path of
+  one request through rules and destination checks, or a review loop;
+- per-hop or before-and-after comparisons, such as the header fields each
+  hop sends, or a configuration before and after a change;
+- states and timelines, such as the unreachable hold or a task's
+  iterations;
+- many items with several attributes, such as stage progress or findings
+  across iterations, when a Markdown table would exceed about eight rows or
+  needs status colors;
+- numbers whose trend or comparison matters, such as traffic statistics,
+  gate timings, or measurements.
+
+Text stays the right form for short answers, single decisions, progress
+notes during work, questions (use the question tool), and anything the user
+copies, such as commands, configuration, and paths.
+
+- Every HTML view comes with a short Korean text that states the conclusion
+  and any action needed, so the reply stands on its own without the view.
+  Use at most one view per reply.
+- The view is never the record. Decisions and evidence go to the tracked
+  documents first, and the view shows the same data, taken from Git, the
+  board, and worker reports rather than memory.
+- Write the HTML in a scratch directory, never in the repository. Keep it
+  self-contained with inline styles and no remote resources. Check it with
+  `html_preview` in dark and light appearance, then show it with
+  `html_render` at the previewed content height.
+- Follow the renderer's layout rules: no background, card, border, title
+  banner, or side padding on the outer element; fluid widths; theme CSS
+  variables instead of fixed colors; fixed pixel heights for charts; no
+  `vh` units or `height: 100%` on `html` or `body`.
+- User-facing text in the view is Korean; identifiers, commands, and
+  configuration keys stay as they are.
+- This applies to the orchestrator only. Workers report in English prose
+  and may include tables of data for the orchestrator to present.
+
 ## Orchestration and roles
 
 The orchestrator defines the work, assigns roles, resolves scope questions,
