@@ -265,6 +265,18 @@ Move resolved items to Closed with their resolving commit or evidence.
     D6 step 4 and P5 need such upgraded connections tracked like tunnels.
     The C13 remainder of 0002 D7 belongs to the same stage: socket-exact
     plain-HTTP `up`, and exact totals after a `101`.
+  - Z1–Z4 (from the TASK-0004 final re-check): Z1 (implementer, M1.2):
+    the `proxy.remote.sources` `/0` warning, the "repeats rule" warnings,
+    and `rule` or `upstream` elements after a non-table element still name
+    positions in the filtered list; keep each element's original position
+    and add samples. Z2 (docs): the 0002 D7 `decisions_total` row also
+    counts `action=none` for a connection without a source class. Z3
+    (docs, status half at M1.4): 0006 D7 should say that lines written to
+    a deleted log file before the next rotation are lost, that a deleted
+    log directory is recreated only after restart, and whether the
+    rotation failure count is shown by `cuttle status`. Z4 (implementer,
+    only if it flakes): relax the lower bound in
+    `TestHTTPClientClosesMidBody`.
 - Next action: orchestrator — include V1–V12, P1, and W1–W3 in the first M1
   task brief; the producer closes each item with the commit that settles
   it. Include R5 and the C13 remainder of 0002 D7 (socket-exact plain-HTTP
