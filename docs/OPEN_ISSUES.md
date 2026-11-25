@@ -413,6 +413,20 @@ Move resolved items to Closed with their resolving commit or evidence.
     `CGO_ENABLED=0` is set in the environment; run it as `CGO_ENABLED=1 go
     list -deps -f '{{if .CgoFiles}}{{.ImportPath}}{{end}}' ./cmd/cuttle` in
     `scripts/gate` and 0007 D7.
+  - P-R2–P-R7 (from the TASK-0011 review; M2.3 and docs): P-R2 (design):
+    an admin port that cannot bind is only logged; show the admin listener
+    state in `cuttle status` and record the port-squatting risk next to the
+    cookie-scope risk in 0005 D7. P-R3 (implementer): make the uid lookup
+    injectable so the password file's owner check has a test. P-R4
+    (design): responses `net/http` writes before the handler (`400` for a
+    missing, duplicate, or malformed Host, `431`, `OPTIONS *`) carry no D5
+    headers; record them as the A7 exception. P-R5 (design): one global
+    login backoff lets another local user keep the operator locked out;
+    record it as an accepted availability risk in D8. P-R6 (docs): record
+    in 0005 D5 and D8 that the listen literal is also accepted, that the
+    signed `cuttle_login` token carries its expiry, and that `no-store` is
+    on every page except the styles. P-R7 (docs): note `golang.org/x/sys`
+    as a transitive dependency in 0002 D1.
 - Next action: orchestrator — include the open items (V4–V6, V8, V11,
   V12, P1, W1–W3, Z2, Z4, G1–G2, and M-R2) in the briefs of the stages
   they affect; the producer closes each item with the commit that settles

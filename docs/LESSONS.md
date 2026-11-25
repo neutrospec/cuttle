@@ -179,3 +179,14 @@ removes entries. Append new entries at the end, oldest first.
   the targeted test fails with its own message, not a build error or a
   timeout. Make every failure path of a test finish, for example by
   remembering a value already received from a channel.
+
+### 2026-11-25 — reviewer — probing `cuttle serve` by hand
+
+- Task: TASK-0011, a live probe of the admin listener with a built binary.
+- Attempts: 1, recorded because it touched the real control socket path.
+- What failed: The probe set `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, and
+  `XDG_STATE_HOME` but not `XDG_RUNTIME_DIR`, so the control socket fell
+  back to `$TMPDIR/cuttle/control.sock`, the path a real instance uses.
+- What to do instead: Set `XDG_RUNTIME_DIR` to a short 0700 directory under
+  `/tmp` as well, together with `HOME` and the other `XDG_*` variables,
+  whenever a probe runs `cuttle serve` outside the test helpers.
