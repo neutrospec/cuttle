@@ -381,12 +381,14 @@ upstream=egress outcome=ok status=200 up=5321 down=88410 dur=12.402s
 ```
 
 The line is wrapped here for width; it is one line in the log. Errors add
-`error=<Proxy-Status type>` and `detail`. A `CONNECT` whose status cuttle
-mapped from an upstream's non-2xx answer adds `upstream_status=<code>`
-after `status`, so that an egress `403`, `407`, and `502`, all sent to the
-client as `502`, can be told apart in the log. A request whose target is
-refused (D3) has empty `target`, `rule`, `action`, and `upstream` fields,
-so nothing of the target is logged. The log never contains paths, queries,
+`error=<Proxy-Status type>` and `detail`. A request whose status cuttle
+mapped from the next hop's answer, which is every decision with outcome
+`upstream_status`, adds `upstream_status=<code>` after `status`: a non-2xx
+`CONNECT` answer from an upstream, and a plain-HTTP `407` from an upstream
+or an origin. So an egress `403`, `407`, and `502`, all sent to the client
+as `502`, can be told apart in the log. A request whose target is refused
+(D3) has empty `target`, `rule`, `action`, and `upstream` fields, so
+nothing of the target is logged. The log never contains paths, queries,
 header values, bodies, or TLS contents.
 
 ## Non-goals

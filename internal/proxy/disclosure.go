@@ -12,7 +12,7 @@ import (
 // disclosureFields are the fields that reveal an intermediary or the
 // original client address (design 0003 D5), lowercase. Every field whose
 // name starts with x-forwarded, with or without a following dash, is also
-// one.
+// one. The list cannot be complete; the guarantee covers these names.
 var disclosureFields = []string{
 	"via",
 	"forwarded",
@@ -27,13 +27,32 @@ var disclosureFields = []string{
 	"cf-connecting-ip",
 	"fastly-client-ip",
 	"proxy-status",
+	"cdn-loop",
+	"proxy-client-ip",
+	"wl-proxy-client-ip",
+	"x-proxyuser-ip",
+	"x-remote-addr",
+	"x-remote-ip",
+	"x-envoy-external-address",
+	"x-bluecoat-via",
 }
+
+// cgiPrefix is the prefix CGI-style servers put before a field name, as in
+// HTTP_X_FORWARDED_FOR; with "_" read as "-" it is "http-".
+const cgiPrefix = "http-"
 
 // isDisclosureField matches names without regard to case and with "_"
 // read as "-", because some servers treat X_Forwarded_For like
-// X-Forwarded-For.
+// X-Forwarded-For, and also behind the CGI prefix, as in
+// HTTP_X_FORWARDED_FOR.
 func isDisclosureField(name string) bool {
 	n := strings.ReplaceAll(strings.ToLower(name), "_", "-")
+	return listedDisclosure(n) || (strings.HasPrefix(n, cgiPrefix) && listedDisclosure(n[len(cgiPrefix):]))
+}
+
+// listedDisclosure reports whether a normalized name is listed or has the
+// x-forwarded prefix.
+func listedDisclosure(n string) bool {
 	return strings.HasPrefix(n, "x-forwarded") || slices.Contains(disclosureFields, n)
 }
 

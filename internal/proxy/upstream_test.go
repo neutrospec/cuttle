@@ -447,7 +447,7 @@ func TestUpstreamHTTP(t *testing.T) {
 	t.Run("fields named in Connection", func(t *testing.T) {
 		// A Forwarded or X-Forwarded-* field the client names in Connection
 		// is hop-by-hop: it is removed on the plain-HTTP path as in the
-		// CONNECT head (OI-0006 V2, RFC 9110 section 7.6.1).
+		// CONNECT head (TASK-0006 U-R1, RFC 9110 section 7.6.1).
 		for _, kind := range []string{"plain", "connect"} {
 			rec.Reset()
 			head := "Host: h\r\nConnection: forwarded, X-FORWARDED-FOR , x-forwarded-port\r\n" + forwardedHead()
@@ -514,6 +514,23 @@ func TestUpstreamHTTP(t *testing.T) {
 			res.Header.Get("Proxy-Status") != "" || res.Header.Get("Via") != "" {
 			t.Errorf("403 page changed: %d %q %v", res.StatusCode, body, res.Header)
 		}
+		// The mapped 407 keeps the upstream's status in the decision line;
+		// the relayed 403 has no such field (design 0002 D8, TASK-0006
+		// V-R1).
+		lines := func(target string) []map[string]string {
+			var out []map[string]string
+			for _, d := range e.logs.decisions() {
+				if d["kind"] == "http" && d["target"] == target {
+					out = append(out, d)
+				}
+			}
+			return out
+		}
+		waitFor(t, "decision lines", func() bool { return len(lines("s407.cuttle.test:80")) == 1 && len(lines("s403.cuttle.test:80")) == 1 })
+		checkDecision(t, lines("s407.cuttle.test:80")[0], map[string]string{"action": "upstream", "upstream": "rec",
+			"outcome": "upstream_status", "status": "502", "upstream_status": "407"})
+		checkDecision(t, lines("s403.cuttle.test:80")[0], map[string]string{"action": "upstream", "upstream": "rec",
+			"outcome": "ok", "status": "403", "upstream_status": ""})
 	})
 
 	t.Run("WebSocket", func(t *testing.T) {

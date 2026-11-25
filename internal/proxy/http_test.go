@@ -42,17 +42,40 @@ var clientDisclosure = map[string]string{
 	"Cf-Connecting-Ip":    "198.51.100.7",
 	"Fastly-Client-Ip":    "198.51.100.7",
 	"Proxy-Status":        "lab-gw; error=connection_refused",
-	// The wider list of the TASK-0006 decision (0003 D5).
+	// The wider lists of the TASK-0006 decisions U-R7 and V-R2 (0003 D5).
 	"X-Forwarded":              "for=198.51.100.7",
 	"Forwarded-For":            "198.51.100.7",
 	"X-Original-Forwarded-For": "198.51.100.7",
+	"Cdn-Loop":                 "lab-cdn",
+	"Proxy-Client-Ip":          "198.51.100.7",
+	"Wl-Proxy-Client-Ip":       "198.51.100.7",
+	"X-Proxyuser-Ip":           "198.51.100.7",
+	"X-Remote-Addr":            "198.51.100.7",
+	"X-Remote-Ip":              "198.51.100.7",
+	"X-Envoy-External-Address": "198.51.100.7",
+	"X-Bluecoat-Via":           "lab-gw",
+	// Listed names behind the CGI prefix.
+	"Http_x_forwarded_for": "198.51.100.7",
+	"Http_client_ip":       "198.51.100.7",
+	"Http-Via":             "1.1 lab-gw",
+}
+
+// isClientDisclosure is the tests' own reading of design 0003 D5: a name in
+// clientDisclosure or with the X-Forwarded prefix, without regard to case,
+// with "_" read as "-", and also behind an "http-" prefix.
+func isClientDisclosure(name string) bool {
+	listed := func(n string) bool {
+		_, ok := clientDisclosure[http.CanonicalHeaderKey(n)]
+		return ok || strings.HasPrefix(strings.ToLower(n), "x-forwarded")
+	}
+	n := strings.ReplaceAll(strings.TrimSpace(name), "_", "-")
+	return listed(n) || (len(n) > 5 && strings.EqualFold(n[:5], "http-") && listed(n[5:]))
 }
 
 func checkNoDisclosure(t *testing.T, h http.Header) {
 	t.Helper()
 	for k := range h {
-		ck := http.CanonicalHeaderKey(strings.ReplaceAll(k, "_", "-"))
-		if _, bad := clientDisclosure[ck]; bad || strings.HasPrefix(ck, "X-Forwarded") {
+		if isClientDisclosure(k) {
 			t.Errorf("origin received disclosure field %s: %q", k, h[k])
 		}
 	}
@@ -489,8 +512,12 @@ func TestHTTPExpectAnd407(t *testing.T) {
 		t.Errorf("curl 407: %q", r.Stdout)
 	}
 	ds := e.waitDecisions(4)
-	checkDecision(t, ds[2], map[string]string{"outcome": "upstream_status", "status": "502", "down": "0"})
-	checkDecision(t, ds[3], map[string]string{"outcome": "upstream_status", "status": "502", "down": "0"})
+	// A 407 mapped to 502 keeps the origin's status in the decision line
+	// (design 0002 D8, TASK-0006 V-R1); relayed responses have no such field.
+	checkDecision(t, ds[0], map[string]string{"outcome": "ok", "status": "200", "upstream_status": ""})
+	checkDecision(t, ds[1], map[string]string{"outcome": "ok", "status": "200", "upstream_status": ""})
+	checkDecision(t, ds[2], map[string]string{"outcome": "upstream_status", "status": "502", "upstream_status": "407", "down": "0"})
+	checkDecision(t, ds[3], map[string]string{"outcome": "upstream_status", "status": "502", "upstream_status": "407", "down": "0"})
 }
 
 // TestFrontEndRejects checks C11: unsupported target forms get cuttle's 400

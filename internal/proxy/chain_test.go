@@ -6,8 +6,10 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -101,11 +103,7 @@ func newChain(t *testing.T, edgeTimeout, gatewayTimeout string, edgeOpt envOptio
 // chain.
 func checkNoDisclosureHead(t *testing.T, r testenv.ProxyRequest, secrets ...string) {
 	t.Helper()
-	disclosure := func(name string) bool {
-		ck := http.CanonicalHeaderKey(strings.ReplaceAll(strings.TrimSpace(name), "_", "-"))
-		_, bad := clientDisclosure[ck]
-		return bad || strings.HasPrefix(ck, "X-Forwarded")
-	}
+	disclosure := isClientDisclosure
 	for _, f := range append(append([]testenv.Field(nil), r.Fields...), r.Trailer...) {
 		if disclosure(f.Name) {
 			t.Errorf("%s %s: disclosure field %s: %q", r.Method, r.Target, f.Name, f.Value)
@@ -298,13 +296,14 @@ action = "upstream:edge"
 	loopMember := `cuttle-edge; error=proxy_loop_detected; details="Via names this instance"`
 
 	// The second round has the client's own Via first, so the instance's
-	// entry is not the first Via line it receives (OI-0006 U-R2).
+	// entry is not the first Via line it receives (TASK-0006 U-R2).
 	for round, clientVia := range []string{"", "Via: 1.1 lab-gw\r\n"} {
 		dials, fwd, decisions, gwDecisions := upstreamDials(), forwarded(), len(edge.logs.decisions()), len(gw.logs.decisions())
 		res, _ := edge.raw("CONNECT loop.cuttle.test:443 HTTP/1.1\r\nHost: loop.cuttle.test:443\r\n" + clientVia + "\r\n")
 		generatedHeaders(t, res, 502, loopMember+`, cuttle-gateway; received-status=502; next-hop="edge", cuttle-edge; received-status=502; next-hop="gateway"`)
 		ed := edge.waitDecisions(decisions + 2)[decisions:]
-		gw.waitDecisions(gwDecisions + 1)
+		checkDecision(t, gw.waitDecisions(gwDecisions + 1)[gwDecisions], map[string]string{"kind": "connect", "source": "remote",
+			"action": "upstream", "upstream": "edge", "outcome": "upstream_status", "status": "502", "upstream_status": "502"})
 		if n := upstreamDials() - dials; n != 2 {
 			t.Errorf("round %d CONNECT: %d upstream dials", round, n)
 		}
@@ -325,7 +324,8 @@ action = "upstream:edge"
 			t.Errorf("round %d plain HTTP: %d %q", round, res.StatusCode, res.Header.Get("Proxy-Status"))
 		}
 		ed = edge.waitDecisions(decisions + 2)[decisions:]
-		gw.waitDecisions(gwDecisions + 1)
+		checkDecision(t, gw.waitDecisions(gwDecisions + 1)[gwDecisions], map[string]string{"kind": "http", "source": "remote",
+			"action": "upstream", "upstream": "edge", "outcome": "ok", "status": "502", "upstream_status": ""})
 		if n := forwarded() - fwd; n != 2 {
 			t.Errorf("round %d plain HTTP: %d upstream requests", round, n)
 		}
@@ -337,8 +337,8 @@ action = "upstream:edge"
 			t.Errorf("round %d plain HTTP: edge outcomes %v", round, outcomes)
 		}
 	}
-	for _, d := range gw.waitDecisions(4) {
-		checkDecision(t, d, map[string]string{"source": "remote", "action": "upstream", "upstream": "edge"})
+	if n := len(gw.logs.decisions()); n != 4 {
+		t.Errorf("gateway decisions %d, want 4", n)
 	}
 }
 
@@ -413,11 +413,14 @@ func TestNoDisclosureChain(t *testing.T) {
 	rec.SetMode("h", testenv.Pass())
 	gw.net.Route("10.20.0.80:8080", rec.Addr)
 
-	common := []testenv.Field{{Name: "Via", Value: "1.1 lab-gw"}, {Name: "X-Real-IP", Value: "198.51.100.7"},
-		// The wider list of the TASK-0006 decision (0003 D5).
-		{Name: "X-Forwarded", Value: "for=198.51.100.7"}, {Name: "Forwarded-For", Value: "198.51.100.7"},
-		{Name: "X-Original-Forwarded-For", Value: "198.51.100.7"}, {Name: "X-Client-IP", Value: "198.51.100.7"},
-		{Name: "X-Cluster-Client-IP", Value: "198.51.100.7"}}
+	// The client sends its own copy of every disclosure field of 0003 D5,
+	// Via: 1.1 lab-gw and X-Real-IP among them, including the names of the
+	// TASK-0006 decisions U-R7 and V-R2 and listed names behind the CGI
+	// prefix.
+	var common []testenv.Field
+	for _, k := range slices.Sorted(maps.Keys(clientDisclosure)) {
+		common = append(common, testenv.Field{Name: k, Value: clientDisclosure[k]})
+	}
 	f := func(fs ...testenv.Field) []testenv.Field {
 		return append(append([]testenv.Field(nil), fs...), common...)
 	}
@@ -436,7 +439,7 @@ func TestNoDisclosureChain(t *testing.T) {
 			fields: f(testenv.Field{Name: "Host", Value: "plain.cuttle.test"}, ua, testenv.Field{Name: "Max-Forwards", Value: "0"})},
 		{method: "TRACE", target: "http://plain.cuttle.test/x",
 			fields: f(testenv.Field{Name: "Host", Value: "plain.cuttle.test"}, ua, testenv.Field{Name: "Max-Forwards", Value: "0"})},
-		// A trailer that carries disclosure fields (OI-0006 U-R6).
+		// A trailer that carries disclosure fields (TASK-0006 U-R6).
 		{method: "POST", target: "http://plain.cuttle.test/trailer",
 			fields: f(testenv.Field{Name: "Host", Value: "plain.cuttle.test"}, ua, testenv.Field{Name: "Transfer-Encoding", Value: "chunked"},
 				testenv.Field{Name: "Trailer", Value: "X-Checksum, X-Forwarded-For, Via, X-Real-IP"}),
@@ -444,7 +447,7 @@ func TestNoDisclosureChain(t *testing.T) {
 			raw:  "6\r\ntraced\r\n0\r\nX-Checksum: abc\r\nX-Forwarded-For: 198.51.100.7\r\nVia: 1.1 lab-gw\r\nX-Real-IP: 198.51.100.7\r\n\r\n",
 			trailer: []testenv.Field{{Name: "X-Checksum", Value: "abc"}, {Name: "X-Forwarded-For", Value: "198.51.100.7"},
 				{Name: "Via", Value: "1.1 lab-gw"}, {Name: "X-Real-IP", Value: "198.51.100.7"}}},
-		// Expect: 100-continue through the chain (OI-0006 U-R5).
+		// Expect: 100-continue through the chain (TASK-0006 U-R5).
 		{method: "POST", target: "http://plain.cuttle.test/expect",
 			fields: f(testenv.Field{Name: "Host", Value: "plain.cuttle.test"}, ua, testenv.Field{Name: "Expect", Value: "100-continue"},
 				testenv.Field{Name: "Content-Length", Value: "5"}),

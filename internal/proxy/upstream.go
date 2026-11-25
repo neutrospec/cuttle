@@ -359,7 +359,6 @@ func (p *Proxy) upstreamStatus(w http.ResponseWriter, ex *exchange, u *upstream,
 	member := chainProxyStatus(res.Header.Values("Proxy-Status"), own)
 	p.writeGenerated(w, status, member, fmt.Sprintf("upstream %s answered %d (%s)", u.cfg.Name, res.StatusCode, ex.target))
 	ex.status, ex.outcome, ex.upstreamStatus = status, OutcomeUpstreamStatus, res.StatusCode
-	ex.detail = fmt.Sprintf("received-status=%d", res.StatusCode)
 	p.finish(ex)
 }
 

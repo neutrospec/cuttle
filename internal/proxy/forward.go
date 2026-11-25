@@ -109,8 +109,7 @@ func (p *Proxy) forwardError(w http.ResponseWriter, r *http.Request, err error) 
 	case errors.Is(err, errProxyAuth):
 		p.writeGenerated(w, http.StatusBadGateway, receivedMember(ex.snap.cfg.Name, http.StatusProxyAuthRequired, nextHop),
 			"next hop answered 407 ("+ex.target+")")
-		ex.status, ex.outcome = http.StatusBadGateway, OutcomeUpstreamStatus
-		ex.detail = "received-status=407"
+		ex.status, ex.outcome, ex.upstreamStatus = http.StatusBadGateway, OutcomeUpstreamStatus, http.StatusProxyAuthRequired
 		p.finish(ex)
 	case upstream && (isDialError(err) || errors.As(err, &held)):
 		p.upstreamDialFailure(w, ex, err)

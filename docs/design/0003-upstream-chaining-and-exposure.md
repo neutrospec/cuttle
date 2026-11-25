@@ -156,23 +156,30 @@ Disclosure fields are `Via`, `Forwarded`, `Forwarded-For`, every field
 whose name starts with `X-Forwarded`, with or without a following dash
 (`X-Forwarded` itself included), `X-Original-Forwarded-For`, `X-Real-IP`,
 `Client-IP`, `True-Client-IP`, `X-Client-IP`, `X-Cluster-Client-IP`,
-`X-Originating-IP`, `CF-Connecting-IP`, `Fastly-Client-IP`, and
-`Proxy-Status`. The user asked in TASK-0006 that client-sent trace fields
-such as `X-Forwarded`, `Forwarded-For`, and `X-Original-Forwarded-For` be
-removed as well. Names match without regard to case and with `_` read as
-`-`, because some servers treat `X_Forwarded_For` as `X-Forwarded-For`. One
-function in `internal/proxy`, the disclosure filter, deletes them all from
-a header set. It is called from one place for each path: the plain-HTTP
-`Rewrite` and the `CONNECT` head writer (D3), on `direct` and
-`disclosure = "none"` routes. It removes the client's own copies as well,
-because any of these fields reaching the egress proxy would disclose an
-intermediary, whoever added it. `Rewrite` also applies it to the request's
-trailer keys: Go's `ReverseProxy` declares a request's trailer keys in
-`Trailer` but sends no trailer values ([0002 D5][d2-5]), and the filter
-keeps disclosure names out of that declaration. On `disclosure = "via"`
-routes the filter does not run: the client's fields pass and cuttle adds
-its own `Via` entry, because the last hop before the egress proxy filters
-them anyway.
+`X-Originating-IP`, `CF-Connecting-IP`, `Fastly-Client-IP`,
+`Proxy-Client-IP`, `WL-Proxy-Client-IP`, `X-ProxyUser-Ip`,
+`X-Remote-Addr`, `X-Remote-IP`, `X-Envoy-External-Address`,
+`X-BlueCoat-Via`, `CDN-Loop`, and `Proxy-Status`. The user asked in
+TASK-0006 that client-sent trace fields beyond the first list, such as
+`X-Forwarded`, `Forwarded-For`, and `CDN-Loop`, be removed as well. Names
+match without regard to case and with `_` read as `-`, because some
+servers treat `X_Forwarded_For` as `X-Forwarded-For`. A listed name or
+prefix also matches behind an `http-` prefix after that normalization, as
+CGI-style servers spell `HTTP_X_FORWARDED_FOR` and `HTTP_CLIENT_IP`. No
+list of trace fields is complete: the non-disclosure guarantee covers the
+names and prefixes listed here, and a client field under any other name
+passes like other client fields. One function in `internal/proxy`, the
+disclosure filter, deletes them all from a header set. It is called from
+one place for each path: the plain-HTTP `Rewrite` and the `CONNECT` head
+writer (D3), on `direct` and `disclosure = "none"` routes. It removes the
+client's own copies as well, because any of these fields reaching the
+egress proxy would disclose an intermediary, whoever added it. `Rewrite`
+also applies it to the request's trailer keys: Go's `ReverseProxy`
+declares a request's trailer keys in `Trailer` but sends no trailer values
+([0002 D5][d2-5]), and the filter keeps disclosure names out of that
+declaration. On `disclosure = "via"` routes the filter does not run: the
+client's fields pass and cuttle adds its own `Via` entry, because the last
+hop before the egress proxy filters them anyway.
 
 The list above is the minimum. Each other way a proxy can disclose itself
 is decided:
@@ -249,6 +256,11 @@ Limits:
   This is one field line on the wire, sent toward the client. In the
   research chain tests, the first hop relayed `502` with `received-status`
   in the same way ([research 0002 §1][r2-1]).
+- Known limit: cuttle copies an upstream's members whole and does not
+  parse them. It drops a member that ends inside an unterminated quoted
+  string, so that it cannot swallow cuttle's own member, but copies any
+  other invalid structured-field syntax verbatim. A strict RFC 8941 parser
+  may then reject the whole `Proxy-Status` field (TASK-0006 V-R6).
 
 ### D7. Timeouts
 
@@ -663,7 +675,7 @@ unless marked T0.
 | U9 | An upstream equal to a listener address fails validation (T0). In-process tests pass their own listeners, and an upstream name that the test network resolves to the listener's address fails at dial time with `502 proxy_loop_detected`; validation cannot see that case. | `TestConfigSelfUpstream`, `TestUpstreamSelfDial` |
 | U10 | With the gateway's `egress` `response_timeout` at 300 ms and the edge's `gateway` `response_timeout` at 2 s, a silent egress mock yields at the original client, for `CONNECT`, `504` with `received-status=504` and the gateway member before the edge member, and for plain HTTP, the gateway's `504` unchanged with the gateway's member only. | `TestChainTimeoutPropagates` |
 | U11 | With an injected clock, `connect_timeout` 300 ms, and `unreachable_hold` 1 s on a blackholed upstream: the first request gets `504 connection_timeout` after one dial; four more within the hold get `503 destination_unavailable` without a dial, and `upstream_state` is `down`; while a probe is in flight after the hold, a concurrent request gets `503` and only one dial is recorded; once the address routes to the recording upstream, the probe succeeds, the state returns to `up`, and one recovery line is logged. A silent upstream and an upstream answering `502` are never held. A plain-HTTP request to a held upstream also gets `503`. With `unreachable_hold = "0s"`, every request dials. | `TestUpstreamUnreachableHold` |
-| U12 | Non-disclosure: an original client with a distinctive source address sends a `CONNECT` and plain-HTTP requests (a `POST` with a chunked body, and `GET` targets `http://h/a{b}|c?x=1;y=2&z=%zz` and `http://h/q?b=2&a=1;c=3`) through edge (`via`) → gateway (`none`) → recording mock. The client also sends `Via: 1.1 lab-gw` and `X-Real-IP`, and one request has no `User-Agent`. The mock receives no field or value that cuttle added: every field it receives, apart from `Content-Length`, `Transfer-Encoding`, and `Trailer`, was sent by the client with the same value; no disclosure field arrives, the client's own included; no value contains `cuttle-edge`, `cuttle-gateway`, or the original client address; and method, target, and body bytes equal the client's. `OPTIONS` and `TRACE` with `Max-Forwards: 0` arrive with the value unchanged and are answered by the mock. | `TestNoDisclosureChain` |
+| U12 | Non-disclosure: an original client with a distinctive source address sends a `CONNECT` and plain-HTTP requests (a `POST` with a chunked body, a chunked `POST` whose trailer carries disclosure fields, a `POST` with `Expect: 100-continue`, and `GET` targets `http://h/a{b}|c?x=1;y=2&z=%zz` and `http://h/q?b=2&a=1;c=3`) through edge (`via`) → gateway (`none`) → recording mock. The client also sends its own disclosure fields from the whole D5 list, among them `Via: 1.1 lab-gw`, `X-Real-IP`, `X-Forwarded`, `CDN-Loop`, and `HTTP_X_FORWARDED_FOR`, and one request has no `User-Agent`. The mock receives no field or value that cuttle added: every field it receives, apart from `Content-Length`, `Transfer-Encoding`, and `Trailer`, was sent by the client with the same value; no disclosure field arrives in the head or the trailer, the client's own included, and `Trailer` declares none; no value contains `cuttle-edge`, `cuttle-gateway`, or the original client address; and method, target, and body bytes equal the client's. `OPTIONS` and `TRACE` with `Max-Forwards: 0` arrive with the value unchanged and are answered by the mock. | `TestNoDisclosureChain` |
 | N1 | Validation rejects a wildcard or host-name listener, a non-loopback listener without `proxy.remote.sources`, `proxy.remote.default = "direct"` without `allow_direct`, and an upstream without `disclosure`; `cuttle check` warns about `0.0.0.0/0` or `::/0` in `sources`. | T0 `TestConfigExposure` |
 | N2 | A connection from a source outside the allowlist is closed with no byte read or written, increments `connections_rejected_total{reason="source"}`, logs the source address, and produces no decision. | `TestRemoteSourceRejected` |
 | N3 | A remote client gets a `block` rule's `403` with that rule's name, `403` with rule `remote-default` for unmatched names, `403` with rule `remote-direct` for a `direct` rule, and `403` with rule `port` for port 22 and for a port outside a configured `proxy.remote.ports`, without a lookup or dial; each decision line has `source=remote`. With `allow_direct`, it reaches a public test address and gets `502 destination_ip_prohibited` for private, loopback, and `self` addresses, by name and as literals, even through rules with `allow_private` or `allow_loopback`, without a dial. A remote client's upstream route is checked from M1.3 by the chain tests (U6, U8, U12), in which the gateway instance serves the edge instance as a remote client. | `TestRemotePolicy` |

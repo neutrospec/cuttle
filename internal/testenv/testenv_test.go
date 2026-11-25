@@ -286,7 +286,7 @@ func TestRecordingUpstream(t *testing.T) {
 		t.Errorf("POST status %d", res.StatusCode)
 	}
 	// Informational responses are relayed before the final one: 100
-	// Continue for Expect, and 103 Early Hints (OI-0006 U-R5).
+	// Continue for Expect, and 103 Early Hints (TASK-0006 U-R5).
 	c4, br4 := dial()
 	if res := exchange(c4, br4, "POST http://a.cuttle.test/expect HTTP/1.1\r\nHost: a.cuttle.test\r\nExpect: 100-continue\r\n"+
 		"Content-Length: 5\r\n\r\nhello"); res.StatusCode != 100 {

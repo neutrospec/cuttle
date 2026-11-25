@@ -61,8 +61,10 @@ type exchange struct {
 
 	outcome string
 	status  int
-	// upstreamStatus is the status an upstream answered a CONNECT with,
-	// when cuttle's status was mapped from it (design 0002 D8).
+	// upstreamStatus is the status the next hop answered with, when
+	// cuttle's own status was mapped from it: a non-2xx CONNECT answer, or
+	// a plain-HTTP 407 from an upstream or an origin (design 0002 D8).
+	// Every decision with outcome upstream_status carries it.
 	upstreamStatus int
 	errType        string
 	detail         string
