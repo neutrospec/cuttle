@@ -88,26 +88,6 @@ Decisions for TASK-0010 (2026-11-25):
   `scripts/gate` and 0007 D7).
 - Review follows the risk-based policy in AGENTS.md.
 
-### TASK-0011 — M2.2 admin access
-
-- Milestone: M2.2
-- Status: review
-- Iteration: 1/3
-- Workers: implementer done on branch `t3/admin-access-auth`; fresh
-  reviewer pending
-- Base: `f94f8e7`
-- Candidate: `fe704d9` (tree `dc68654`)
-- Evidence: implementer ran `scripts/gate t0` and `t1` on `dc68654`, both
-  pass; 34 mutations on the security behavior each fail their test
-- Findings: none yet
-- Next action: reviewer — risk-based review of `f94f8e7..fe704d9`
-
-Decisions for TASK-0011 (2026-11-25):
-
-- Runs in parallel with TASK-0010; the second to land merges the first.
-- Review follows the risk-based policy in AGENTS.md; mutation proofs apply
-  to authentication, sessions, CSRF, Host checks, and backoff.
-
 ## Closed
 
 The history was rewritten on 2026-11-25 (TASK-0003) to remove local
@@ -116,6 +96,9 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0011 — M2.2 admin access — landed `d5f3603`, gates: T0 T1 @ `21c216f`;
+  reviewed tree `dc68654` plus the P-R1 test fix (tree `04d8845`),
+  iteration 1 of 3; follow-ups P-R2–P-R7 in OI-0006
 - TASK-0009 — M1.5 interface selection implementation — landed `3355992`,
   gates: T0 T1 @ `e15583a`; reviewed tree `36a2c83` (iteration 2 of 3);
   follow-ups O-R1 and the cgo gate fix in OI-0006; device check I20 in
