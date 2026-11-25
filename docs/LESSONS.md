@@ -69,3 +69,16 @@ removes entries. Append new entries at the end, oldest first.
 - What to do instead: For scans that must not miss anything, call
   `/usr/bin/grep` or run the script with `sh`, and do not pass `-I` to
   `git grep`. Add a positive control that plants a known hit.
+
+### 2026-11-25 — implementer — strict gate script under `sh`
+
+- Task: TASK-0004, making `scripts/gate` fail when a command inside a check
+  fails.
+- Attempts: 1, recorded because the obvious fix silently does nothing.
+- What failed: Under `sh` with `set -e`, a failing command on the left of
+  `&&`, as in `out=$(false) && test -z "$out"`, does not stop the script,
+  and neither does one inside `test -z "$(cmd)"`.
+- What to do instead: Capture with a plain assignment, `out=$(cmd)`, which
+  takes the command's exit status, then run `test -z "$out"` on its own
+  line. Verify by injecting a failing command and checking that the script
+  exits non-zero.
