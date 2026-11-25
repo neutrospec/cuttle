@@ -75,7 +75,7 @@ chained deployment. Acceptance uses T0, T1, and full T2.
 | --- | --- |
 | M3.1 — Homebrew tap and service | `brew install`, `brew test`, and `brew audit` pass; `brew services` start, stop, and restart behave as designed, including `SIGTERM` handling, relaunch, the `.env` override, and log locations. Criteria: 0006 P8–P12. Depends on [OI-0003][oi-3] and [OI-0004][oi-4]. |
 | M3.2 — Client verification | The [design 0007 D8][d7-8] M3 matrix is recorded in the [compatibility matrix](COMPATIBILITY.md) for Chrome, Safari, and `/usr/bin/curl`, with admin login in Chrome and Safari. Depends on [OI-0002][oi-2] and [OI-0005][oi-5]. |
-| M3.3 — Chained deployment | A deployment guide gives the [design 0003 D13][d3-13] configuration, both private-link cases (routed and NAT), the trust steps and their consequences, the timeout budget, and verification commands. The two-instance chain is verified with `tools/mockenv`. On the example deployment of D13, the user confirms on the real egress proxy that requests through the gateway instance with `disclosure = "none"` work as direct requests from Chrome on the gateway machine do, or defers that with the user's consent. Depends on [OI-0001][oi-1]. |
+| M3.3 — Chained deployment | A deployment guide gives the [design 0003 D13][d3-13] configuration, all three private-link cases (routed, NAT, and a link that ends on the edge machine), the trust steps and their consequences, the timeout budget, and verification commands. The two-instance chain is verified with `tools/mockenv`. On the example deployment of D13, the user confirms on the real egress proxy that requests through the gateway instance with `disclosure = "none"` work as direct requests from Chrome on the gateway machine do, or defers that with the user's consent. Depends on [OI-0001][oi-1]. |
 
 ## Later
 
@@ -109,7 +109,7 @@ chained deployment. Acceptance uses T0, T1, and full T2.
 [d3-5]: design/0003-upstream-chaining-and-exposure.md#d5-non-disclosure-toward-an-egress-proxy
 [d3-13]: design/0003-upstream-chaining-and-exposure.md#d13-edge-gateway-and-egress-deployment
 [d7-8]: design/0007-test-environment-and-gates.md#d8-client-checks
-[oi-1]: OPEN_ISSUES.md#oi-0001--real-egress-proxy-and-private-link-behavior-in-the-maintainers-environment
+[oi-1]: OPEN_ISSUES.md#oi-0001--real-egress-proxy-and-private-link-in-the-example-deployment
 [oi-2]: OPEN_ISSUES.md#oi-0002--safari-and-cfnetwork-behavior-unverified
 [oi-3]: OPEN_ISSUES.md#oi-0003--homebrew-and-launchd-behavior-unverified
 [oi-4]: OPEN_ISSUES.md#oi-0004--tap-hosting-repository-remote-and-licence

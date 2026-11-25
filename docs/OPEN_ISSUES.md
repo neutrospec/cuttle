@@ -7,7 +7,7 @@ Move resolved items to Closed with their resolving commit or evidence.
 
 ## Open
 
-### OI-0001 — Real egress proxy and private link behavior in the maintainer's environment
+### OI-0001 — Real egress proxy and private link in the example deployment
 
 - Origin: TASK-0001 design, [0003 assumptions][d3-a] A1–A4 and the
   [private-link cases of 0003 D13][d3-13]; research 0002
@@ -118,8 +118,9 @@ Move resolved items to Closed with their resolving commit or evidence.
 ### OI-0006 — Design follow-ups from the TASK-0001 final review
 
 - Origin: TASK-0001 iteration 3 review of candidate `3d33f59`, verdict
-  "approve with minor fixes", findings V1–V12. Landed in `ec577ec`.
-- Affected milestones: M1.2, M1.3, and M1 close; V5 also M3.2.
+  "approve with minor fixes", findings V1–V12. Landed in `ec577ec`. P1
+  comes from the TASK-0002 review.
+- Affected milestones: M1.2, M1.3, and M1 close; V5 also M3.2; P1 M3.3.
 - Iterations used: 3 of 3, so the fixes move to the first M1 task instead of
   another design loop.
 - Responsible step: design for wording and criteria, implementer for tests.
@@ -156,12 +157,13 @@ Move resolved items to Closed with their resolving commit or evidence.
   - V7 (implementer): mention Go's 500 header-value cap
     (`DefaultMaxHeaderValueCount`) in 0002 D2 and build the C11 60 KiB head
     from fewer than 500 field lines.
-  - V8 (design, docs): wording fixes in 0002 l.219 (`RequestURI` prefixes
-    `scheme:` for `//` opaque values), 0003 l.153–155 and l.643 (line
-    numbers after TASK-0002), OI-0001 step 2, the 0007 D7
-    `check-disclosure` flags, the 0007 D8 chain evidence, 0005 A10
-    "T2-lite", the COMPATIBILITY curl M3 WebSocket cell, and ragged wraps
-    in 0003.
+  - V8 (design, docs): wording fixes in 0002 D5 (the sentence that
+    `RequestURI()` returns `URL.Opaque` unchanged, although it prefixes
+    `scheme:` for `//` opaque values), 0003 D5 (where the disclosure filter
+    is called), the 0003 alternative "Forwarding request heads byte for
+    byte", OI-0001 step 2, the 0007 D7 `check-disclosure` flags, the 0007
+    D8 chain evidence, 0005 A10 "T2-lite", the COMPATIBILITY curl M3
+    WebSocket cell, and ragged wraps in 0003.
   - V9 (implementer): C4 sends the direct request before the block request,
     because cuttle's own responses close the connection.
   - V10 (implementer): add a `/status?code=` endpoint to the mock origin for
@@ -170,8 +172,15 @@ Move resolved items to Closed with their resolving commit or evidence.
     convention in the design README.
   - V12 (design): note `proxy.remote.ports` in the 0003 D13 deployment notes
     for restricted destinations on ports other than 80 and 443.
-- Next action: orchestrator — include V1–V12 in the first M1 task brief;
-  the producer closes each item with the commit that settles it.
+  - P1 (from the TASK-0002 review; design): a private link can drop a
+    packet whose inner source address it does not expect; WireGuard, for
+    example, drops one that is not in the peer's `AllowedIPs`. In the
+    routed case of 0003 D13 without the edge LAN listed, the request then
+    never reaches the gateway instance, and the D13 observation step shows
+    no rejected-source warning. This is an inference and was not tested.
+    Do not change the design until the inference is confirmed.
+- Next action: orchestrator — include V1–V12 and P1 in the first M1 task
+  brief; the producer closes each item with the commit that settles it.
 
 ## Closed
 

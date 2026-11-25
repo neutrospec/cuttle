@@ -38,7 +38,7 @@ egress proxy ([research 0002 §3][r2-3], open question 6).
 | Mode | Use for | Effect on requests sent to it |
 | --- | --- | --- |
 | `via` | Another cuttle instance | The client's fields pass, and one cuttle `Via` entry is added for loop detection (D2) |
-| `none` | An egress proxy, or any proxy that must not see an intermediary | The disclosure filter removes every disclosure field, the client's own included, and nothing that reveals a hop is added (D5) |
+| `none` | An egress proxy, a strict upstream, or any proxy that must not see an intermediary | The disclosure filter removes every disclosure field, the client's own included, and nothing that reveals a hop is added (D5) |
 
 - `disclosure` has no default because either wrong default fails: `via`
   toward an egress proxy discloses an intermediary, and `none` toward
@@ -142,8 +142,9 @@ only an exact `200`, while curl accepts any 2xx
 ### D5. Non-disclosure toward an egress proxy
 
 Principle: toward a `disclosure = "none"` upstream, a request discloses no
-intermediary. The egress proxy sees what it would see if the client used it
-directly, apart from the limits below. The same rule applies on every
+intermediary, so a strict upstream has nothing to reject. The egress proxy
+sees what it would see if the client used it directly, apart from the
+limits below. The same rule applies on every
 `direct` route toward origins.
 
 Disclosure fields are `Via`, `Forwarded`, every field whose name starts
@@ -529,7 +530,9 @@ listen = ["127.0.0.1:3128", "10.8.0.6:3128"]
 default = "upstream:egress"  # local gateway clients use the egress proxy
 
 [proxy.remote]
-sources = ["192.168.1.20/32"]  # routed case; for NAT, the server, e.g. 10.8.0.1/32
+# Routed case as here; for NAT, the server's link address, e.g. 10.8.0.1/32;
+# for a link that ends on the edge machine, its link address, e.g. 10.8.0.2/32
+sources = ["192.168.1.20/32"]
 default = "block"
 
 [[upstream]]
@@ -591,9 +594,8 @@ The maintainer's own setup is one instance of this deployment:
 
 The configurations above apply with this setup's names and addresses.
 The VPN ends on a home server or router, not on the home Mac, so the
-routed or NAT case applies. Which of the two, and assumptions A1–A4 about
-the corporate proxy and the VPN, are checked on this setup in
-[OI-0001][oi].
+routed or NAT case applies. Which of the two, and assumptions A1–A4, are
+checked on this setup in [OI-0001][oi].
 
 ## Acceptance criteria
 

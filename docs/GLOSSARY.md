@@ -10,13 +10,15 @@ commits and the research notes use older wording; the
 ## Deployment
 
 - **Instance.** One running cuttle process with its own configuration. Its
-  instance name, the top-level `name`, appears in its `Via` entries and
-  logs.
+  instance name, the top-level `name`, appears in the `Via` entries it adds
+  on `via` routes and in its `Proxy-Status` members ([0003 D2][d3-2],
+  [D6][d3-6]).
 - **Edge instance.** The cuttle instance that clients point at.
 - **Gateway instance.** A cuttle instance inside another network. It
   accepts allowlisted remote clients, usually edge instances, and forwards
-  to restricted destinations directly or through that network's egress
-  proxy.
+  to restricted destinations through that network's egress proxy.
+- **Edge machine, gateway machine.** The host that runs the edge or gateway
+  instance.
 - **Restricted destinations.** Destinations reachable only from inside
   another network or through its egress proxy.
 - **Private link.** The network path between instances, such as a VPN,
@@ -109,7 +111,6 @@ notes, which keep their original wording.
 | corporate proxy, `corp` | egress proxy |
 | intercepting proxy, re-signs TLS | TLS-inspecting proxy |
 | corporate root | inspection root CA |
-| picky corporate proxy | strict upstream |
 | home cuttle, `cuttle-home` | edge instance, `cuttle-edge` |
 | office cuttle, `cuttle-office` | gateway instance, `cuttle-gateway` |
 | home Mac, office Mac | edge machine, gateway machine |
@@ -136,6 +137,7 @@ notes, which keep their original wording.
 [d3-1]: design/0003-upstream-chaining-and-exposure.md#d1-upstreams-and-disclosure-modes
 [d3-2]: design/0003-upstream-chaining-and-exposure.md#d2-via-entries-and-loop-detection
 [d3-5]: design/0003-upstream-chaining-and-exposure.md#d5-non-disclosure-toward-an-egress-proxy
+[d3-6]: design/0003-upstream-chaining-and-exposure.md#d6-upstream-failures-and-proxy-status
 [d3-8]: design/0003-upstream-chaining-and-exposure.md#d8-unreachable-upstream-hold
 [d3-10]: design/0003-upstream-chaining-and-exposure.md#d10-source-classes-and-remote-policy
 [d3-11]: design/0003-upstream-chaining-and-exposure.md#d11-destination-address-policy-for-direct-routes
