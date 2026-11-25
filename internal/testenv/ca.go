@@ -27,29 +27,39 @@ type CA struct {
 	Cert *x509.Certificate
 	Key  *ecdsa.PrivateKey
 	PEM  []byte
+	// LeafKey, when set, is the key of every leaf the CA issues, so a
+	// client can pin the leaves' SPKI, as tools/mockenv does for Chrome's
+	// --ignore-certificate-errors-spki-list. Otherwise each leaf gets a
+	// new key.
+	LeafKey *ecdsa.PrivateKey
 }
 
 // LeafValidity is the validity of generated leaves.
 const LeafValidity = 24 * time.Hour
 
-func serial(t testing.TB) *big.Int {
-	n, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 120))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return n
-}
-
 // NewCA generates an ECDSA P-256 root.
 func NewCA(t testing.TB, name string) *CA {
 	t.Helper()
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	ca, err := GenerateCA(name)
 	if err != nil {
 		t.Fatal(err)
 	}
+	return ca
+}
+
+// GenerateCA is NewCA for code outside a test, such as tools/mockenv.
+func GenerateCA(name string) (*CA, error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	sn, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 120))
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now()
 	tmpl := &x509.Certificate{
-		SerialNumber:          serial(t),
+		SerialNumber:          sn,
 		Subject:               pkix.Name{CommonName: name, Organization: []string{"cuttle tests"}},
 		NotBefore:             now.Add(-time.Hour),
 		NotAfter:              now.Add(LeafValidity),
@@ -59,13 +69,13 @@ func NewCA(t testing.TB, name string) *CA {
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 	cert, err := x509.ParseCertificate(der)
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
-	return &CA{Cert: cert, Key: key, PEM: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})}
+	return &CA{Cert: cert, Key: key, PEM: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})}, nil
 }
 
 // Leaf issues a server certificate for names, which may be DNS names or IP
@@ -82,9 +92,12 @@ func (ca *CA) Leaf(t testing.TB, names ...string) tls.Certificate {
 // Issue is Leaf for code that runs outside the test goroutine, such as a
 // mock that signs a leaf per TLS handshake.
 func (ca *CA) Issue(names ...string) (tls.Certificate, error) {
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return tls.Certificate{}, err
+	key := ca.LeafKey
+	if key == nil {
+		var err error
+		if key, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader); err != nil {
+			return tls.Certificate{}, err
+		}
 	}
 	sn, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 120))
 	if err != nil {

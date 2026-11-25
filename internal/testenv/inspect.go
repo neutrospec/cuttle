@@ -28,6 +28,12 @@ type InspectingOptions struct {
 	Net *Net
 	// Refuse lists names whose CONNECT gets 403.
 	Refuse []string
+	// Record and RecordDecrypted, when set, are called with each request
+	// outside TLS and each decrypted request as it is recorded, in
+	// recording order, while the mock holds its lock; they must not call
+	// back into the mock.
+	Record          func(ProxyRequest)
+	RecordDecrypted func(Decrypted)
 }
 
 // Decrypted is one request the mock read inside a tunnel after
@@ -66,9 +72,20 @@ type InspectingProxy struct {
 // test ends.
 func NewInspectingProxy(t testing.TB, opt InspectingOptions) *InspectingProxy {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	p, err := StartInspectingProxy(opt)
 	if err != nil {
 		t.Fatal(err)
+	}
+	t.Cleanup(p.Close)
+	return p
+}
+
+// StartInspectingProxy is NewInspectingProxy for code outside a test, such
+// as tools/mockenv; the caller stops the mock with Close.
+func StartInspectingProxy(opt InspectingOptions) (*InspectingProxy, error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, err
 	}
 	p := &InspectingProxy{
 		Addr:   ln.Addr().(*net.TCPAddr).AddrPort(),
@@ -97,8 +114,7 @@ func NewInspectingProxy(t testing.TB, opt InspectingOptions) *InspectingProxy {
 	}
 	p.wg.Add(1)
 	go p.accept()
-	t.Cleanup(p.close)
-	return p
+	return p, nil
 }
 
 // Requests returns the raw request heads the mock received outside TLS:
@@ -127,7 +143,9 @@ func (p *InspectingProxy) Leaves() map[string]*x509.Certificate {
 	return out
 }
 
-func (p *InspectingProxy) close() {
+// Close stops the mock, closes every connection it holds, and waits for its
+// goroutines.
+func (p *InspectingProxy) Close() {
 	p.ln.Close()
 	p.mu.Lock()
 	for _, c := range p.conns {
@@ -176,6 +194,9 @@ func (p *InspectingProxy) serve(c net.Conn, id int) {
 		req.Conn = id
 		p.mu.Lock()
 		p.reqs = append(p.reqs, req)
+		if p.opt.Record != nil {
+			p.opt.Record(req)
+		}
 		p.mu.Unlock()
 		if req.Method == http.MethodConnect {
 			p.inspect(c, br, req, id)
@@ -246,8 +267,12 @@ func (p *InspectingProxy) inspect(c net.Conn, br *bufio.Reader, req ProxyRequest
 		if err != nil {
 			return
 		}
+		d := Decrypted{Conn: id, Method: r.Method, URI: r.RequestURI, Host: r.Host, Header: r.Header.Clone()}
 		p.mu.Lock()
-		p.dec = append(p.dec, Decrypted{Conn: id, Method: r.Method, URI: r.RequestURI, Host: r.Host, Header: r.Header.Clone()})
+		p.dec = append(p.dec, d)
+		if p.opt.RecordDecrypted != nil {
+			p.opt.RecordDecrypted(d)
+		}
 		p.mu.Unlock()
 		r.URL.Scheme, r.URL.Host, r.RequestURI = "https", authority, ""
 		res, err := p.tr.RoundTrip(r)

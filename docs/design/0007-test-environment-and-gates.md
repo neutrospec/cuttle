@@ -41,9 +41,9 @@ All mocks live in `internal/testenv` and are started by tests on
 | Mock | Behavior | Records |
 | --- | --- | --- |
 | CA set | Per test run: an origin root and an inspection root CA, ECDSA P-256. Leaves have a SAN (names, and `127.0.0.1` where needed), the serverAuth EKU, and 24-hour validity. Kept in memory; written as PEM to `t.TempDir()` only for curl. | — |
-| HTTPS origin | TLS with a leaf for `*.cuttle.test`. `/echo` returns method, path, field lines, and body; `/bytes?n=` sends n bytes; `/sink` counts an upload; `/slow?ms=` delays the response; `/status?code=` answers with that status, and with `407` only in a test that enables it, which `tools/mockenv` never does (D6); `/chunked` answers with a chunked body and a trailer; `/hints` sends a `103 Early Hints` response before its `200`; `/ws` is a WebSocket echo. | Raw request bytes; connections |
+| HTTPS origin | TLS with a leaf for `*.cuttle.test`. `/echo` returns method, path, field lines, and body; `/bytes?n=` sends n bytes; `/sink` counts an upload; `/slow?ms=` delays the response; `/status?code=` answers with that status, and with `407` only in a test that enables it, which `tools/mockenv` never does (D6); `/chunked` answers with a chunked body and a trailer; `/hints` sends a `103 Early Hints` response before its `200`; `/ws` is a WebSocket echo; `/lna.html` is the page of the D8 LNA observation, which fetches each `t` query URL. | Raw request bytes; connections |
 | HTTP origin | The same endpoints over plain HTTP, `/ws` for `ws://`, and `/ws.html`, a page that opens `ws://<host>/ws` and sends one message. | Same |
-| Recording upstream | A raw-socket HTTP proxy. Per target name the test selects `tunnel` (`200`), a status (`201`, `299`, `200` with `Content-Length: 3`, `403`, `407`, `502`, `504`), `buffered` (`200` followed at once by server bytes), `silent` (reads the head, never answers), or `reset`. A name without a chosen mode is tunnelled when it is `cuttle.test` or below it and gets `403` otherwise, as the research recorder did. Absolute-form requests, upgrades included, are forwarded to the origin unchanged, or answered with the chosen status. The origin's informational responses, such as `100 Continue` and `103 Early Hints`, are relayed before its final response. In `tools/mockenv` only, it can also pass an allowlist of public names (default `example.org`) through to the internet for the M3 matrix; tests never enable this. | Every request head and body, byte for byte, per connection and in order |
+| Recording upstream | A raw-socket HTTP proxy. Per target name the test selects `tunnel` (`200`), a status (`201`, `299`, `200` with `Content-Length: 3`, `403`, `407`, `502`, `504`), `buffered` (`200` followed at once by server bytes), `silent` (reads the head, never answers), or `reset`. A name without a chosen mode is tunnelled when it is `cuttle.test` or below it and gets `403` otherwise, as the research recorder did. Absolute-form requests, upgrades included, are forwarded to the origin unchanged, or answered with the chosen status. The origin's informational responses, such as `100 Continue` and `103 Early Hints`, are relayed before its final response. In `tools/mockenv` only, it can also pass an allowlist of public names (default `example.org`) through to the internet for the M3 matrix; tests never enable this, and it is built with the M3 matrix. | Every request head and body, byte for byte, per connection and in order |
 | Inspecting egress mock | Accepts plain-HTTP proxy connections. On `CONNECT` it answers `200`, terminates TLS with a leaf for the SNI name signed by the inspection root CA, and forwards the decrypted HTTP/1.1 requests to the origin, trusting the origin root. Names on its refuse list get `403`. Absolute-form `http://` is proxied normally. | Raw `CONNECT` heads; decrypted request lines and `Host` |
 
 A refused upstream is an address whose port the test bound and closed.
@@ -222,7 +222,7 @@ CUTTLE_REQUIRE_CURL=1 go test -race -count=1 -timeout 10m ./...
   applies to proxy, routing, configuration, upstream, statistics, admin,
   and CLI behavior. Docs-only changes record `gates: none`.
 - T2 at M1 close: the D8 M1 client check with headless Chrome and curl,
-  ending with
+  run with `go run ./tools/mockenv m1-check` and ending with
   `go run ./tools/mockenv check-disclosure -dir <session directory>` for
   each client, and the [0008 device check][d8-dc] on the user's Mac with
   the user's interfaces. This is the milestone acceptance that AGENTS.md
@@ -241,28 +241,81 @@ CUTTLE_REQUIRE_CURL=1 go test -race -count=1 -timeout 10m ./...
 
 ### D8. Client checks
 
-`tools/mockenv` has two subcommands:
+`tools/mockenv` has three subcommands:
 
-- `go run ./tools/mockenv serve` starts the D2 mocks with fresh roots in a
-  new session directory under `$TMPDIR` and prints cuttle configurations
-  for an edge and a gateway instance, the root certificate paths, and the
-  SPKI hashes for Chrome. It runs two identical recording upstreams,
-  `egress-direct` and `egress-chain`; clients use the first directly, and
-  the gateway's `egress` upstream (`disclosure = "none"`) uses the second.
-  Each records every request as one JSON line in `<dir>/<mock>.jsonl`:
-  method, target, header fields with names and values in the received
-  order, and the body.
-- `go run ./tools/mockenv check-disclosure -dir <dir> -names
-  cuttle-edge,cuttle-gateway -client <original client address>` compares
-  the two files. For each target in `egress-chain.jsonl` it prints every
-  disclosure field of [0003 D5][d3-5], every value containing an instance
-  name or the client address, and any difference in method, target, or
-  body from the `egress-direct.jsonl` request with the same target. Other
-  header differences are printed for information. It exits 1 if any check
-  fails.
+- `go run ./tools/mockenv serve [-dir <dir>] [-mode <name>=<mode> ...]`
+  starts the D2 mocks with fresh roots in a new session directory, by
+  default a `mockenv-*` directory under `$TMPDIR`. It writes the root
+  certificates, `session.json`, and three cuttle configurations, and
+  prints them with the SPKI hashes for Chrome and the environment and
+  command for each instance. Every leaf of one root shares one key, so the
+  hashes cover the leaves as well as the roots. It runs three identical
+  recording upstreams: `upstream` for the single instance, and
+  `egress-direct` and `egress-chain`. Clients use `egress-direct`
+  directly, and the gateway's `egress` upstream (`disclosure = "none"`)
+  uses `egress-chain`. The recording upstreams, the inspecting egress
+  mock, and the origins record every request as one JSON line in
+  `<dir>/<mock>.jsonl`. A proxy mock's line holds the method, the target as
+  sent, the header fields with names and values in the received order,
+  and the body. The other files are `inspect.jsonl` and
+  `inspect-decrypted.jsonl` for the inspecting egress mock, and
+  `origin.jsonl` for both origins, with each WebSocket message as method
+  `WS`. `-mode` sets a recording-upstream mode: `tunnel`, `buffered`,
+  `silent`, `reset`, or a status code. Any `407` is refused (D6, E4). The
+  session runs until `SIGINT` or `SIGTERM` and keeps its directory as
+  evidence.
+- `go run ./tools/mockenv check-disclosure -dir <dir> [-names
+  cuttle-edge,cuttle-gateway] [-client 127.0.0.1] [-target <url> ...]`
+  compares `egress-chain.jsonl` with `egress-direct.jsonl`. Every
+  `egress-chain` request must carry no disclosure field of
+  [0003 D5][d3-5] and no field name, value, or target containing an
+  instance name or the original client address. The defaults are the two
+  chain instance names and the loopback address that every mockenv client
+  connects from. Only the case targets are compared with the direct run:
+  by default the four non-disclosure targets below, or the repeated
+  `-target` values. A browser's background requests therefore never
+  spoil the comparison. A case target matches a recorded request as a
+  `CONNECT` to its host and port for `https`, or by its absolute-form
+  target for `http`. Valid percent-escapes are decoded first, so a client
+  that writes `{` as `%7B` still matches. Each `egress-chain` request for a
+  case must then have the method, target, and body bytes of an
+  `egress-direct` request for it. A case target missing from either file,
+  or present only in `egress-chain.jsonl`, fails. Other header
+  differences, such as the client's `Proxy-Connection`, are printed for
+  information. It exits 1 if any check fails, and 2 on a usage error.
+- `go run ./tools/mockenv m1-check [-clients chrome,curl] [-out <dir>]`
+  runs the whole M1 client check below. It builds `./cmd/cuttle` unless
+  `-cuttle` names a binary, and starts one fresh `serve` session per
+  client in the evidence directory. It runs the single, edge, and gateway
+  instances, then every case with that client. It checks the evidence,
+  ends each client with `check-disclosure`, and stops every process it
+  started, confirming with `pgrep`. It prints each case as `PASS`,
+  `FAIL`, `OBSERVED`, or `NOT RUN` with its evidence, writes `report.txt`,
+  appends every client command line to each session's `commands.txt`,
+  and exits 1 if any case fails. `TestM1CheckCurl` runs it with curl in T1,
+  also against a gateway that discloses, which must fail.
 
-Each cuttle binary gets its own `XDG_*` directories and test-chosen ports,
-as in D4. One `serve` session is used per client.
+The three configurations use `default = "block"` and rules only for
+`cuttle.test` and loopback. The recording upstreams answer `403` to every
+name outside `cuttle.test`. A browser's background requests, such as
+Chrome's to Google services, therefore never leave loopback or reach an
+origin. The single instance also routes the two test literals of the LNA
+observation, `203.0.113.10` and `10.20.0.5`, to its recording upstream.
+The session's test network maps the `cuttle.test` names in use to
+`203.0.113.10` and routes that address and `10.20.0.5` to the mock
+origins (OI-0006 V4).
+
+| Instance | Name | Rules, in order | Upstreams |
+| --- | --- | --- | --- |
+| Single | `cuttle-single` | `loopback` (`localhost`, `127.0.0.0/8`, `::1`, `direct` with `allow_loopback`); `blocked` (`blocked.cuttle.test`, `block`); `cuttle-test` (`cuttle.test` and below, `upstream:recording`); `test-literals` (`203.0.113.10/32`, `10.20.0.5/32`, `upstream:recording`) | `recording` → `upstream`, `disclosure = "via"` |
+| Edge | `cuttle-edge` | `cuttle-test` → `upstream:gateway` | `gateway` → the gateway instance, `disclosure = "via"` |
+| Gateway | `cuttle-gateway` | `inspected` (`inspected.cuttle.test`) → `upstream:inspect`; `cuttle-test` → `upstream:egress` | `egress` → `egress-chain` and `inspect` → the inspecting egress mock, both `disclosure = "none"` |
+
+Each cuttle binary gets its own `HOME`, `XDG_*`, and `TMPDIR` directories
+inside the session directory, an `XDG_RUNTIME_DIR` in a new 0700
+`cuttle-*` directory under `/tmp`, an empty `admin.listen`, and a
+test-chosen loopback port, as in D4. `m1-check` refuses to start an
+instance otherwise. One session is used per client.
 
 Headless Chrome runs as
 `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"` with
@@ -271,8 +324,15 @@ directory> --no-first-run --proxy-server=http://127.0.0.1:<port>
 --proxy-bypass-list="<-loopback>"
 --ignore-certificate-errors-spki-list=<hashes> --virtual-time-budget=5000
 --dump-dom <url>`. `<-loopback>` removes Chrome's implicit loopback bypass
-([research 0002 §5][r2-5]). curl uses `--proxy`, `--cacert`, `-w`, and
-`-g`, which keeps `{` and `}` in a URL literal, as in D5.
+([research 0002 §5][r2-5]). `m1-check` gives every Chrome run a new
+profile inside the session directory, so no cache carries over from the
+direct run to the chain run. It sets `HOME` and `TMPDIR` to a directory of
+the session and runs Chrome in its own process group, which it kills
+after the run. It keeps each run's DOM and standard error, and removes the
+profile. curl uses `--proxy`, `--cacert`, `-w`, and `-g`, which keeps `{`
+and `}` in a URL literal, as in D5. The curl-only non-disclosure target
+`http://plain.cuttle.test/post` sends a body, so the body comparison has
+bytes to compare.
 
 M1 client check, against mocks only:
 
@@ -280,11 +340,26 @@ M1 client check, against mocks only:
 | --- | --- | --- | --- |
 | Direct HTTPS | `https://127.0.0.1:<origin port>/echo` | The `loopback` rule | Chrome's DOM and curl show the echo; decision `ok`, action `direct` |
 | Direct HTTP | `http://127.0.0.1:<origin port>/echo` | The `loopback` rule | Chrome's DOM and curl show the echo; plain-HTTP decision `ok`, action `direct` |
-| Block | `https://blocked.cuttle.test/` | `block` rule | Chrome's DOM is empty; curl's `%{http_connect}` is `403`; decision `blocked`; no mock received anything |
+| Block | `https://blocked.cuttle.test/` | `block` rule | Chrome's DOM is empty; curl's `%{http_connect}` is `403`; decision `blocked`; no mock received anything for `blocked.cuttle.test` |
 | Upstream | `https://origin.cuttle.test/echo` | Recording upstream, `disclosure = "via"` | Echo shown; the mock recorded the `CONNECT` with one cuttle `Via` entry |
-| WebSocket | `http://ws.cuttle.test/ws.html` | Recording upstream | Chrome only: the mock recorded `CONNECT ws.cuttle.test:80`, and the origin recorded the page's message |
-| Chain | `https://origin.cuttle.test/chain` | Edge → gateway (`none`) → inspecting egress mock | Echo shown through the inspection root CA; the inspecting egress mock's `CONNECT` head has no `Via` |
-| Non-disclosure | `https://origin.cuttle.test/x`, `http://plain.cuttle.test/x`, `http://plain.cuttle.test/a{b}|c?x=1;y=2&z=%zz`, and `http://plain.cuttle.test/q?b=2&a=1;c=3` | Client → `egress-direct`, then client → edge → gateway (`none`) → `egress-chain` | `check-disclosure` exits 0 for Chrome and for curl: no disclosure field of [0003 D5][d3-5], no value containing either instance name or the original client address, and the same method, target, and body bytes as the direct run |
+| WebSocket | `http://ws.cuttle.test/ws.html` | Recording upstream | Chrome only: the mock recorded `CONNECT ws.cuttle.test:80`, and the origin recorded the page's message; the page's own status line is for information |
+| Chain | `https://inspected.cuttle.test/chain` | Edge → gateway (`none`) → inspecting egress mock | Echo shown; curl trusts only the inspection root; the inspecting egress mock decrypted `/chain` with a leaf signed by the inspection root CA, and its `CONNECT` head has no `Via` or other disclosure field |
+| Non-disclosure | `https://origin.cuttle.test/x`, `http://plain.cuttle.test/x`, `http://plain.cuttle.test/a{b}\|c?x=1;y=2&z=%zz`, and `http://plain.cuttle.test/q?b=2&a=1;c=3`; curl also `http://plain.cuttle.test/post` with a body | Client → `egress-direct`, then client → edge → gateway (`none`) → `egress-chain` | `check-disclosure` exits 0 for Chrome and for curl: no disclosure field of [0003 D5][d3-5], no value containing either instance name or the original client address, and the same method, target, and body bytes as the direct run |
+| LNA observation | `https://lna.cuttle.test/lna.html`, which fetches `https://10.20.0.5/echo`, `http://127.0.0.1:<origin port>/echo`, and `https://203.0.113.10/echo` in `no-cors` mode | Page through `cuttle-test`; the literals through `test-literals` or `loopback` | Chrome only, observed rather than passed: for each fetch, the page's outcome, `response`, `error`, or `pending`, whether cuttle logged a decision for it, and whether the origin received it. The page also shows the state of Chrome's Local Network Access permission names. A decision line with a `response` means Chrome sent the private-literal fetch with no permission request; no decision with `pending` means a permission request that headless Chrome cannot show; no decision with `error` means Chrome blocked it (OI-0006 V6) |
+
+To run the check, from the repository root:
+
+```sh
+go run ./tools/mockenv m1-check
+```
+
+`-clients curl` or `-clients chrome` runs one client, and `-out <dir>`
+keeps the evidence in a chosen directory. The tester records in
+[COMPATIBILITY.md](../COMPATIBILITY.md) the Chrome version, the macOS
+version, `/usr/bin/curl --version`, the tested commit and tree, and each
+case's result. For the LNA observation, the tester records the three
+fetch outcomes, the decision lines, and the permission states as printed.
+The check opens no window and changes no system setting.
 
 M3 matrix, with Chrome, Safari after approval, and `/usr/bin/curl`, and with
 both "Web proxy (HTTP)" and "Secure web proxy (HTTPS)" set to
@@ -297,7 +372,7 @@ both "Web proxy (HTTP)" and "Secure web proxy (HTTPS)" set to
 | Upstream HTTPS | `https://example.org/` | Recording upstream passing allowlisted public names through | Loads with its public certificate; the mock recorded the `CONNECT`; no direct dial |
 | WebSocket | `http://ws.cuttle.test/ws.html` | Recording upstream | The origin recorded the page's message, and the mock recorded the `CONNECT` to port 80 or an absolute-form upgrade, whichever the client sent |
 | Block | `https://example.net/` | `block` | Chrome `ERR_TUNNEL_CONNECTION_FAILED`, Safari generic failure, curl `403`; decision `blocked`; no dial |
-| Chain | `https://origin.cuttle.test/` | Edge → gateway (`none`) → inspecting egress mock | Loads only when the inspection root CA is trusted (Chrome SPKI flag, Safari keychain after approval, curl `--cacert`) |
+| Chain | `https://inspected.cuttle.test/` | Edge → gateway (`none`) → inspecting egress mock | Loads only when the inspection root CA is trusted (Chrome SPKI flag, Safari keychain after approval, curl `--cacert`) |
 | Non-disclosure | As at M1 | As at M1 | The M1 properties, now including Safari |
 | IPv6 literal | `https://[2001:db8::1]/` | Recording upstream, status `403` | The recorded `CONNECT` spelling ([OI-0002][oi]) |
 | Admin UI | `http://127.0.0.1:3129/` | — | Login and dashboard work |
@@ -312,10 +387,10 @@ macOS versions, the tested commit, and evidence links.
 | E1 | Mock self-tests pass: the inspecting egress mock's leaves have a SAN, the serverAuth EKU, and at most 825 days of validity; the recording upstream records requests byte for byte per connection; `testenv.Net` records lookups and dials. | T1 `go test ./internal/testenv/...` |
 | E2 | `cmd/cuttle` links neither `internal/testenv` nor any package of the `golang.org/x/net` module, `x/net/websocket` included, none of the packages it links has cgo files in the default environment, and it builds with `CGO_ENABLED=0`. | T0 commands above |
 | E3 | Git tracks no key or certificate file. | T0 command above |
-| E4 | `tools/mockenv` rejects any `407` mode. | T1 `TestMockenvRefuses407` |
+| E4 | `tools/mockenv` rejects any `407` mode before it starts a session, enables no mock's `407`, and a running session's origins and recording upstreams answer a `407` request with `400`. | T1 `TestMockenvRefuses407` |
 | E5 | The full T1 run completes within its 10-minute timeout. | T1 command above |
 | E6 | The binary-test helper refuses to start cuttle unless `HOME`, every `XDG_*` directory, and `XDG_RUNTIME_DIR` are test-owned temporary directories, and, for `cuttle serve`, the only command that binds, the configuration exists, `proxy.listen` avoids 3128 and 3129, and `admin.listen` is `""` or a port the test chose. Commands that bind nothing may read the unchanged starter file, as K2's `cuttle check` does. | T0 `TestBinaryHelperIsolation` |
-| E7 | `mockenv check-disclosure` reports and fails on a planted disclosure field, a value with an instance name or the client address, a changed target, and a changed body, and passes on identical records. | T1 `TestCheckDisclosure` |
+| E7 | `mockenv check-disclosure` reports and fails on a planted disclosure field in any spelling of [0003 D5][d3-5], also in a trailer or outside the case targets; a field name or value with an instance name or the client address; a changed method, target, or body; and a case target that is unmatched or missing; and passes on identical records, on header differences that reveal nothing, and on requests outside the case targets. | T0 `TestCheckDisclosure` |
 
 ## Alternatives considered
 

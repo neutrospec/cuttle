@@ -147,6 +147,17 @@ mock origins, and a test network instead of DNS
 bind 3128 or 3129 or touch `~/.config/cuttle`. Record the macOS version,
 `go version`, and `/usr/bin/curl --version` with gate evidence.
 
+The M1 client check (T2) runs headless Chrome and `/usr/bin/curl` against
+cuttle binaries and the mocks of `tools/mockenv`, on loopback only, with
+throwaway profiles and no system setting changed
+([design 0007 D8](docs/design/0007-test-environment-and-gates.md#d8-client-checks)):
+
+```sh
+go run ./tools/mockenv m1-check                  # both clients, all cases
+go run ./tools/mockenv m1-check -clients curl    # one client
+go run ./tools/mockenv serve                     # the mocks alone, for manual checks
+```
+
 ## Documentation
 
 - [Roadmap and milestones](docs/ROADMAP.md)

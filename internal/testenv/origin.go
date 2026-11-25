@@ -27,8 +27,12 @@ type OriginOptions struct {
 	Names []string
 	// Allow407 lets /status?code=407 answer 407. Only Go-only and
 	// /usr/bin/curl T1 tests set it (design 0007 D6); without it the origin
-	// refuses that status.
+	// refuses that status. tools/mockenv never sets it.
 	Allow407 bool
+	// Record, when set, is called with each request as it is recorded, in
+	// recording order, while the origin holds its lock; it must not call
+	// back into the origin.
+	Record func(Request)
 }
 
 // Request is one request as the origin received it.
@@ -53,6 +57,8 @@ type Request struct {
 //	/ws.html      a page that opens ws://<host>/ws and sends one message
 //	/status?code= answers with that status; 407 only with Allow407
 //	/hints        a 103 Early Hints response, then 200
+//	/lna.html     a page that fetches each ?t= URL and reports the
+//	              outcomes and Local Network Access permission states
 //	anything else echoes the request as JSON (/echo included)
 //
 // Every request is recorded, and the raw bytes read on each connection are
@@ -76,9 +82,20 @@ type connIDKey struct{}
 // NewOrigin starts an origin on 127.0.0.1:0 and stops it when the test ends.
 func NewOrigin(t testing.TB, opt OriginOptions) *Origin {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	o, err := StartOrigin(opt)
 	if err != nil {
 		t.Fatal(err)
+	}
+	t.Cleanup(o.Close)
+	return o
+}
+
+// StartOrigin is NewOrigin for code outside a test, such as tools/mockenv;
+// the caller stops the origin with Close.
+func StartOrigin(opt OriginOptions) (*Origin, error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, err
 	}
 	o := &Origin{opt: opt, raw: map[int]*bytes.Buffer{}}
 	o.Addr = ln.Addr().(*net.TCPAddr).AddrPort()
@@ -87,7 +104,11 @@ func NewOrigin(t testing.TB, opt OriginOptions) *Origin {
 		if len(names) == 0 {
 			names = []string{"*.cuttle.test", "cuttle.test", "localhost", "127.0.0.1"}
 		}
-		leaf := opt.TLS.Leaf(t, names...)
+		leaf, err := opt.TLS.Issue(names...)
+		if err != nil {
+			ln.Close()
+			return nil, err
+		}
 		ln = tls.NewListener(ln, &tls.Config{Certificates: []tls.Certificate{leaf}, NextProtos: []string{"http/1.1"}})
 	}
 	o.srv = &http.Server{
@@ -109,9 +130,11 @@ func NewOrigin(t testing.TB, opt OriginOptions) *Origin {
 		ErrorLog: newDiscardLogger(),
 	}
 	go o.srv.Serve(&recordingListener{Listener: ln, o: o})
-	t.Cleanup(func() { o.srv.Close() })
-	return o
+	return o, nil
 }
+
+// Close stops the origin and closes its connections.
+func (o *Origin) Close() { o.srv.Close() }
 
 // Requests returns the recorded requests in arrival order.
 func (o *Origin) Requests() []Request {
@@ -157,6 +180,9 @@ func (o *Origin) record(r Request) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.reqs = append(o.reqs, r)
+	if o.opt.Record != nil {
+		o.opt.Record(r)
+	}
 }
 
 func (o *Origin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -212,6 +238,9 @@ func (o *Origin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/ws.html":
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		fmt.Fprint(w, wsPage)
+	case "/lna.html":
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, lnaPage)
 	case "/status":
 		code, err := strconv.Atoi(q.Get("code"))
 		if err != nil || code < 200 || code > 599 {
@@ -242,11 +271,59 @@ func Pattern(n int) []byte {
 	return b
 }
 
+// wsPage and lnaPage keep a /slow fetch pending until their work settles:
+// headless Chrome's --virtual-time-budget pauses while a fetch is pending,
+// but not for WebSocket traffic or permission queries, so without it
+// --dump-dom can end the run before the page's message is sent.
 const wsPage = `<!doctype html><html><body><pre id="out">waiting</pre><script>
+const hold = new AbortController();
+fetch("/slow?ms=3000", {signal: hold.signal, cache: "no-store"}).catch(() => {});
 const ws = new WebSocket("ws://" + location.host + "/ws");
+ws.binaryType = "arraybuffer";
 ws.onopen = () => ws.send("hello from ws.html");
-ws.onmessage = (e) => { document.getElementById("out").textContent = "echo: " + e.data; };
-ws.onerror = () => { document.getElementById("out").textContent = "error"; };
+ws.onmessage = (e) => {
+  const text = typeof e.data === "string" ? e.data : new TextDecoder().decode(e.data);
+  document.getElementById("out").textContent = "echo: " + text;
+  hold.abort();
+};
+ws.onerror = () => { document.getElementById("out").textContent = "error"; hold.abort(); };
+</script></body></html>
+`
+
+// lnaPage fetches each URL given as a t query parameter in no-cors mode and
+// shows, one line each, the outcome of every fetch, "pending" until it
+// settles, and the state of each Local Network Access permission name
+// Chrome has used. Its /slow hold ends when no line is pending, or after
+// 3 s, so a fetch held for a permission prompt still shows "pending". The M1 client check loads it from a public-looking origin
+// through cuttle (OI-0006 V6).
+const lnaPage = `<!doctype html><html><body><pre id="out">running</pre><script>
+const out = document.getElementById("out");
+const lines = new Map();
+const hold = new AbortController();
+fetch("/slow?ms=3000", {signal: hold.signal, cache: "no-store"}).catch(() => {});
+const show = () => {
+  out.textContent = [...lines].map(([k, v]) => k + " => " + v).join("\n");
+  if (![...lines.values()].includes("pending")) hold.abort();
+};
+for (const name of ["local-network-access", "local-network", "loopback-network"]) {
+  const key = "permission " + name;
+  lines.set(key, "pending");
+  try {
+    navigator.permissions.query({name}).then(
+      (s) => { lines.set(key, s.state); show(); },
+      (e) => { lines.set(key, "error " + e.name); show(); });
+  } catch (e) { lines.set(key, "error " + e.name); }
+}
+for (const t of new URLSearchParams(location.search).getAll("t")) {
+  const key = "fetch " + t;
+  lines.set(key, "pending");
+  try {
+    fetch(t, {mode: "no-cors", cache: "no-store"}).then(
+      (r) => { lines.set(key, "response type=" + r.type); show(); },
+      (e) => { lines.set(key, "error " + e.name + ": " + e.message); show(); });
+  } catch (e) { lines.set(key, "error " + e.name + ": " + e.message); }
+}
+show();
 </script></body></html>
 `
 
