@@ -41,6 +41,26 @@ A closed task becomes one line under Closed:
 
 ## Active
 
+### TASK-0005 — M1.2 exposure controls
+
+- Milestone: M1.2
+- Status: implement
+- Iteration: 1/3
+- Workers: implementer on a T3 worktree branch
+- Base: `1573528` plus this board update
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: implementer — build M1.2 with the T0 and T1 gates and return
+  the candidate commit
+
+Decisions for TASK-0005 (2026-11-25):
+
+- OI-0006 items settled in this task: V1 (N3 limited to what M1.2 can
+  show; the bind-retry sentence moves to M1.4) and Z1 (validator positions).
+- Ignore the `cuttle` binary that the README quick start builds in the
+  repository root.
+
 ## Closed
 
 The history was rewritten on 2026-11-25 (TASK-0003) to remove local
