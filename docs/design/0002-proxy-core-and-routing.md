@@ -1,6 +1,7 @@
 # 0002 — Proxy core and routing
 
-**Status** — Proposed (TASK-0001, 2026-11-25; revised in iteration 2).
+**Status** — Proposed (TASK-0001, 2026-11-25; revised in iterations 2
+and 3).
 Together with [0003](0003-upstream-chaining-and-exposure.md) it supersedes
 [0001](0001-https-connect-proxy.md).
 
@@ -14,8 +15,9 @@ or `block`, and the traffic is counted.
 
 The corporate proxy at the end of the home → office chain must not see any
 trace of having been reached through a proxy. A request toward it carries no
-trace of the cuttle hops ([0003 D5][d3-5]). Beyond that, cuttle follows
-standard `net/http` handling.
+trace of proxying, not even trace fields the client sent itself
+([0003 D5][d3-5]). Beyond that, cuttle follows standard `net/http`
+handling.
 
 This record defines the proxy listener, authority normalization, rule
 semantics, forwarding, the responses cuttle generates, byte accounting, live
@@ -86,7 +88,7 @@ Server settings:
 | --- | --- | --- |
 | `ReadHeaderTimeout` | 30 s | Head timeout |
 | `IdleTimeout` | 120 s | Keep-alive idle timeout |
-| `MaxHeaderBytes` | 64 KiB | Bounds a head; Go answers `431` above it |
+| `MaxHeaderBytes` | 64 KiB | Bounds a head. Go reads up to `MaxHeaderBytes` + 4096 bytes before it answers `431` (`server.go` l.956–957 in Go 1.27.4), so the effective limit is 69,632 bytes |
 | `ReadTimeout`, `WriteTimeout` | 0 | Tunnels and long bodies; idle limits apply instead |
 | `DisableGeneralOptionsHandler` | `true` | Go would otherwise answer `OPTIONS *` itself; the handler answers `400` |
 | `ErrorLog` | Adapter to the cuttle log at `warn` | Server-level errors are logged |
@@ -109,7 +111,8 @@ The admin UI and the control socket also use `net/http`.
 The normalized authority is used for matching, for the direct dial, and in
 cuttle's own messages. It is a lowercase ASCII name without a trailing dot,
 or a canonical IP address from `net/netip`, plus a port. Forwarded requests
-keep the target the client sent (D5).
+keep the client's raw target: the `CONNECT` target as sent, and the raw path
+and query of a plain-HTTP request (D5).
 
 | Request target | Normalized | Note |
 | --- | --- | --- |
@@ -125,6 +128,7 @@ keep the target the client sent (D5).
 | `CONNECT example.com:0443` | `400` | Port is 1–65535 without leading zeros |
 | `GET https://example.com/`, `GET /`, `OPTIONS *`, userinfo | `400` | Only absolute-form `http://` and `CONNECT` |
 | `CONNECT 2001:db8::1:443` | Go's `400` | Known limitation (D2) |
+| `GET http://h/a%zz` | Go's `400` | Go's URL parser rejects an invalid escape in the path before the handler; in the query it is kept |
 
 - A name has 1–253 bytes in labels of 1–63 bytes from `[a-z0-9_-]` after
   lowercasing. A name whose last label is all digits or starts with `0x` is
@@ -190,10 +194,12 @@ order an operator reads is the order cuttle applies. `cuttle explain`
   itself ([0003 D3][d3-3]).
 - **Plain HTTP, any route** — `httputil.ReverseProxy` with a `Rewrite`
   function and the route's `http.Transport`. `Rewrite` keeps the client's
-  absolute URL and `Host` and applies only the `Via` edit of
-  [0003 D2][d3-2]. The direct transport writes origin-form; an upstream
-  transport, whose `Proxy` is fixed to that upstream, writes absolute-form
-  ([research 0002 §2][r2-2]).
+  `Host`, restores the client's raw target (below), and applies the trace
+  rule of [0003 D5][d3-5]: on `direct` and `trace = "none"` routes it
+  removes the trace fields, and on `trace = "via"` routes it adds cuttle's
+  `Via` entry ([0003 D2][d3-2]). The direct transport writes origin-form;
+  an upstream transport, whose `Proxy` is fixed to that upstream, writes
+  absolute-form ([research 0002 §2][r2-2]).
 - **Responses** pass through `ReverseProxy`'s standard handling. A `407`
   becomes cuttle's own `502` in `ModifyResponse`
   ([0003 D6][d3-6]), because a `407` must never reach a client
@@ -201,6 +207,30 @@ order an operator reads is the order cuttle applies. `cuttle explain`
 - **Upgrades.** `ReverseProxy` splices the connections after a `101`, so
   absolute-form WebSocket works on every route. Chrome tunnels `ws://`
   with `CONNECT` to port 80 instead ([research 0002 §2][r2-2]).
+
+Request target. Left alone, Go would change it: `ReverseProxy` re-encodes
+a query that contains `;` or an invalid `%` escape before calling `Rewrite`
+(`cleanQueryParams`, `reverseproxy.go` l.497 and l.933–958), and the
+transport writes `URL.RequestURI()`, which re-escapes the path (`url.go`
+l.1171–1186, `request.go` l.656–658, Go 1.27.4). For example,
+`GET http://h/a{b}|c?x=1;y=2&z=%zz` would reach the origin as
+`GET /a%7Bb%7D%7Cc` without its query. `RequestURI()` returns `URL.Opaque`
+unchanged when it is set, and the transport then writes it as the target.
+So `Rewrite` splits the client's raw target, `r.RequestURI`, into authority,
+path, and query, and sets:
+
+| Route | `Out.URL.Opaque` | Target written |
+| --- | --- | --- |
+| `direct` | The raw path; empty when the path is empty | `<raw path>?<raw query>` in origin-form, or `/` for an empty path |
+| `direct`, raw path starting with `//` | `//<raw authority><raw path>` | Absolute-form, which origins must accept (RFC 9112 §3.2.2); `RequestURI()` would otherwise read `//x` as an authority |
+| `upstream:<name>` | `//<raw authority><raw path>` | `http://<raw authority><raw path>?<raw query>`, the client's absolute-form |
+
+`Out.URL.RawQuery` gets the raw query, and `Out.URL.ForceQuery` is set when
+the client sent `?` with an empty query. `Out.URL.Host` stays set for
+dialing. A scratch check against Go 1.27.4 wrote
+`GET /a{b}|c?x=1;y=2&z=%zz HTTP/1.1` direct and
+`GET http://h/a{b}|c?x=1;y=2&z=%zz HTTP/1.1` through a proxy with these
+settings.
 
 Standard `net/http` handling applies to everything else: header-name
 canonicalization and order, removal of hop-by-hop fields including
@@ -214,11 +244,13 @@ add a trace or change the client's content are switched off:
 | `http.Transport` adds `Accept-Encoding: gzip` and decodes the body | Changes the request and the body | `DisableCompression: true` ([research 0002 §2][r2-2]) |
 | `http.Transport` sends `Proxy-Authorization` from proxy URL userinfo | Credentials | Upstream URLs never carry userinfo |
 | `http.ProxyFromEnvironment` | Environment proxies | The direct transport has `Proxy: nil`; an upstream transport has a fixed URL |
-| `ReverseProxy` `Director`, or `SetXForwarded` in `Rewrite` | Adds `X-Forwarded-For` with the client's address | Only `Rewrite`; `SetXForwarded` is never called. `Rewrite` also drops the client's own `Forwarded` and `X-Forwarded-*` fields. |
+| `ReverseProxy` `Director`, or `SetXForwarded` in `Rewrite` | Adds `X-Forwarded-For` with the client's address | Only `Rewrite`; `SetXForwarded` is never called |
+| `ReverseProxy` with `Rewrite` drops the client's `Forwarded`, `X-Forwarded-For`, `X-Forwarded-Host`, and `X-Forwarded-Proto` (`reverseproxy.go` l.491–494) | Differs between plain HTTP and `CONNECT` | On `direct` and `trace = "none"` routes the trace filter removes them on both paths anyway. On `trace = "via"` routes `Rewrite` copies the client's own back from `pr.In`, so both paths pass client fields alike ([0003 D5][d3-5]). |
+| `cleanQueryParams` and `URL.RequestURI()` | Change the target | `Rewrite` restores the raw target (above) |
 | `http.Transport` HTTP/2 | Different protocol on the wire | `ForceAttemptHTTP2: false`; plain HTTP only |
 | `Max-Forwards` processing on `TRACE` and `OPTIONS` (RFC 9110 §7.6.2) | Decrementing or answering reveals a hop | Not implemented: forwarded unchanged ([0003 D5][d3-5]) |
 
-Every row has a check in [0003 U12][d3-ac] or C3.
+Every row has a check in C3, C9, or [0003 U5 and U12][d3-ac].
 
 Outbound connection pools:
 
@@ -265,8 +297,9 @@ it.
 | Internal error | 500 | `proxy_internal_error` | `internal` |
 
 - Requests that Go's server rejects before the handler, such as an
-  oversized head (`431`) or a malformed request line (`400`), get Go's own
-  response without `Proxy-Status` and no decision line.
+  oversized head (`431`), a malformed request line, or an invalid escape in
+  the path (`400`), get Go's own response without `Proxy-Status` and no
+  decision line.
 - `403` always means cuttle's own policy. A refusal by a later hop arrives
   as `502` with `received-status`, so a curl user can tell the two apart
   ([0003 D6][d3-6]).
@@ -389,25 +422,27 @@ All checks are T1 tests run with the mocks in
 | --- | --- | --- |
 | C1 | `CONNECT` with a `direct` rule reaches the HTTPS origin; Go and curl verify the test-CA certificate; a raw client receives exactly `HTTP/1.1 200 Connection established\r\n\r\n` and nothing else before origin bytes. | `TestConnectDirect`, `TestConnectExact200` |
 | C2 | Bytes pipelined after the `CONNECT` head reach the origin. | `TestConnectPipelinedBytes` |
-| C3 | Plain-HTTP `GET`, and `POST` with a `Content-Length` body and with a chunked body, arrive at the origin in origin-form with the client's `Host`, the client's end-to-end fields and values, the same body bytes, and none of: `Via`, `Forwarded`, `X-Forwarded-*`, an added `Accept-Encoding`, or a `User-Agent` the client did not send. The response reaches the client with its status and body. | `TestHTTPDirect` |
-| C4 | Two plain-HTTP requests on one client connection to hosts with different rules take different routes and produce two decision lines. A direct connection pooled for a local client is not reused for a remote client's request to the same host. | `TestHTTPReusedConnRoutesPerRequest` (Go and curl), `TestDirectPoolSeparation` |
+| C3 | Plain-HTTP `GET` requests for `http://h/a{b}|c?x=1;y=2&z=%zz`, `http://h/q?b=2&a=1;c=3`, `http://h/p?`, and `http://h//x`, and `POST` requests with a `Content-Length` body and with a chunked body, reach the origin with the client's raw path and query (origin-form, and absolute-form for `//x`), the client's `Host`, the client's other end-to-end fields and values, and the same body bytes. The origin receives no trace field of [0003 D5][d3-5], even when the client sent one, and no `Accept-Encoding` or `User-Agent` the client did not send. The response reaches the client with its status and body. `GET http://h/a%zz` gets Go's `400`. | `TestHTTPDirect`, `TestHTTPRawTarget` |
+| C4 | Two plain-HTTP requests on one client connection, to hosts with a `direct` and a `block` rule, take those routes and produce two decision lines. | `TestHTTPReusedConnRoutesPerRequest` (Go and curl) |
 | C5 | A `block` rule and a `block` default answer `403` with `Proxy-Status: <name>; error=http_request_denied`, zero lookups and dials in the test network, and zero counted bytes. | `TestBlockRule`, `TestBlockDefault` |
 | C6 | A local client reaches `localhost:3000`, `127.0.0.1:8443`, and a public test address on port 8443 through `direct`; no port policy applies to local clients. | `TestLocalAnyPort` |
 | C7 | Every row of the D3 table normalizes or fails as listed, including Go's own `400` for the bracketless IPv6 form. | T0 `TestAuthorityTable`; T1 `TestConnectBracketlessIPv6Rejected` |
 | C8 | Rule order, `hosts`, `domains` label boundaries, `cidrs`, `ports`, and both defaults decide as specified. | T0 `TestPolicyTable` |
 | C9 | A WebSocket echo round trip succeeds over `CONNECT` to port 80 and to port 443 (`wss`), and over an absolute-form `GET` with `Upgrade: websocket` on a `direct` route. | `TestWebSocket` |
 | C10 | With `Expect: 100-continue`, the request body reaches the origin. An origin's `407` reaches the client as `502` with `received-status=407`. | `TestHTTPExpectAnd407` |
-| C11 | Origin-form, asterisk-form (`OPTIONS *`), absolute-form `https://`, userinfo, and a 65 KiB head get the D6 responses, and a decision line or counter where D6 says so. | `TestFrontEndRejects` |
+| C11 | Origin-form, asterisk-form (`OPTIONS *`), absolute-form `https://`, and userinfo get cuttle's `400` with a decision line. A head of about 72 KiB gets Go's `431`, and a head of about 60 KiB is served. | `TestFrontEndRejects`, `TestHeadSizeLimit` |
 | C12 | A controlled transfer of 1,048,576 bytes down and 65,536 bytes up through a tunnel shows partial `bytes_total` progress while open and exact totals after close; `tunnels_active` returns to 0. | `TestTunnelByteCounters` |
-| C13 | Plain-HTTP `up` and `down` equal the request and response body sizes, for `Content-Length` and chunked bodies. | `TestHTTPByteCounters` |
+| C13 | Plain-HTTP `up` and `down` equal the request and response body sizes, for `Content-Length` and chunked bodies. After a `101`, the bytes of an absolute-form WebSocket exchange of known size are added to the exchange's counts. A blocked request adds zero bytes. | `TestHTTPByteCounters` |
 | C14 | A decision line has the D8 fields and contains no path or query from the request. | `TestDecisionLogFields` |
+| C15 | A direct connection pooled for a local client is not reused for a remote client's request to the same host and port (remote client with `allow_direct`). | `TestDirectPoolSeparation` |
 
 ## Consequences
 
 - One `CONNECT` tunnel can carry many HTTPS requests; cuttle sees only the
   authority and the stream sizes.
 - Request parsing and framing are Go's well-tested code. cuttle's own
-  parsing is limited to the `CONNECT` target and the `Via` edit.
+  parsing is limited to the `CONNECT` target, the split of the raw
+  plain-HTTP target, and the trace fields.
 - CFNetwork clients that use IPv6 literals fail until OI-0002 shows whether
   Safari needs that form.
 - Operators write rules by name. A rule never matches a site reached by IP

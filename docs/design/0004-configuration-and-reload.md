@@ -1,6 +1,7 @@
 # 0004 — Configuration and reload
 
-**Status** — Proposed (TASK-0001, 2026-11-25; revised in iteration 2).
+**Status** — Proposed (TASK-0001, 2026-11-25; revised in iterations 2
+and 3).
 
 ## Context
 
@@ -92,7 +93,7 @@ Local clients have no port policy.
 | --- | --- | --- | --- | --- |
 | `name` | string | required | reload | `^[a-z][a-z0-9-]{0,31}$`, unique |
 | `address` | `host:port` | required | reload | Plain-HTTP proxy address |
-| `trace` | string | required | reload | `via` for another cuttle instance; `none` for the corporate proxy or any proxy that must see no trace of the cuttle hops ([0003 D1][d3-1]) |
+| `trace` | string | required | reload | `via` for another cuttle instance; `none` for the corporate proxy or any proxy that must see no trace of proxying ([0003 D1][d3-1]) |
 | `connect_timeout` | duration | `"10s"` | reload | 100 ms–10 min |
 | `response_timeout` | duration | `"60s"` | reload | Response head for `CONNECT` and plain HTTP, 100 ms–10 min |
 | `unreachable_hold` | duration | `"5s"` | reload | Fail fast after a connect failure, 100 ms–5 min; `"0s"` disables ([0003 D8][d3-8]) |
@@ -107,7 +108,7 @@ Local clients have no port policy.
 | `cidrs` | array of CIDR | `[]` | IP-literal targets |
 | `ports` | array of integers | `[]` | Port condition; empty means any port |
 | `action` | action | required | `direct`, `block`, or `upstream:<name>` |
-| `allow_loopback` | boolean | `false` | `direct` only: local clients may reach loopback and own addresses ([0003 D11][d3-11]) |
+| `allow_loopback` | boolean | `false` | `direct` only: local clients may reach loopback addresses, and names that resolve to this Mac's own addresses ([0003 D11][d3-11]) |
 | `allow_private` | boolean | `false` | `direct` only: local clients may reach private addresses that a name resolves to ([0003 D11][d3-11]) |
 
 All rule keys apply on reload.
@@ -187,8 +188,8 @@ default = "direct"  # direct, block, or upstream:<name>
 [admin]
 listen = "127.0.0.1:3129"  # set a password with `cuttle admin passwd`
 
-# Local services named explicitly, on any port. Other names that resolve
-# to loopback stay refused.
+# localhost and loopback addresses, on any port. Other names that resolve
+# to loopback or to this Mac's own addresses stay refused.
 [[rule]]
 name = "loopback"
 hosts = ["localhost"]
@@ -197,10 +198,11 @@ action = "direct"
 allow_loopback = true
 
 # Devices on the home network by name, such as a NAS. Private IP literals
-# work without a rule; names that resolve to private addresses need one.
+# and this Mac's own address work without a rule; names that resolve to
+# private addresses need one.
 # [[rule]]
 # name = "home-lan"
-# domains = ["lan", "home.arpa"]
+# domains = ["lan", "local", "home.arpa"]
 # action = "direct"
 # allow_private = true
 
@@ -217,10 +219,19 @@ allow_loopback = true
 ```
 
 With the starter default `direct` on a loopback listener, a local client
-has the reach it has without a proxy, on any port, with two exceptions:
-names that resolve to loopback, own, or private addresses need a rule with
-`allow_loopback` or `allow_private`, and link-local, multicast, and
-unspecified addresses are always refused ([0003 D11][d3-11]).
+has the reach it has without a proxy, on any port, with three exceptions
+([0003 D11][d3-11]):
+
+- Loopback literals need a rule with `allow_loopback`; the starter
+  `loopback` rule provides it.
+- Names that resolve to loopback, to this Mac's own addresses, or to
+  private addresses need a rule with `allow_loopback` or `allow_private`.
+- Unspecified, link-local, multicast, and reserved addresses are always
+  refused.
+
+Tests never serve this file unchanged: they replace `proxy.listen` with a
+port they chose and set `admin.listen` to `""` or another port they chose
+([0007 D4][d7-4]).
 
 ### D6. Reload
 
@@ -279,7 +290,7 @@ The target always exists, holding the old or the new content.
 | ID | Criterion | Check |
 | --- | --- | --- |
 | K1 | Each D4 error has a sample file that fails with the documented key path and line, and each warning appears in `cuttle check` output with exit status 0. | T0 `TestConfigValidation`, `TestCheckCommand` |
-| K2 | With `HOME` and the `XDG_*` variables set to temporary directories, `cuttle init` creates `~/.config/cuttle` (0700) and the D5 file (0600), which passes `cuttle check` and has a `cuttle-<hex>` name. `cuttle serve` given that file with `proxy.listen` changed to a port the test chose serves on that port. A unit test shows that `serve` writes the same starter file when none exists. No test binds port 3128. | T1 `TestFirstRun`; T0 `TestServeWritesStarter` |
+| K2 | With `HOME` and the `XDG_*` variables set to temporary directories, `cuttle init` creates `~/.config/cuttle` (0700) and the D5 file (0600), which passes `cuttle check` and has a `cuttle-<hex>` name. `cuttle serve`, given that file with `proxy.listen` changed to a port the test chose and `admin.listen` set to `""`, serves on that port. A unit test shows that `serve` writes the same starter file when none exists. No test binds 3128 or 3129. | T1 `TestFirstRun`; T0 `TestServeWritesStarter` |
 | K3 | A tunnel opened before a reload keeps transferring after it. A request after the reload follows the new rules. | T1 `TestReloadKeepsTunnels` |
 | K4 | Reloading an invalid file keeps the previous policy, logs the errors, and returns them through `cuttle reload` with a non-zero exit status. `SIGHUP` behaves the same apart from the return path. | T1 `TestReloadInvalid`, `TestReloadSIGHUP` |
 | K5 | Changing `proxy.listen` and reloading leaves the listeners unchanged and lists `proxy.listen` under `restart_required`. | T1 `TestReloadRestartRequired` |
@@ -312,3 +323,4 @@ The target always exists, holding the old or the new content.
 [d5-10]: 0005-statistics-and-admin.md#d10-settings
 [d6-1]: 0006-packaging-paths-and-lifecycle.md#d1-paths
 [d6-4]: 0006-packaging-paths-and-lifecycle.md#d4-control-socket
+[d7-4]: 0007-test-environment-and-gates.md#d4-instances-chains-and-loops

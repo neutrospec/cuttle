@@ -10,27 +10,30 @@ and an independent review is complete.
 ## M1 — Routing proxy core with the mock environment
 
 cuttle routes `CONNECT` tunnels and plain `http://` requests to `direct`,
-an upstream proxy, or `block`; reaches the corporate proxy through a
-home → office chain without leaving a trace of the cuttle hops; protects a
-remote listener;
-and reports live traffic. Acceptance uses T0 and T1 with Go, raw-socket,
-and curl clients against the mocks, plus the T2 M1 client check with
-headless Chrome and `/usr/bin/curl` against cuttle binaries and the mocks
-([design 0007 D8][d7-8]). No installation, no Safari, no system proxy
+an upstream proxy, or `block`; protects a remote listener; reaches the
+corporate proxy through a home → office chain without leaving a trace of
+proxying; and reports live traffic. Acceptance uses T0 and T1 with Go,
+raw-socket, and curl clients against the mocks, plus the T2 M1 client check
+with headless Chrome and `/usr/bin/curl` against cuttle binaries and the
+mocks ([design 0007 D8][d7-8]). No installation, no Safari, no system proxy
 setting, and no keychain change.
+
+Each stage uses only features of its own or earlier stages. Live counters
+exist in memory from M1.1, and tests read them through the Go API; M1.4
+exposes them through the control socket and proves exact byte accounting.
 
 | Stage | Done when |
 | --- | --- |
-| M1.1 — Direct and block | The starter configuration is created, and `cuttle check`, `explain`, and `paths` work. `CONNECT` and plain HTTP reach controlled origins on `direct` rules with certificates verified, local clients reach any port, and `block` rules and defaults answer `403` without any lookup or dial. `net/http` serves the proxy port; targets are normalized, and CFNetwork's bracketless IPv6 form is a documented limitation. Each request on a reused connection is routed on its own. WebSocket works over `CONNECT` and absolute-form upgrades. Forwarded requests gain no `Via`, `X-Forwarded-*`, `Accept-Encoding`, or default `User-Agent`. Every decision is logged, and the log rotates. Criteria: 0002 C1–C11 and C14; 0004 K1, K2, and K7; 0006 P1, P3, P6, and P7. |
-| M1.2 — Upstreams and chaining | `trace = "via"` upstreams receive one cuttle `Via` entry; `trace = "none"` upstreams receive no trace of the cuttle hops, shown by the no-trace chain test. Any upstream 2xx yields exactly `200`, failures map to `502`, `503`, or `504` with `Proxy-Status` and no direct attempt, and an unreachable upstream is held so later requests fail at once. Home → office → intercepting mock delivers a corporate-root leaf, and a home ↔ office loop stops after two `CONNECT` requests. Criteria: 0003 U1–U12. |
-| M1.3 — Exposure | Listeners accept only explicit addresses; remote sources need the allowlist, get their own ports and default, and cannot go `direct` unless allowed; direct routes refuse loopback, own, and private addresses reached by name unless a rule allows them, and always refuse link-local addresses; connection limits apply. Criteria: 0003 N1–N4 and N6. |
-| M1.4 — Live operation | Live counters show exact byte deltas during and after a controlled transfer. `cuttle status` and `cuttle reload` work over the control socket; a reload keeps established tunnels and drops removed sources; a listener that cannot bind shows as retrying; `SIGTERM` drains and exits within 8 s. Criteria: 0002 C12–C13; 0003 N5 and N7; 0004 K3–K6; 0006 P2, P4, and P5. |
+| M1.1 — Direct and block for local clients | The starter configuration is created, and `cuttle check`, `explain`, and `paths` work. `net/http` serves the proxy port. `CONNECT` and plain HTTP reach controlled origins on `direct` rules with certificates verified and the client's raw target kept, local clients reach any port, and `block` rules and defaults answer `403` without any lookup or dial. Direct routes refuse loopback, own, and private addresses reached by name unless a rule allows them, and always refuse link-local addresses. Targets are normalized, and CFNetwork's bracketless IPv6 form is a documented limitation. Each request on a reused connection is routed on its own. WebSocket works over `CONNECT` and absolute-form upgrades. Forwarded requests carry no trace field and no added `Accept-Encoding` or default `User-Agent`. Every decision is logged, and the log rotates. Criteria: 0002 C1–C11 and C14; 0003 N4; 0004 K1, K2, and K7; 0006 P1, P3, P6, and P7. |
+| M1.2 — Exposure | Listeners accept only explicit addresses, and a non-loopback listener that cannot bind is retried. Sources are classified on accept: remote sources need the allowlist, get their own ports and default, and cannot go `direct` unless allowed. Direct connection pools are kept apart per client class. Connection limits apply. Criteria: 0002 C15; 0003 N1, N2, N3, and N6. |
+| M1.3 — Upstreams and chaining | `trace = "via"` upstreams receive one cuttle `Via` entry; `trace = "none"` upstreams receive no trace of proxying, shown by the no-trace chain test. Any upstream 2xx yields exactly `200`; `CONNECT` failures map to `502`, `503`, or `504` with `Proxy-Status`, plain-HTTP responses pass through, and nothing falls back to `direct`. An unreachable upstream is held so later requests fail at once. Home → office → intercepting mock delivers a corporate-root leaf, and a home ↔ office loop stops after two `CONNECT` requests. Criteria: 0003 U1–U12. |
+| M1.4 — Live operation | Live counters show exact byte deltas during and after a controlled transfer. `cuttle status` and `cuttle reload` work over the control socket. A reload keeps established tunnels; after it removes a source, that source's kept-alive connections close at their next request, while its established tunnels survive until they close or reach the idle timeout. A listener that cannot bind shows as retrying. `SIGTERM` drains and exits within 8 s. Criteria: 0002 C12–C13; 0003 N5 and N7; 0004 K3–K6; 0006 P2, P4, and P5. |
 
-M1 also needs the test environment criteria 0007 E1–E6 and the M1 client
-check: direct, block, upstream, WebSocket over `CONNECT` to port 80, the
-home → office chain, and the no-trace comparison of Chrome and curl
-requests sent directly to a mock and through home → office with
-`trace = "none"`.
+M1 also needs the test environment criteria 0007 E1–E7 and the M1 client
+check: direct HTTPS and HTTP, block, upstream, WebSocket over `CONNECT` to
+port 80, the home → office chain, and `mockenv check-trace` comparing
+Chrome and curl requests sent directly to a mock and through home → office
+with `trace = "none"`.
 
 Changes from the suggested split, with reasons:
 
@@ -44,6 +47,9 @@ Changes from the suggested split, with reasons:
 - The M1 client check moves headless Chrome and curl coverage to M1 close,
   as the user approved, so M1 meets the AGENTS.md T2 trigger for milestone
   acceptance.
+- Exposure comes before upstreams. The chain tests need remote source
+  classes, the allowlist, and the remote default, so the stage that
+  delivers them goes first.
 
 ## M2 — Statistics and admin
 

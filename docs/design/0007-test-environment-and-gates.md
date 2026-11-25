@@ -1,6 +1,7 @@
 # 0007 — Test environment and gates
 
-**Status** — Proposed (TASK-0001, 2026-11-25; revised in iteration 2).
+**Status** — Proposed (TASK-0001, 2026-11-25; revised in iterations 2
+and 3).
 
 ## Context
 
@@ -8,8 +9,8 @@ There is no local test network, corporate proxy, or second site to test
 against. The project must therefore provide controlled origins and
 upstream proxies, including a TLS-intercepting one, and run chained cuttle
 instances against them. A request reaching the corporate hop must carry no
-trace of the cuttle hops ([0003 D5][d3-5]), so the mocks record exactly
-what they receive. Research found two hazards: a mock that answers `407` to an
+trace of proxying ([0003 D5][d3-5]), so the mocks record exactly what they
+receive. Research found two hazards: a mock that answers `407` to an
 Apple-framework client opens a credential dialog on the user's desktop, and
 browser checks can open windows ([LESSONS](../LESSONS.md),
 [research 0002 §6][r2-6]).
@@ -42,7 +43,7 @@ All mocks live in `internal/testenv` and are started by tests on
 | CA set | Per test run: an origin root and a corporate root, ECDSA P-256. Leaves have a SAN (names, and `127.0.0.1` where needed), the serverAuth EKU, and 24-hour validity. Kept in memory; written as PEM to `t.TempDir()` only for curl. | — |
 | HTTPS origin | TLS with a leaf for `*.cuttle.test`. `/echo` returns method, path, field lines, and body; `/bytes?n=` sends n bytes; `/sink` counts an upload; `/slow?ms=` delays the response; `/chunked` answers with a chunked body and a trailer; `/ws` is a WebSocket echo. | Raw request bytes; connections |
 | HTTP origin | The same endpoints over plain HTTP, `/ws` for `ws://`, and `/ws.html`, a page that opens `ws://<host>/ws` and sends one message. | Same |
-| Recording upstream | A raw-socket HTTP proxy. Per target name the test selects `tunnel` (`200`), a status (`201`, `299`, `200` with `Content-Length: 3`, `403`, `407`, `502`, `504`), `buffered` (`200` followed at once by server bytes), `silent` (reads the head, never answers), or `reset`. Absolute-form requests are forwarded to the origin unchanged, or answered with the chosen status. | Every request head and body, byte for byte, per connection and in order |
+| Recording upstream | A raw-socket HTTP proxy. Per target name the test selects `tunnel` (`200`), a status (`201`, `299`, `200` with `Content-Length: 3`, `403`, `407`, `502`, `504`), `buffered` (`200` followed at once by server bytes), `silent` (reads the head, never answers), or `reset`. Absolute-form requests, upgrades included, are forwarded to the origin unchanged, or answered with the chosen status. In `tools/mockenv` only, it can also pass an allowlist of public names (default `example.org`) through to the internet for the M3 matrix; tests never enable this. | Every request head and body, byte for byte, per connection and in order |
 | Intercepting upstream | Accepts plain-HTTP proxy connections. On `CONNECT` it answers `200`, terminates TLS with a leaf for the SNI name signed by the corporate root, and forwards the decrypted HTTP/1.1 requests to the origin, trusting the origin root. Names on its refuse list get `403`. Absolute-form `http://` is proxied normally. | Raw `CONNECT` heads; decrypted request lines and `Host` |
 
 A refused upstream is an address whose port the test bound and closed.
@@ -89,8 +90,9 @@ real DNS by accident. T0 and T1 use no real DNS, internet, or proxy.
 - No-trace chain ([0003 U12][d3-ac]): the home client is a raw-socket
   client behind a `SourceListener` with a distinctive address, so the test
   can search every recorded header value for that address and both
-  instance names, and can send fields that Go's client would not, such as
-  its own `Via` and no `User-Agent`.
+  instance names. It sends fields that Go's client would not, such as its
+  own `Via` and `X-Real-IP`, which must not arrive, and a request without
+  `User-Agent`, and targets that Go would re-escape.
 - Loop: home routes `loop.cuttle.test` to office, and office routes it to
   home, both with `trace = "via"`; home's second listener reports
   office's address. The expected result is `502 proxy_loop_detected` after
@@ -130,9 +132,13 @@ real DNS by accident. T0 and T1 use no real DNS, internet, or proxy.
 
 ### D6. Safety rules
 
-- A mock answers `407` only in T1 tests with Go or curl clients.
-  `tools/mockenv` refuses any `407` mode, so no browser session ever sees a
-  proxy challenge ([LESSONS](../LESSONS.md)).
+- A mock, origin or upstream, answers `407` only in T1 tests whose clients
+  are cuttle, Go, or `/usr/bin/curl`: [0003 U3][d3-ac] and
+  [0002 C10][d2-ac]. No `407` variant is ever enabled in a `tools/mockenv`
+  session, which is what browser and Apple-framework clients use;
+  `tools/mockenv` refuses any such mode (E4), so no browser or
+  Apple-framework session ever sees a proxy challenge
+  ([LESSONS](../LESSONS.md)).
 - T0 and T1 never start a browser or another GUI process.
 - The user approved the M1 client check as specified in D8: headless
   Chrome with `--headless=new`, `--use-mock-keychain`, and a throwaway
@@ -174,8 +180,10 @@ CUTTLE_REQUIRE_CURL=1 go test -race -count=1 -timeout 10m ./...
 - T0 applies to source, dependency, toolchain, and build changes. T1
   applies to proxy, routing, configuration, upstream, statistics, admin,
   and CLI behavior. Docs-only changes record `gates: none`.
-- T2 at M1 close: the D8 M1 client check with headless Chrome and curl.
-  This is the milestone acceptance that AGENTS.md requires.
+- T2 at M1 close: the D8 M1 client check with headless Chrome and curl,
+  ending with `go run ./tools/mockenv check-trace -dir <session directory>`
+  for each client. This is the milestone acceptance that AGENTS.md
+  requires.
 - T2 at M2 close: the headless Chrome admin check
   ([0005](0005-statistics-and-admin.md#acceptance-criteria) A10).
 - T2 at M3 close and every later milestone: the D8 M3 matrix, the Homebrew
@@ -190,11 +198,26 @@ CUTTLE_REQUIRE_CURL=1 go test -race -count=1 -timeout 10m ./...
 
 ### D8. Client checks
 
-`go run ./tools/mockenv` starts the D2 mocks with fresh roots in a new
-directory under `$TMPDIR`, writes every recorded request to files there,
-and prints cuttle configurations for a home and an office instance, the
-root certificate paths, and the SPKI hashes for Chrome. Each cuttle binary
-gets its own `XDG_*` directories and test-chosen ports, as in D4.
+`tools/mockenv` has two subcommands:
+
+- `go run ./tools/mockenv serve` starts the D2 mocks with fresh roots in a
+  new session directory under `$TMPDIR` and prints cuttle configurations
+  for a home and an office instance, the root certificate paths, and the
+  SPKI hashes for Chrome. It runs two identical recording upstreams,
+  `corp-direct` and `corp-chain`; clients use the first directly, and
+  office's `corp` upstream (`trace = "none"`) uses the second. Each records
+  every request as one JSON line in `<dir>/<mock>.jsonl`: method, target,
+  header fields with names and values in the received order, and the body.
+- `go run ./tools/mockenv check-trace -dir <dir> -names
+  cuttle-home,cuttle-office -client <home client address>` compares the two
+  files. For each target in `corp-chain.jsonl` it prints every trace field
+  of [0003 D5][d3-5], every value containing an instance name or the
+  client address, and any difference in method, target, or body from the
+  `corp-direct.jsonl` request with the same target. Other header
+  differences are printed for information. It exits 1 if any check fails.
+
+Each cuttle binary gets its own `XDG_*` directories and test-chosen ports,
+as in D4. One `serve` session is used per client.
 
 Headless Chrome runs as
 `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"` with
@@ -203,19 +226,20 @@ directory> --no-first-run --proxy-server=http://127.0.0.1:<port>
 --proxy-bypass-list="<-loopback>"
 --ignore-certificate-errors-spki-list=<hashes> --virtual-time-budget=5000
 --dump-dom <url>`. `<-loopback>` removes Chrome's implicit loopback bypass
-([research 0002 §5][r2-5]). curl uses `--proxy`, `--cacert`, and `-w` as in
-D5.
+([research 0002 §5][r2-5]). curl uses `--proxy`, `--cacert`, `-w`, and
+`-g`, which keeps `{` and `}` in a URL literal, as in D5.
 
 M1 client check, against mocks only:
 
 | Case | Target | Route | Evidence |
 | --- | --- | --- | --- |
-| Direct | `https://127.0.0.1:<origin port>/echo` | The `loopback` rule | Chrome's DOM and curl show the echo; decision `ok`, action `direct` |
+| Direct HTTPS | `https://127.0.0.1:<origin port>/echo` | The `loopback` rule | Chrome's DOM and curl show the echo; decision `ok`, action `direct` |
+| Direct HTTP | `http://127.0.0.1:<origin port>/echo` | The `loopback` rule | Chrome's DOM and curl show the echo; plain-HTTP decision `ok`, action `direct` |
 | Block | `https://blocked.cuttle.test/` | `block` rule | Chrome's DOM is empty; curl's `%{http_connect}` is `403`; decision `blocked`; no mock received anything |
 | Upstream | `https://origin.cuttle.test/echo` | Recording upstream, `trace = "via"` | Echo shown; the mock recorded the `CONNECT` with one cuttle `Via` entry |
 | WebSocket | `http://ws.cuttle.test/ws.html` | Recording upstream | Chrome only: the mock recorded `CONNECT ws.cuttle.test:80`, and the origin recorded the page's message |
 | Chain | `https://origin.cuttle.test/chain` | Home → office (`none`) → intercepting upstream | Echo shown through the corporate root; the intercepting mock's `CONNECT` head has no `Via` |
-| No trace | `https://origin.cuttle.test/x` and `http://plain.cuttle.test/x` | Client → recording upstream directly, then client → home → office (`none`) → recording upstream | For Chrome and for curl, the chain's requests carry no header from the [0003 D5][d3-5] list and no value containing either instance name or the home client's address, and have the same method, target, and body bytes as the direct run. Other header differences are reported for information. |
+| No trace | `https://origin.cuttle.test/x`, `http://plain.cuttle.test/x`, `http://plain.cuttle.test/a{b}|c?x=1;y=2&z=%zz`, and `http://plain.cuttle.test/q?b=2&a=1;c=3` | Client → `corp-direct`, then client → home → office (`none`) → `corp-chain` | `check-trace` exits 0 for Chrome and for curl: no trace field of [0003 D5][d3-5], no value containing either instance name or the home client's address, and the same method, target, and body bytes as the direct run |
 
 M3 matrix, with Chrome, Safari after approval, and `/usr/bin/curl`, and with
 both "Web proxy (HTTP)" and "Secure web proxy (HTTPS)" set to
@@ -243,9 +267,10 @@ macOS versions, the tested commit, and evidence links.
 | E1 | Mock self-tests pass: the intercepting upstream's leaves have a SAN, the serverAuth EKU, and at most 825 days of validity; the recording upstream records requests byte for byte per connection; `testenv.Net` records lookups and dials. | T1 `go test ./internal/testenv/...` |
 | E2 | `cmd/cuttle` links neither `internal/testenv` nor `x/net/websocket`. | T0 command above |
 | E3 | Git tracks no key or certificate file. | T0 command above |
-| E4 | `tools/mockenv` rejects a `407` mode. | T1 `TestMockenvRefuses407` |
+| E4 | `tools/mockenv` rejects any `407` mode. | T1 `TestMockenvRefuses407` |
 | E5 | The full T1 run completes within its 10-minute timeout. | T1 command above |
-| E6 | The binary-test helper refuses to start cuttle unless `HOME`, every `XDG_*` directory, and `XDG_RUNTIME_DIR` are test-owned temporary directories and the configuration avoids ports 3128 and 3129. | T0 `TestBinaryHelperIsolation` |
+| E6 | The binary-test helper refuses to start cuttle unless `HOME`, every `XDG_*` directory, and `XDG_RUNTIME_DIR` are test-owned temporary directories, `proxy.listen` avoids 3128 and 3129, and `admin.listen` is `""` or a port the test chose. | T0 `TestBinaryHelperIsolation` |
+| E7 | `mockenv check-trace` reports and fails on a planted trace field, a value with an instance name or the client address, a changed target, and a changed body, and passes on identical records. | T1 `TestCheckTrace` |
 
 ## Alternatives considered
 
@@ -259,6 +284,7 @@ macOS versions, the tested commit, and evidence links.
 - **Chrome against public sites at M1.** Mocks keep the M1 check offline and
   let it compare recorded bytes; public sites wait for M3.
 
+[d2-ac]: 0002-proxy-core-and-routing.md#acceptance-criteria
 [d3-5]: 0003-upstream-chaining-and-exposure.md#d5-no-trace-toward-the-corporate-upstream
 [d3-ac]: 0003-upstream-chaining-and-exposure.md#acceptance-criteria
 [oi]: ../OPEN_ISSUES.md

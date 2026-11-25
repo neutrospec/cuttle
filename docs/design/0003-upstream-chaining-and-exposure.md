@@ -1,6 +1,7 @@
 # 0003 — Upstream chaining and exposure
 
-**Status** — Proposed (TASK-0001, 2026-11-25; revised in iteration 2).
+**Status** — Proposed (TASK-0001, 2026-11-25; revised in iterations 2
+and 3).
 Together with [0002](0002-proxy-core-and-routing.md) it supersedes
 [0001](0001-https-connect-proxy.md).
 
@@ -33,14 +34,15 @@ research's recommendation to send `Via` to the corporate proxy
 
 | Mode | Use for | Effect on requests sent to it |
 | --- | --- | --- |
-| `via` | Another cuttle instance | Adds one cuttle `Via` entry (D2), for loop detection |
-| `none` | The corporate proxy, or any proxy that must not see a trace of the cuttle hops | Removes the `Via` entries that cuttle instances added and adds nothing that reveals a hop (D5) |
+| `via` | Another cuttle instance | The client's fields pass, and one cuttle `Via` entry is added for loop detection (D2) |
+| `none` | The corporate proxy, or any proxy that must not see a trace of a proxy | The trace filter removes every trace field, the client's own included, and nothing that reveals a hop is added (D5) |
 
 - `trace` has no default because either wrong default fails: `via` toward
   the corporate proxy leaves a trace, and `none` toward another cuttle hides
   the chain from loop detection.
-- Apart from `Via`, both modes forward the same way, with the standard
-  handling of [0002 D5][d2-5].
+- Apart from the trace fields, both modes forward the same way, with the
+  standard handling of [0002 D5][d2-5]. `direct` routes apply the same
+  trace filter as `none`.
 - cuttle resolves an upstream's own host name through the `Network` seam
   ([0002 Interfaces][d2-if]). The destination checks of D11 do not apply to
   upstream addresses, which are often loopback or private.
@@ -61,18 +63,16 @@ research's recommendation to send `Via` to the corporate proxy
   9110 §7.6.3 allows a comment after `received-by`; `(cuttle)` marks the
   member as cuttle's own.
 - **Adding (`trace = "via"`).** cuttle appends one cuttle entry as a new
-  `Via` field value. Members the client or earlier hops sent stay.
-- **Removing (`trace = "none"` and every `direct` route).** cuttle parses
-  each `Via` field value into members, splitting on commas outside
-  comments, deletes every cuttle entry, and keeps the other members in
-  their order. A `Via` field left empty is deleted. A `Via` the client
-  itself sent survives; a client that forges a cuttle entry loses only that
-  entry.
-- **Loop detection.** On every request, cuttle takes the `received-by`
-  token of every `Via` member, the client's and cuttle's alike, and compares
-  it with its own name without regard to case. A match fails the request
-  with `502 proxy_loop_detected` unless the policy blocks it
-  ([0002 D4][d2-4] step 6). A home → office → home misroute stops in one
+  `Via` field value. `Via` members that the client or earlier hops sent
+  stay, in their order.
+- **Removing (`trace = "none"` and every `direct` route).** The trace
+  filter of D5 removes every `Via` field, cuttle's entries and the client's
+  own alike.
+- **Loop detection.** On every request, before any filtering, cuttle takes
+  the `received-by` token of every `Via` member, the client's and cuttle's
+  alike, and compares it with its own name without regard to case. A match
+  fails the request with `502 proxy_loop_detected` unless the policy blocks
+  it ([0002 D4][d2-4] step 6). A home → office → home misroute stops in one
   hop; in the research harness a loop stopped after 2 `CONNECT` requests
   with the check and ran to 40 without it ([research 0002 §3][r2-3]).
 - A `none` hop adds no entry, so a loop through a `none` hop toward another
@@ -100,7 +100,8 @@ deployment uses `cuttle-home` and `cuttle-office`.
      the fields it names, `Proxy-Connection`, `Keep-Alive`,
      `Proxy-Authenticate`, `Proxy-Authorization`, `TE`, `Trailer`,
      `Transfer-Encoding`, `Upgrade`);
-   - the D2 `Via` edit for the upstream's mode.
+   - for `trace = "none"`, the D5 trace filter applied to those fields; for
+     `trace = "via"`, cuttle's `Via` entry added (D2).
 
    Nothing else is written. `http.Header.Write` writes the fields in sorted
    order.
@@ -121,41 +122,56 @@ only an exact `200`, while curl accepts any 2xx
 ### D4. Plain HTTP through an upstream
 
 - `ReverseProxy` forwards the request with the upstream's transport, which
-  keeps absolute-form because the next hop is a proxy
-  ([research 0002 §2][r2-2]). `Rewrite` applies the D2 `Via` edit for the
-  upstream's mode.
+  writes the client's raw absolute-form target ([0002 D5][d2-5],
+  [research 0002 §2][r2-2]). `Rewrite` applies the trace rule for the
+  upstream's mode: the D5 filter for `none`, cuttle's `Via` entry for
+  `via`.
 - The transport pools connections to the upstream across clients
   ([0002 D5][d2-5]). Its dial function applies the hold (D8).
-- Responses pass through standard handling. A `407` becomes `502` with
-  `received-status=407`, and a corporate block page with another status is
-  relayed.
+- Responses pass through standard handling and keep their status. Only a
+  `407` becomes `502` with `received-status=407`. Any other non-2xx
+  response, such as a corporate block page or an upstream cuttle's own
+  `502`, `503`, or `504` with its `Proxy-Status`, reaches the client as the
+  upstream sent it; cuttle adds no `Proxy-Status` member to it.
+- Absolute-form WebSocket works through an upstream: `ReverseProxy`
+  splices the connections after the upstream's `101`.
 
 ### D5. No trace toward the corporate upstream
 
 Principle: toward a `trace = "none"` upstream, a request carries no trace of
-the cuttle hops. The corporate proxy sees what it would see if the client
-used it directly, apart from the limits below. The following list is the
-minimum; each item is decided:
+proxying. The corporate proxy sees what it would see if the client used it
+directly, apart from the limits below. The same rule applies on every
+`direct` route toward origins.
+
+Trace fields are `Via`, `Forwarded`, every field whose name starts with
+`X-Forwarded-`, `X-Real-IP`, `Client-IP`, `True-Client-IP`, `X-Client-IP`,
+`X-Cluster-Client-IP`, `X-Originating-IP`, `CF-Connecting-IP`,
+`Fastly-Client-IP`, and `Proxy-Status`. One function in `internal/proxy`,
+the trace filter, deletes them all from a header set. It is called from one
+place for each path: the plain-HTTP `Rewrite` and the `CONNECT` head writer
+(D3), on `direct` and `trace = "none"` routes. It removes the client's own
+copies as well, because any of these fields reaching the corporate proxy
+would show proxying, whoever added it. On `trace = "via"` routes the filter
+does not run: the client's fields pass and cuttle adds its own `Via` entry,
+because the last hop before the corporate proxy filters them anyway.
+
+The list above is the minimum. Each other way a proxy can leave a trace is
+decided:
 
 | Possible trace | Decision |
 | --- | --- |
-| `Via` | Cuttle entries removed, none added; the client's own members kept (D2) |
-| `Forwarded`, `X-Forwarded-For`, `X-Forwarded-Host`, `X-Forwarded-Proto` | Never added. `ReverseProxy` with `Rewrite` also drops the client's own copies on plain HTTP ([research 0002 §2][r2-2]) |
-| `X-Real-IP`, `Client-IP`, `True-Client-IP` | Never added; a client's own copy passes through unchanged |
-| `Proxy-Status` | Only on responses cuttle generates for its clients; never in a request |
-| Any cuttle-specific header | None exists |
-| cuttle instance names in any value | Appear only in cuttle `Via` entries, which are removed, and in responses to clients |
-| The home client's address | Never sent: no `X-Forwarded-For`, `Forwarded`, or similar |
+| Trace fields | Removed by the trace filter on `direct` and `none` routes; never added by cuttle except its own `Via` entry on `via` routes |
+| cuttle-specific headers | None exist |
+| cuttle instance names in any value | Appear only in cuttle `Via` entries, which the filter removes, and in responses to clients |
+| The home client's address | Never added to any field; client-sent address fields are trace fields |
 | `User-Agent` | Only the client's own. If the client sent none, none is sent: `ReverseProxy` suppresses Go's default, and the `CONNECT` head carries only client fields ([0002 D5][d2-5]) |
+| Request target | The client's raw target, `CONNECT` and plain HTTP alike ([0002 D5][d2-5]) |
 | `Accept-Encoding` and body encoding | Not added; bodies are not decoded (`DisableCompression`) |
 | `Proxy-Authorization` | Never generated; upstream URLs carry no userinfo |
 | `Max-Forwards` on `TRACE` and `OPTIONS` | Forwarded unchanged on every route. cuttle never decrements it and never answers such a request itself, even at `Max-Forwards: 0`, because either would reveal a hop. This deviates from RFC 9110 §7.6.2. |
 | `TRACE` | Forwarded like any method; its echo shows only what the upstream received |
 | Requests of cuttle's own | None: no health checks, probes, or keep-alive requests; the hold (D8) learns only from client requests |
 | Error responses with cuttle's name | Sent to the client, never upstream |
-
-`trace = "via"` differs only in the `Via` row. The same rules apply on every
-`direct` route toward origins, so an origin sees no cuttle trace either.
 
 Standard handling that changes a request without revealing a hop stays, as
 the user accepted: header-name case and order, removal of hop-by-hop fields
@@ -187,12 +203,19 @@ Limits:
 | Non-2xx `CONNECT` answer other than 504, `407` included | 502 | `received-status=<code>; next-hop="<upstream>"` |
 | `504` answer to `CONNECT` | 504 | `received-status=504; next-hop="<upstream>"` |
 | Plain-HTTP `407` | 502 | `received-status=407; next-hop="<upstream>"` |
+| Any other plain-HTTP response | Relayed unchanged (D4) | None added |
 | Closed after the `200` or mid-response | Close the client connection | — |
 
 - `403` from cuttle always means its own policy
   ([0002 D6][d2-6]). A refusal further along the chain arrives as `502`,
   with the refusing hop's code in `received-status`.
-- `504` is relayed as `504`, so timeouts stay visible through a chain.
+- A `504` answer to `CONNECT` is relayed as `504`, so timeouts stay visible
+  through a chain.
+- Status mapping and `Proxy-Status` chaining apply to `CONNECT` answers
+  and to failures to reach the upstream or read its response, on either
+  path. A plain-HTTP response other than `407` is a whole response that
+  cuttle relays: home relays office's `502`, `503`, or `504` unchanged,
+  with office's `Proxy-Status` member only.
 - When an upstream's non-2xx `CONNECT` answer carries `Proxy-Status`,
   cuttle copies those members, up to 1 KiB of field value, and appends its
   own member last. RFC 9209 lists the member closest to the origin first
@@ -223,9 +246,11 @@ Limits:
 Chain budget: an upstream that is itself a cuttle instance must get a
 `response_timeout` longer than that instance's slowest answer, which is its
 longest connect timeout plus response timeout over the routes it may use,
-plus 10 s. Then a timeout at the office reaches home as office's `504`,
-with office's `Proxy-Status` member, before home's own timer fires, for
-`CONNECT` and plain HTTP alike. Otherwise home reports its own `504` while
+plus 10 s. Then a timeout at the office reaches the home client as office's
+`504` before home's own timer fires: for `CONNECT`, home answers `504` with
+`received-status=504` and both members; for plain HTTP, home relays office's
+`504` unchanged with office's member only (D6). Otherwise home reports its
+own `504` while
 office still succeeds and holds an orphaned tunnel
 ([research 0002 §1][r2-1]). With defaults at the office (10 s + 60 s), home
 uses `response_timeout = "80s"` for its `office` upstream. cuttle cannot see
@@ -276,8 +301,9 @@ by another upstream.
   count held requests as failures ([0005 D1][d5-1]).
 
 In a chain each hop holds only its own upstream. If office cannot reach the
-corporate proxy, office answers `503` at once, and home relays it as `502`
-with `received-status=503` and office's `Proxy-Status` member (D6).
+corporate proxy, office answers `503` at once. For `CONNECT`, home answers
+`502` with `received-status=503` and both members; for plain HTTP, home
+relays office's `503` unchanged (D6).
 
 ### D9. Listeners
 
@@ -339,7 +365,7 @@ loopback admin UI and other local services ([research 0002 §7][r2-7]).
 | --- | --- | --- | --- | --- |
 | `unusable` | `0.0.0.0/8`, `::`, `169.254.0.0/16`, `fe80::/10`, `224.0.0.0/4`, `ff00::/8`, `240.0.0.0/4` | Refused | Refused | Refused |
 | `loopback` | `127.0.0.0/8`, `::1` | Through a rule with `allow_loopback` | Through a rule with `allow_loopback` | Refused |
-| `self` | This host's interface addresses, refreshed at most every 10 s | Through a rule with `allow_loopback` | Through a rule with `allow_loopback` | Refused |
+| `self` | This host's interface addresses, refreshed at most every 10 s | Allowed | Through a rule with `allow_loopback` | Refused |
 | `private` | `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `100.64.0.0/10`, `fc00::/7` | Allowed | Through a rule with `allow_private` | Refused |
 | `public` | Everything else | Allowed | Allowed | Allowed |
 
@@ -347,14 +373,15 @@ How the pieces compose:
 
 - `allow_loopback` and `allow_private` are flags on `direct` rules and
   apply only to the rule that matched. `allow_loopback` covers `loopback`
-  and `self`; `allow_private` covers `private`. Neither implies the other,
+  addresses and names that resolve to `self`; `allow_private` covers names
+  that resolve to `private` addresses. Neither implies the other,
   neither ever admits `unusable`, and both are ignored for remote clients.
 - A name with several addresses keeps the allowed ones; for example, a name
   with a public and a private address is dialed on the public one.
 - Private ranges are RFC 1918, carrier-grade NAT `100.64.0.0/10`, and IPv6
-  unique local `fc00::/7`. Carrier-grade NAT is included because the
-  user's own private networks use it, for example Tailscale, whose names
-  resolve into `100.64.0.0/10`.
+  unique local `fc00::/7`. Carrier-grade NAT is included because overlay
+  networks place private devices there; Tailscale, for example, assigns
+  addresses in `100.64.0.0/10`.
 
 Why names and literals differ:
 
@@ -366,9 +393,12 @@ Why names and literals differ:
   recommends ([research 0002 §7][r2-7]).
 - A private IP literal is a destination the user typed, such as
   `http://192.168.0.1/`, and gives the client the reach it has without a
-  proxy. The user decided that such literals are not affected.
-- Loopback and `self` literals still need `allow_loopback`, because they
-  reach this Mac's own services. The starter `loopback` rule provides it
+  proxy. The user decided that such literals are not affected. This Mac's
+  own address typed as a literal is treated the same way.
+- Loopback literals still need `allow_loopback`, because `127.0.0.1` and
+  `::1` reach services that listen only on loopback, such as the admin UI,
+  and a page can name them without any DNS. The starter `loopback` rule
+  provides it
   for `localhost`, `127.0.0.0/8`, and `::1` on any port, so terminal clients
   that proxy `localhost`, which curl does and Chrome never does
   ([research 0002 §5][r2-5]), keep working.
@@ -378,15 +408,16 @@ Example:
 ```toml
 [[rule]]
 name = "home-lan"            # NAS and printers by name
-domains = ["lan", "home.arpa"]
+domains = ["lan", "local", "home.arpa"]
 action = "direct"
 allow_private = true
 ```
 
-- The admin port is reachable through cuttle only by a local client through
-  an `allow_loopback` rule, which equals local access and still meets the
-  password and Host checks of [0005](0005-statistics-and-admin.md). Remote
-  clients cannot reach `loopback`, `self`, or `private` addresses at all.
+- The admin port listens on loopback, so it is reachable through cuttle
+  only by a local client through an `allow_loopback` rule. That equals
+  local access and still meets the password and Host checks of
+  [0005](0005-statistics-and-admin.md). Remote clients cannot reach
+  `loopback`, `self`, or `private` addresses at all.
 - Upstream routes do no local resolution and no address check; the next
   proxy resolves.
 
@@ -416,7 +447,7 @@ home browser or curl
 ```
 
 The addresses are placeholders: `10.8.0.6` is the office Mac's WireGuard
-address. The corporate proxy receives no trace of the cuttle hops (D5) and
+address. The corporate proxy receives no trace of proxying (D5) and
 attributes all of this traffic to the employee's office machine.
 
 Which source address office cuttle sees depends on the home server:
@@ -479,7 +510,7 @@ default = "block"
 [[upstream]]
 name = "corp"
 address = "proxy.corp.example:8080"
-trace = "none"  # no trace of the cuttle hops reaches the corporate proxy
+trace = "none"  # no trace of proxying reaches the corporate proxy
 
 [[rule]]
 name = "loopback"
@@ -529,18 +560,18 @@ unless marked T0.
 | U2 | Bytes the upstream sends right after its 2xx head reach the client after cuttle's `200`. | `TestUpstreamBufferedBytes` |
 | U3 | Upstream `403`, `407`, and `502` reach the client as `502` with `received-status`; `504` as `504`; no `Proxy-Authenticate` is relayed; the test network records zero direct dials. Checked with Go (`OnProxyConnectResponse`) and curl. | `TestUpstreamStatusMapping` |
 | U4 | A refused upstream gives `502 connection_refused`; one that accepts and never answers gives `504 http_response_timeout` within `response_timeout` + 1 s; neither makes a direct dial. | `TestUpstreamRefusedAndTimeout` |
-| U5 | Plain HTTP through a `via` upstream arrives in absolute-form with one cuttle `Via` entry and the client's body bytes; an upstream `407` becomes `502`; a `403` page is relayed. | `TestUpstreamHTTP` |
-| U6 | Home (`via`) → office (`none`) → intercepting mock: the mock's recorded `CONNECT` head has no `Via` and no D5 item. A client trusting the generated corporate root gets `200` and a leaf for the requested name issued by that root, and the mock's decrypted request has the expected `Host` and path. A client trusting only the origin CA fails verification while both instances log `ok` tunnels. | `TestChainIntercepting` |
+| U5 | Plain HTTP through a `via` upstream arrives with the client's raw absolute-form target, including `http://h/a{b}|c?x=1;y=2&z=%zz`, one cuttle `Via` entry, and the client's body bytes; an upstream `407` becomes `502`; a `403` page is relayed unchanged. An absolute-form WebSocket upgrade through the upstream completes an echo round trip. | `TestUpstreamHTTP` |
+| U6 | Home (`via`) → office (`none`) → intercepting mock: the mock's recorded `CONNECT` head has no trace field (D5). A client trusting the generated corporate root gets `200` and a leaf for the requested name issued by that root, and the mock's decrypted request has the expected `Host` and path. A client trusting only the origin CA fails verification while both instances log `ok` tunnels. | `TestChainIntercepting` |
 | U7 | When the intercepting mock refuses a name, the home client gets `502` and a `Proxy-Status` with the office member before the home member. | `TestChainRefusal` |
 | U8 | Home routes `loop.cuttle.test` to office and office routes it back to home, both with `trace = "via"`: the client gets `502` with `error=proxy_loop_detected`, after exactly 2 upstream `CONNECT` requests in total. The same holds for plain HTTP. | `TestChainLoop` |
 | U9 | An upstream equal to a listener address fails validation (T0). In-process tests pass their own listeners, and an upstream name that the test network resolves to the listener's address fails at dial time with `502 proxy_loop_detected`; validation cannot see that case. | `TestConfigSelfUpstream`, `TestUpstreamSelfDial` |
-| U10 | With office's corp `response_timeout` at 300 ms and home's office `response_timeout` at 2 s, a silent corporate mock yields `504` at the home client with `received-status=504` and office's member, for `CONNECT` and for plain HTTP. | `TestChainTimeoutPropagates` |
+| U10 | With office's corp `response_timeout` at 300 ms and home's office `response_timeout` at 2 s, a silent corporate mock yields at the home client, for `CONNECT`, `504` with `received-status=504` and the office member before the home member, and for plain HTTP, office's `504` unchanged with office's member only. | `TestChainTimeoutPropagates` |
 | U11 | With an injected clock, `connect_timeout` 300 ms, and `unreachable_hold` 1 s on a blackholed upstream: the first request gets `504 connection_timeout` after one dial; four more within the hold get `503 destination_unavailable` without a dial, and `upstream_state` is `down`; while a probe is in flight after the hold, a concurrent request gets `503` and only one dial is recorded; once the address routes to the recording upstream, the probe succeeds, the state returns to `up`, and one recovery line is logged. A silent upstream and an upstream answering `502` are never held. A plain-HTTP request to a held upstream also gets `503`. With `unreachable_hold = "0s"`, every request dials. | `TestUpstreamUnreachableHold` |
-| U12 | No trace: a home client with a distinctive source address sends a `CONNECT` and a plain-HTTP `POST` with a chunked body through home (`via`) → office (`none`) → recording mock. The mock receives no header from the D5 list, no value containing `cuttle-home`, `cuttle-office`, or the home client's address, and the same method, target, and body bytes the client sent. A client-sent `Via: 1.1 lab-gw` and `X-Real-IP` arrive unchanged; a request without `User-Agent` arrives without one; `OPTIONS` and `TRACE` with `Max-Forwards: 0` are forwarded with the value unchanged and answered by the mock. | `TestNoTraceChain` |
+| U12 | No trace: a home client with a distinctive source address sends a `CONNECT` and plain-HTTP requests (a `POST` with a chunked body, and `GET` targets `http://h/a{b}|c?x=1;y=2&z=%zz` and `http://h/q?b=2&a=1;c=3`) through home (`via`) → office (`none`) → recording mock. The client also sends `Via: 1.1 lab-gw` and `X-Real-IP`, and one request has no `User-Agent`. The mock receives no field or value that cuttle added: every field it receives, apart from `Content-Length`, `Transfer-Encoding`, and `Trailer`, was sent by the client with the same value; no trace field arrives, the client's own included; no value contains `cuttle-home`, `cuttle-office`, or the home client's address; and method, target, and body bytes equal the client's. `OPTIONS` and `TRACE` with `Max-Forwards: 0` arrive with the value unchanged and are answered by the mock. | `TestNoTraceChain` |
 | N1 | Validation rejects a wildcard or host-name listener, a non-loopback listener without `proxy.remote.sources`, `proxy.remote.default = "direct"` without `allow_direct`, and an upstream without `trace`; `cuttle check` warns about `0.0.0.0/0` or `::/0` in `sources`. | T0 `TestConfigExposure` |
 | N2 | A connection from a source outside the allowlist is closed with no byte read or written, increments `connections_rejected_total{reason="source"}`, logs the source address, and produces no decision. | `TestRemoteSourceRejected` |
 | N3 | A remote client gets the upstream rule's route, `403` with rule `remote-default` for unmatched names, `403` with rule `remote-direct` for a `direct` rule, and `403` with rule `port` for port 22. With `allow_direct`, it reaches a public test address and gets `502 destination_ip_prohibited` for private, loopback, and `self` addresses even through rules with `allow_private` or `allow_loopback`. | `TestRemotePolicy` |
-| N4 | A local client's direct request for a name resolving to `127.0.0.1`, `169.254.1.1`, `fe80::1`, or `0.0.0.0` gets `502 destination_ip_prohibited` with zero dials. A name resolving to `10.20.0.5` is refused without `allow_private` and dialed with it; the literal `10.20.0.5` is dialed without any rule flag. `localhost:3000` and `127.0.0.1:8443` reach loopback mocks through the starter `loopback` rule. | `TestDirectAddressPolicy` |
+| N4 | A local client's direct request for a name resolving to `127.0.0.1`, `192.0.2.50` (`self`), `169.254.1.1`, `fe80::1`, or `0.0.0.0` gets `502 destination_ip_prohibited` with zero dials. A name resolving to `10.20.0.5` is refused without `allow_private` and dialed with it; the literals `10.20.0.5` and `192.0.2.50` are dialed without any rule flag. `localhost:3000` and `127.0.0.1:8443` reach loopback mocks through the starter `loopback` rule. | `TestDirectAddressPolicy` |
 | N5 | After a reload removes a remote source, its kept-alive connection is closed at the next request. | `TestReloadRemovesSource` |
 | N6 | Connections over `max_connections` or `max_connections_per_source` are closed after accept and counted with `reason="limit"`. | `TestConnectionLimits` |
 | N7 | A non-loopback listener on an address absent from the host (`192.0.2.1`) shows `retrying` in `cuttle status` while the loopback listener serves. | `TestListenerBindRetry` |
@@ -551,7 +582,7 @@ The real corporate proxy and VPN are checked in M3 ([OI-0001][oi]).
 
 | ID | Assumption | Smallest check |
 | --- | --- | --- |
-| A1 | The corporate proxy accepts requests that carry no trace of the cuttle hops, with standard header handling, as it accepts office Chrome's direct requests. This replaces the earlier assumption that it accepts `Via`. | From home through the chain, load office-only sites that office Chrome loads directly ([OI-0001][oi]). |
+| A1 | The corporate proxy accepts requests that carry no trace of proxying, with standard header handling, as it accepts office Chrome's direct requests. This replaces the earlier assumption that it accepts `Via`. | From home through the chain, load office-only sites that office Chrome loads directly ([OI-0001][oi]). |
 | A2 | A listener bound to the WireGuard address keeps accepting after the tunnel reconnects with the same address. | Bind office cuttle, restart the tunnel, and connect from home ([OI-0001][oi]). |
 | A3 | With the macOS application firewall on, the first non-loopback bind shows an allow prompt, possibly again after an upgrade changes the binary. | Bind once with the firewall on, then after `brew upgrade` ([OI-0001][oi]). |
 | A4 | The corporate proxy's re-signed leaves meet Safari's requirements. | `openssl s_client -proxy` from the office Mac ([OI-0001][oi]). |

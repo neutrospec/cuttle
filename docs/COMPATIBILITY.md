@@ -11,15 +11,16 @@ checks actually performed.
 
 ## Proxy
 
-"No trace" means that requests a mock records through home → office with
-`trace = "none"` carry no header from the [design 0003 D5][nt] list and no
-value with an instance name or the home client's address, and match the
-direct run in method, target, and body bytes.
+"No trace" means that `mockenv check-trace` passes: requests a mock
+records through home → office with `trace = "none"` carry no trace field of
+[design 0003 D5][nt], not even one the client sent, and no value with an
+instance name or the home client's address, and they match the direct run
+in method, target, and body bytes.
 
 | Client | Check | Proxy configuration | Direct HTTPS | Direct HTTP | Upstream HTTPS | WebSocket | Block | Chain through an intercepting proxy | No trace | IPv6 literal | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Chrome on macOS, headless | M1 | `--headless=new --use-mock-keychain`, throwaway profile, `--proxy-server=http://127.0.0.1:<port>`, `--proxy-bypass-list="<-loopback>"` | Pending | Not in M1 | Pending | Pending | Pending | Pending | Pending | Not in M1 | — |
-| `/usr/bin/curl` | M1 | `--proxy http://127.0.0.1:<port>` | Pending | Pending | Pending | Not in M1 | Pending | Pending | Pending | Not in M1 | — |
+| Chrome on macOS, headless | M1 | `--headless=new --use-mock-keychain`, throwaway profile, `--proxy-server=http://127.0.0.1:<port>`, `--proxy-bypass-list="<-loopback>"` | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Not in M1 | — |
+| `/usr/bin/curl` | M1 | `--proxy http://127.0.0.1:<port>`, `-g` | Pending | Pending | Pending | Not in M1 | Pending | Pending | Pending | Not in M1 | — |
 | Chrome on macOS | M3 | `--proxy-server=http://127.0.0.1:3128` with a throwaway profile, or the macOS proxy settings | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | — |
 | Safari on macOS | M3, with approval | System Settings → Network → Proxies: "Web proxy (HTTP)" and "Secure web proxy (HTTPS)" both `127.0.0.1:3128` | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | — |
 | `/usr/bin/curl` | M3 | `--proxy http://127.0.0.1:3128`, or lowercase `http_proxy` and `https_proxy` | Pending | Pending | Pending | Not run | Pending | Pending | Pending | Pending | — |
