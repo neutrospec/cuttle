@@ -183,7 +183,8 @@ Move resolved items to Closed with their resolving commit or evidence.
 - Origin: TASK-0001 iteration 3 review of candidate `a1e1e61`, verdict
   "approve with minor fixes", findings V1–V12. Landed in `dc52251`. P1
   comes from the TASK-0002 review.
-- Affected milestones: M1.2, M1.3, and M1 close; V5 also M3.2; P1 M3.3.
+- Affected milestones: M1.2, M1.3, M1.4, and M1 close; V5 also M3.2; P1
+  M3.3.
 - Iterations used: 3 of 3, so the fixes move to the first M1 task instead of
   another design loop.
 - Responsible step: design for wording and criteria, implementer for tests.
@@ -258,13 +259,16 @@ Move resolved items to Closed with their resolving commit or evidence.
     Instance entry (0004 D3, 0006 D5). In P1, say the edge LAN must be in
     the gateway side's `AllowedIPs` or the link's equivalent, and add to
     OI-0001 step 1: if no warning appears, see OI-0006 P1.
-  - M5 (from the TASK-0004 review; implementer at M1.4): after a `101`,
+  - R5 (from the TASK-0004 review; implementer at M1.4): after a `101`,
     `httputil.ReverseProxy` owns the hijacked client connection. `Shutdown`
     neither closes nor logs it, and no idle limit applies to it, so 0006
     D6 step 4 and P5 need such upgraded connections tracked like tunnels.
+    The C13 remainder of 0002 D7 belongs to the same stage: socket-exact
+    plain-HTTP `up`, and exact totals after a `101`.
 - Next action: orchestrator — include V1–V12, P1, and W1–W3 in the first M1
   task brief; the producer closes each item with the commit that settles
-  it.
+  it. Include R5 and the C13 remainder of 0002 D7 (socket-exact plain-HTTP
+  `up`, exact totals after a `101`) in the M1.4 brief.
 
 ## Closed
 

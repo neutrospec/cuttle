@@ -167,8 +167,17 @@ status 2 and writes to stderr, which launchd sends to
   `.1`, then opens a new file. Five rotated files bound the total at
   60 MiB. The writer is in-house and needs no dependency
   ([research 0001 §7][r1-7]).
-- The launchd file receives only output from before the log opens and
-  runtime panics, so it stays small without rotation.
+- A failed rotation never stops logging. When a rename keeps failing, the
+  writer keeps appending to the current file, which then grows past
+  10 MiB, and tries again after each further 10 MiB. When the file cannot
+  be reopened, that line is lost and the next write tries again. Every
+  failure is counted, and the first failure of each run of failures is
+  written to stderr, which under launchd is the launchd file. A current
+  file deleted by someone else is not a failure: the next rotation opens a
+  new one without shifting the rotated files.
+- The launchd file receives only output from before the log opens, the
+  first failure of each run of log failures, and runtime panics, so it
+  stays small without rotation.
 - Levels: `debug` adds tunnel-open and connection events; `info` has
   decisions and lifecycle events; `warn` has rejected sources (rate
   limited), retrying listeners, and statistics write errors; `error` has

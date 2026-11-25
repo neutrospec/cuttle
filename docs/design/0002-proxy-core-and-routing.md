@@ -328,7 +328,7 @@ its atomic counters as each write completes, so active tunnels contribute
 before they close.
 
 A byte counts when a socket write accepted it, never while it is still
-buffered, so a client never receives fewer bytes than `down` shows. Tunnels
+buffered: `down` never includes bytes still in cuttle's buffers. Tunnels
 add the result of each write. Plain-HTTP responses are flushed after each
 body write and counted only when the flush succeeds; a failed write or
 flush counts nothing for that call. Plain-HTTP `up` still counts the
@@ -431,7 +431,10 @@ tests can supply listeners that report chosen remote addresses
   the client failed, with the status that was sent. Both log the bytes the
   client socket accepted (D7).
 - A request on a connection that the listener did not classify gets `500`
-  and is never routed, so a missing source class fails closed.
+  and is never routed, so a missing source class fails closed. Its
+  decision line has `source=unknown`, empty target fields, outcome
+  `internal`, and error `proxy_internal_error`, and it is counted in
+  `outcomes_total`.
 - A client that closes before the decision completes is logged as
   `client_closed` and is not a failure.
 

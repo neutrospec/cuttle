@@ -170,13 +170,17 @@ out=$(git ls-files '*.pem' '*.key' '*.crt' '*.p12')
 test -z "$out"
 deps=$(mktemp)
 go list -deps ./cmd/cuttle >"$deps"
-test -z "$(grep -E 'internal/testenv|x/net/websocket' "$deps")"
+rc=0
+grep -E 'internal/testenv|x/net/websocket' "$deps" || rc=$?
+test "$rc" -eq 1
 ```
 
 Output that must be empty is captured first, by an assignment or into a
 file that the script removes on exit: under `set -e` both fail with their
 command, while a failure inside `test -z "$(...)"` or on the left of `&&`
-would not stop the gate.
+would not stop the gate. The dependency check passes only on `grep`'s exit
+status 1, no match; status 0 lists a forbidden package, and status 2 means
+`grep` itself failed.
 
 T1:
 
