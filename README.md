@@ -28,21 +28,29 @@ ordered rules on host name, domain, IP prefix, and port:
 
 ## Status
 
-Milestone stages M1.1 and M1.2 are implemented: `direct` and `block`
-routes, the starter configuration, the decision log with rotation, and
-`cuttle init`, `check`, `explain`, and `paths`, for local clients and for
-remote clients on non-loopback listeners. Remote clients need an address in
-`proxy.remote.sources` and get their own ports, default, and connection
-limits ([0003 D9–D12](docs/design/0003-upstream-chaining-and-exposure.md#d9-listeners)).
+Milestone stages M1.1 to M1.3 are implemented: `direct`, `block`, and
+`upstream:<name>` routes, the starter configuration, the decision log with
+rotation, and `cuttle init`, `check`, `explain`, and `paths`, for local
+clients and for remote clients on non-loopback listeners. Remote clients
+need an address in `proxy.remote.sources` and get their own ports, default,
+and connection limits
+([0003 D9–D12](docs/design/0003-upstream-chaining-and-exposure.md#d9-listeners)).
+Upstreams are plain HTTP proxies without authentication. Toward another
+cuttle instance, `disclosure = "via"` adds one cuttle `Via` entry, which
+stops loops between instances; toward an egress proxy,
+`disclosure = "none"` sends requests that disclose no intermediary. An
+upstream that cannot be reached is held for `unreachable_hold`, and
+requests routed to it fail at once with `503`; nothing falls back to
+`direct`
+([0003 D1–D8](docs/design/0003-upstream-chaining-and-exposure.md#d1-upstreams-and-disclosure-modes)).
 cuttle tells remote from local clients only by the peer address, so a
 relay that hands remote connections to cuttle from loopback, such as an
 `ssh -L` forward or a VPN client that delivers connections from loopback,
 gives them a local client's full reach; such setups are unsupported
 ([0003 D13](docs/design/0003-upstream-chaining-and-exposure.md#d13-edge-gateway-and-egress-deployment)).
-Upstream routes, `cuttle reload` and `status`, the retry of a listener that
-cannot bind, the statistics, and the admin UI arrive in later stages of the
-[roadmap](docs/ROADMAP.md); `cuttle serve` refuses upstream routes, and
-every listener must bind at startup.
+`cuttle reload` and `status`, the retry of a listener that cannot bind,
+the statistics, and the admin UI arrive in later stages of the
+[roadmap](docs/ROADMAP.md); every listener must bind at startup.
 
 Try it from a checkout:
 

@@ -130,7 +130,12 @@ only an exact `200`, while curl accepts any 2xx
   upstream's mode: the D5 filter for `none`, cuttle's `Via` entry for
   `via`.
 - The transport pools connections to the upstream across clients
-  ([0002 D5][d2-5]). Its dial function applies the hold (D8).
+  ([0002 D5][d2-5]). The handler checks the hold (D8) before
+  `ReverseProxy`, as for `CONNECT`, so a request to a held upstream never
+  reaches the transport or a pooled connection. The transport's dial
+  function applies the hold again, because the upstream may go down
+  between the check and the dial. When the upstream goes down, the
+  transport's idle connections are closed.
 - Responses pass through standard handling and keep their status. Only a
   `407` becomes `502` with `received-status=407`. Any other non-2xx
   response, such as an egress proxy's block page or an upstream cuttle's own

@@ -554,3 +554,40 @@ func TestConfigExposure(t *testing.T) {
 		t.Errorf("listen %v sources %v warnings %v", cfg.Proxy.Listen, cfg.Proxy.Remote.Sources, r.Warnings)
 	}
 }
+
+// TestConfigSelfUpstream checks the T0 half of 0003 U9: an upstream whose
+// address equals one of this instance's listeners fails validation,
+// comparing IP literals and treating localhost as loopback. Other names
+// cannot be checked without resolving them; the dial-time check covers
+// them (TestUpstreamSelfDial).
+func TestConfigSelfUpstream(t *testing.T) {
+	const head = "name = \"cuttle-test\"\n[proxy]\nlisten = [\"127.0.0.1:18080\", \"[::1]:18081\", \"10.8.0.6:18082\"]\ndefault = \"block\"\n" +
+		"[proxy.remote]\nsources = [\"10.8.0.1/32\"]\n[admin]\nlisten = \"\"\n[[upstream]]\nname = \"up\"\ndisclosure = \"via\"\n"
+	for _, c := range []struct {
+		address string
+		self    bool
+	}{
+		{"127.0.0.1:18080", true},
+		{"[::1]:18081", true},
+		{"10.8.0.6:18082", true},
+		{"localhost:18080", true},
+		{"localhost:18081", true},
+		{"LOCALHOST.:18080", true},
+		{"localhost:18082", false},
+		{"127.0.0.1:18081", false},
+		{"127.0.0.2:18080", false},
+		{"10.8.0.6:18080", false},
+		{"gateway.example:18080", false},
+	} {
+		cfg, r := Parse([]byte(head+"address = \""+c.address+"\"\n"), "self.toml")
+		found := false
+		for _, e := range r.Errors {
+			if e.Key == "upstream[1].address" && strings.Contains(e.Msg, "this instance's own listener") {
+				found = true
+			}
+		}
+		if found != c.self || (cfg == nil) != c.self {
+			t.Errorf("%s: self %v, errors:\n%s", c.address, found, issues(r.Errors))
+		}
+	}
+}

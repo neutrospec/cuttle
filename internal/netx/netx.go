@@ -1,7 +1,8 @@
-// Package netx holds the Network seam, the destination address classes, and
-// the direct dialer that applies the destination address policy (design 0003
-// D11). Internal packages have no default Network: cmd/cuttle wires System,
-// and tests pass internal/testenv.Net, so a test cannot reach real DNS by
+// Package netx holds the Network seam, the destination address classes, the
+// direct dialer that applies the destination address policy (design 0003
+// D11), and the upstream dialer, to which that policy does not apply (D1).
+// Internal packages have no default Network: cmd/cuttle wires System, and
+// tests pass internal/testenv.Net, so a test cannot reach real DNS by
 // accident (design 0007 D3).
 package netx
 
@@ -16,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"squid/internal/authority"
 	"squid/internal/policy"
 )
 
@@ -141,9 +143,13 @@ const (
 	ErrProhibited = "destination_ip_prohibited"
 	ErrRefused    = "connection_refused"
 	ErrTimeout    = "connection_timeout"
+	// ErrLoop marks an upstream whose resolved address is one of this
+	// instance's own listeners (design 0003 D1).
+	ErrLoop = "proxy_loop_detected"
 )
 
-// DialError is a direct-route failure with its Proxy-Status error type.
+// DialError is a direct-route or upstream dial failure with its
+// Proxy-Status error type.
 type DialError struct {
 	Type   string // one of the Err constants
 	Detail string // safe to log: addresses and classes, never request content
@@ -211,23 +217,79 @@ func (dl *Dialer) Dial(ctx context.Context, d policy.Decision) (net.Conn, error)
 	if len(allowed) == 0 {
 		return nil, &DialError{Type: ErrProhibited, Detail: "refused address classes: " + strings.Join(refused, ",")}
 	}
-	conn, err := dl.dialAll(ctx, allowed)
+	conn, err := dialAll(ctx, dl.Network, dl.Stagger, allowed)
 	if err != nil {
-		de := &DialError{Type: ErrRefused, Err: err, ClientGone: gone()}
-		if errors.Is(err, context.DeadlineExceeded) || isTimeout(err) {
-			de.Type = ErrTimeout
-			de.Detail = fmt.Sprintf("connect timed out after %s", dl.Timeout)
-		} else {
-			de.Detail = "connect failed: " + errReason(err)
-		}
-		return nil, de
+		return nil, connectError(err, dl.Timeout, gone())
 	}
 	return conn, nil
 }
 
-// dialAll starts the next address Stagger after the previous one unless it
+// connectError maps a failed connection attempt to its error type.
+func connectError(err error, timeout time.Duration, clientGone bool) *DialError {
+	de := &DialError{Type: ErrRefused, Err: err, ClientGone: clientGone}
+	if errors.Is(err, context.DeadlineExceeded) || isTimeout(err) {
+		de.Type = ErrTimeout
+		de.Detail = fmt.Sprintf("connect timed out after %s", timeout)
+	} else {
+		de.Detail = "connect failed: " + errReason(err)
+	}
+	return de
+}
+
+// UpstreamDialer resolves and dials an upstream proxy's own address
+// (design 0003 D1). The destination address policy does not apply, because
+// upstreams are often on loopback or private addresses. An address equal to
+// one of this instance's listeners is refused as a loop.
+type UpstreamDialer struct {
+	Network Network
+	// Timeout bounds the lookup and all connection attempts together.
+	Timeout time.Duration
+	// Stagger is the delay before the next address is tried (RFC 8305).
+	Stagger time.Duration
+	// Self reports whether an address is one of this instance's bound
+	// listeners.
+	Self func(netip.AddrPort) bool
+}
+
+// Dial resolves the upstream address and dials it. A failure is a
+// *DialError of type ErrDNS, ErrRefused, ErrTimeout, or ErrLoop.
+func (dl *UpstreamDialer) Dial(ctx context.Context, t authority.Authority) (net.Conn, error) {
+	parent := ctx
+	ctx, cancel := context.WithTimeout(ctx, dl.Timeout)
+	defer cancel()
+	gone := func() bool { return parent.Err() != nil && !errors.Is(parent.Err(), context.DeadlineExceeded) }
+
+	var addrs []netip.Addr
+	if t.IsIP() {
+		addrs = []netip.Addr{t.Addr}
+	} else {
+		var err error
+		addrs, err = dl.Network.LookupNetIP(ctx, t.Host)
+		if err != nil {
+			return nil, &DialError{Type: ErrDNS, Detail: "upstream lookup failed: " + lookupReason(err), Err: err, ClientGone: gone()}
+		}
+		if len(addrs) == 0 {
+			return nil, &DialError{Type: ErrDNS, Detail: "upstream lookup returned no address"}
+		}
+	}
+	targets := make([]netip.AddrPort, 0, len(addrs))
+	for _, a := range addrs {
+		ap := netip.AddrPortFrom(a.WithZone("").Unmap(), t.Port)
+		if dl.Self != nil && dl.Self(ap) {
+			return nil, &DialError{Type: ErrLoop, Detail: "upstream address " + ap.String() + " is this instance's own listener"}
+		}
+		targets = append(targets, ap)
+	}
+	conn, err := dialAll(ctx, dl.Network, dl.Stagger, targets)
+	if err != nil {
+		return nil, connectError(err, dl.Timeout, gone())
+	}
+	return conn, nil
+}
+
+// dialAll starts the next address stagger after the previous one unless it
 // has connected, and returns the first connection that succeeds.
-func (dl *Dialer) dialAll(ctx context.Context, addrs []netip.AddrPort) (net.Conn, error) {
+func dialAll(ctx context.Context, network Network, stagger time.Duration, addrs []netip.AddrPort) (net.Conn, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	type result struct {
@@ -241,12 +303,11 @@ func (dl *Dialer) dialAll(ctx context.Context, addrs []netip.AddrPort) (net.Conn
 		a := addrs[started]
 		started++
 		go func() {
-			c, err := dl.Network.DialContext(ctx, a)
+			c, err := network.DialContext(ctx, a)
 			results <- result{c, err}
 		}()
 	}
 	start()
-	stagger := dl.Stagger
 	if stagger <= 0 {
 		stagger = 300 * time.Millisecond
 	}

@@ -72,13 +72,27 @@ func NewCA(t testing.TB, name string) *CA {
 // addresses, with the serverAuth EKU and 24-hour validity.
 func (ca *CA) Leaf(t testing.TB, names ...string) tls.Certificate {
 	t.Helper()
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	leaf, err := ca.Issue(names...)
 	if err != nil {
 		t.Fatal(err)
 	}
+	return leaf
+}
+
+// Issue is Leaf for code that runs outside the test goroutine, such as a
+// mock that signs a leaf per TLS handshake.
+func (ca *CA) Issue(names ...string) (tls.Certificate, error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	sn, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 120))
+	if err != nil {
+		return tls.Certificate{}, err
+	}
 	now := time.Now()
 	tmpl := &x509.Certificate{
-		SerialNumber: serial(t),
+		SerialNumber: sn,
 		Subject:      pkix.Name{CommonName: names[0]},
 		NotBefore:    now.Add(-time.Hour),
 		NotAfter:     now.Add(LeafValidity),
@@ -94,13 +108,13 @@ func (ca *CA) Leaf(t testing.TB, names ...string) tls.Certificate {
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, ca.Cert, &key.PublicKey, ca.Key)
 	if err != nil {
-		t.Fatal(err)
+		return tls.Certificate{}, err
 	}
 	leaf, err := x509.ParseCertificate(der)
 	if err != nil {
-		t.Fatal(err)
+		return tls.Certificate{}, err
 	}
-	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key, Leaf: leaf}
+	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key, Leaf: leaf}, nil
 }
 
 // Pool returns a pool holding only this root.

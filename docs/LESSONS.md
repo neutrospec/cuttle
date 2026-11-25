@@ -109,3 +109,26 @@ removes entries. Append new entries at the end, oldest first.
 - What to do instead: Quote every `--include` value, as in
   `grep -rn 'PATTERN' --include='*.go' .`, every time, also in quick
   one-off searches.
+
+### 2026-11-25 — implementer — mutation checks in a scratch copy
+
+- Task: TASK-0006, proving the M1.3 tests by applying one mutation per
+  scratch copy of the worktree with a Python script and running the
+  targeted test.
+- Attempts: 3 for one mutation, recorded because the script reported
+  "PATTERN NOT FOUND" twice and a silently skipped mutation looks like a
+  passing check.
+- What failed: The first pattern was written from memory and did not
+  match the code. The fix was then applied with
+  `python3 - <<EOF ... s.replace('''"\\tcase ...''', ...) EOF`: the
+  unquoted heredoc let the shell rewrite the backslashes, so the script
+  file was left unchanged and the run reported the same miss.
+- What to do instead: Copy the pattern from the file, for example with
+  `/usr/bin/grep -n -A12 '^func (h \*hold) admit' FILE | od -c`, and edit
+  helper scripts with a quoted heredoc (`<<'EOF'`), passing paths as
+  arguments. Make the mutation script fail loudly when a pattern is
+  missing, and count a mutation as checked only when the targeted test
+  fails. A mutation that survives may also mean that the test does not
+  reach the code: Go's `Transport.CloseIdleConnections` also closes
+  connections that become idle later, until the next request queues on
+  the transport, so a pooled-connection test needs such a request.

@@ -1,7 +1,9 @@
 package testenv
 
 import (
+	"bufio"
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"io"
@@ -232,5 +234,151 @@ func TestOriginStatus(t *testing.T) {
 	}
 	if reqs := safe.Requests(); len(reqs) != 3 || reqs[0].URI != "/status?code=407" {
 		t.Errorf("recorded %+v", reqs)
+	}
+}
+
+// TestRecordingUpstream checks part of E1 and OI-0006 V4: the recording
+// upstream records each request head and body byte for byte, per
+// connection and in order; passes absolute-form requests to the origin
+// unchanged; answers 403 for names outside cuttle.test; and refuses 407
+// unless the test allows it.
+func TestRecordingUpstream(t *testing.T) {
+	if testing.Short() {
+		t.Skip("uses sockets")
+	}
+	origin := NewOrigin(t, OriginOptions{})
+	n := NewNet()
+	n.Map("a.cuttle.test", "203.0.113.10")
+	n.Route("203.0.113.10:80", origin.Addr)
+	u := NewRecordingUpstream(t, UpstreamOptions{Net: n})
+	u.SetMode("s407.cuttle.test", Status(407, ""))
+
+	exchange := func(c net.Conn, br *bufio.Reader, req string) *http.Response {
+		t.Helper()
+		if _, err := io.WriteString(c, req); err != nil {
+			t.Fatal(err)
+		}
+		res, err := http.ReadResponse(br, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		io.Copy(io.Discard, res.Body)
+		res.Body.Close()
+		return res
+	}
+	dial := func() (net.Conn, *bufio.Reader) {
+		c, err := net.DialTimeout("tcp", u.Addr.String(), 5*time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { c.Close() })
+		c.SetDeadline(time.Now().Add(10 * time.Second))
+		return c, bufio.NewReader(c)
+	}
+
+	get := "GET http://a.cuttle.test/x?q=%zz HTTP/1.1\r\nHost: a.cuttle.test\r\nx-lower:  One \r\nX-Two: 2\r\n\r\n"
+	post := "POST http://a.cuttle.test/y HTTP/1.1\r\nHost: a.cuttle.test\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n2;ext=1\r\nde\r\n0\r\nX-T: 1\r\n\r\n"
+	c, br := dial()
+	if res := exchange(c, br, get); res.StatusCode != 200 {
+		t.Errorf("GET status %d", res.StatusCode)
+	}
+	if res := exchange(c, br, post); res.StatusCode != 200 {
+		t.Errorf("POST status %d", res.StatusCode)
+	}
+	c2, br2 := dial()
+	if res := exchange(c2, br2, "CONNECT outside.example:443 HTTP/1.1\r\nHost: outside.example:443\r\n\r\n"); res.StatusCode != 403 {
+		t.Errorf("name outside cuttle.test: %d", res.StatusCode)
+	}
+	c3, br3 := dial()
+	if res := exchange(c3, br3, "GET http://s407.cuttle.test/ HTTP/1.1\r\nHost: s407.cuttle.test\r\n\r\n"); res.StatusCode != 400 ||
+		res.Header.Get("Proxy-Authenticate") != "" {
+		t.Errorf("407 without Allow407: %d %v", res.StatusCode, res.Header)
+	}
+
+	reqs := u.Requests()
+	if len(reqs) != 4 {
+		t.Fatalf("%d requests", len(reqs))
+	}
+	g, p := reqs[0], reqs[1]
+	if g.Conn != 1 || p.Conn != 1 || reqs[2].Conn != 2 || reqs[3].Conn != 3 {
+		t.Errorf("connections %d %d %d %d", g.Conn, p.Conn, reqs[2].Conn, reqs[3].Conn)
+	}
+	if string(g.Head) != get || g.Target != "http://a.cuttle.test/x?q=%zz" || g.Fields[1] != (Field{"x-lower", "One"}) {
+		t.Errorf("GET recorded %q %+v", g.Head, g.Fields)
+	}
+	if string(p.Head)+string(p.RawBody) != post || string(p.Body) != "abcde" || len(p.Trailer) != 1 || p.Trailer[0] != (Field{"X-T", "1"}) {
+		t.Errorf("POST recorded %q %q %q %v", p.Head, p.RawBody, p.Body, p.Trailer)
+	}
+	if string(u.Raw(1)) != get+post {
+		t.Errorf("raw bytes of connection 1: %q", u.Raw(1))
+	}
+	o := origin.Requests()
+	if len(o) != 2 || o[0].URI != "http://a.cuttle.test/x?q=%zz" || o[0].Header.Get("X-Lower") != "One" || string(o[1].Body) != "abcde" {
+		t.Errorf("origin received %+v", o)
+	}
+}
+
+// TestInspectingLeaves checks part of E1: the inspecting egress mock's
+// leaves have a SAN, the serverAuth EKU, and at most 825 days of validity;
+// it decrypts the tunnelled request and refuses listed names.
+func TestInspectingLeaves(t *testing.T) {
+	if testing.Short() {
+		t.Skip("uses sockets")
+	}
+	originCA := NewCA(t, "origin root")
+	inspection := NewCA(t, "inspection root")
+	origin := NewOrigin(t, OriginOptions{TLS: originCA})
+	n := NewNet()
+	n.Map("origin.cuttle.test", "203.0.113.10")
+	n.Route("203.0.113.10:443", origin.Addr)
+	p := NewInspectingProxy(t, InspectingOptions{Root: inspection, Origins: originCA.Pool(), Net: n, Refuse: []string{"refused.cuttle.test"}})
+
+	c, err := net.DialTimeout("tcp", p.Addr.String(), 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	c.SetDeadline(time.Now().Add(10 * time.Second))
+	io.WriteString(c, "CONNECT origin.cuttle.test:443 HTTP/1.1\r\nHost: origin.cuttle.test:443\r\n\r\n")
+	br := bufio.NewReader(c)
+	res, err := http.ReadResponse(br, &http.Request{Method: "CONNECT"})
+	if err != nil || res.StatusCode != 200 {
+		t.Fatalf("CONNECT: %v %v", res, err)
+	}
+	tc := tls.Client(c, &tls.Config{ServerName: "origin.cuttle.test", RootCAs: inspection.Pool()})
+	io.WriteString(tc, "GET /e HTTP/1.1\r\nHost: origin.cuttle.test\r\n\r\n")
+	res, err = http.ReadResponse(bufio.NewReader(tc), nil)
+	if err != nil || res.StatusCode != 200 {
+		t.Fatalf("through the mock: %v %v", res, err)
+	}
+	l := tc.ConnectionState().PeerCertificates[0]
+	if len(l.DNSNames) != 1 || l.DNSNames[0] != "origin.cuttle.test" {
+		t.Errorf("SAN %v", l.DNSNames)
+	}
+	if len(l.ExtKeyUsage) != 1 || l.ExtKeyUsage[0] != x509.ExtKeyUsageServerAuth {
+		t.Errorf("EKU %v", l.ExtKeyUsage)
+	}
+	if d := l.NotAfter.Sub(l.NotBefore); d > 825*24*time.Hour {
+		t.Errorf("validity %v", d)
+	}
+	if l.Issuer.CommonName != "inspection root" || p.Leaves()["origin.cuttle.test"] == nil {
+		t.Errorf("issuer %q", l.Issuer.CommonName)
+	}
+	if d := p.Decrypted(); len(d) != 1 || d[0].URI != "/e" || d[0].Host != "origin.cuttle.test" {
+		t.Errorf("decrypted %+v", d)
+	}
+
+	c2, err := net.DialTimeout("tcp", p.Addr.String(), 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c2.Close()
+	c2.SetDeadline(time.Now().Add(10 * time.Second))
+	io.WriteString(c2, "CONNECT refused.cuttle.test:443 HTTP/1.1\r\nHost: refused.cuttle.test:443\r\n\r\n")
+	if res, err := http.ReadResponse(bufio.NewReader(c2), nil); err != nil || res.StatusCode != 403 {
+		t.Errorf("refused name: %v %v", res, err)
+	}
+	if h := p.Requests(); len(h) != 2 || h[1].Target != "refused.cuttle.test:443" {
+		t.Errorf("heads %+v", h)
 	}
 }

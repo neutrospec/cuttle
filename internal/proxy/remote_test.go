@@ -566,34 +566,3 @@ max_connections_per_source = 2
 	waitFor(t, "release after response", func() bool { return live.Get(stats.ConnectionsActive) == 15 })
 	open("10.8.0.6")
 }
-
-// TestCheckSupportedRemote checks that M1.2 serves non-loopback listeners
-// and still refuses upstream routes for remote clients.
-func TestCheckSupportedRemote(t *testing.T) {
-	ok := mustParse(t, `name = "cuttle-test"
-[proxy]
-listen = ["127.0.0.1:18080", "10.8.0.6:18080"]
-default = "direct"
-[proxy.remote]
-sources = ["10.8.0.1/32"]
-allow_direct = true
-default = "direct"
-`)
-	if err := CheckSupported(ok); err != nil {
-		t.Errorf("remote listener: %v", err)
-	}
-	bad := mustParse(t, `name = "cuttle-test"
-[proxy]
-default = "direct"
-[proxy.remote]
-sources = ["10.8.0.1/32"]
-default = "upstream:gw"
-[[upstream]]
-name = "gw"
-address = "10.8.0.6:3128"
-disclosure = "via"
-`)
-	if err := CheckSupported(bad); !errors.Is(err, ErrUnsupported) || !strings.HasPrefix(err.Error(), "proxy.remote.default: ") {
-		t.Errorf("upstream remote default: %v", err)
-	}
-}

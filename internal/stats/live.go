@@ -19,6 +19,10 @@ const (
 	DecisionsTotal           = "decisions_total"
 	OutcomesTotal            = "outcomes_total"
 	BytesTotal               = "bytes_total"
+	UpstreamOutcomesTotal    = "upstream_outcomes_total"
+	// UpstreamState is a gauge per upstream and state: 1 for the current
+	// state, 0 for the others (design 0003 D8).
+	UpstreamState = "upstream_state"
 )
 
 // Live is a set of counters keyed by name and labels. Labels are bounded:
@@ -76,6 +80,11 @@ func (l *Live) Counter(name string, labels ...string) *atomic.Int64 {
 // Add adds n to a counter.
 func (l *Live) Add(n int64, name string, labels ...string) {
 	l.Counter(name, labels...).Add(n)
+}
+
+// Set stores v in a counter, for gauges.
+func (l *Live) Set(v int64, name string, labels ...string) {
+	l.Counter(name, labels...).Store(v)
 }
 
 // Get returns a counter's value, 0 if it does not exist.

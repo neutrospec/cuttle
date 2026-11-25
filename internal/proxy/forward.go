@@ -11,16 +11,17 @@ import (
 	"strings"
 	"syscall"
 
+	"squid/internal/policy"
 	"squid/internal/stats"
 )
 
 // errProxyAuth marks an origin's 407, which never reaches a client.
 var errProxyAuth = errors.New("next hop answered 407")
 
-// forward relays a plain-HTTP request on a direct route through
-// httputil.ReverseProxy and the direct transport of the client's class
-// (design 0002 D5).
-func (p *Proxy) forward(w http.ResponseWriter, r *http.Request, ex *exchange) {
+// forward relays a plain-HTTP request through httputil.ReverseProxy: on a
+// direct route with the direct transport of the client's class, on an
+// upstream route with the upstream's transport (design 0002 D5, 0003 D4).
+func (p *Proxy) forward(w http.ResponseWriter, r *http.Request, ex *exchange, rp *httputil.ReverseProxy) {
 	r = r.WithContext(context.WithValue(r.Context(), exchangeKey{}, ex))
 	if r.Body != nil && r.Body != http.NoBody {
 		r.Body = &countingBody{ReadCloser: r.Body, p: p, ex: ex}
@@ -45,7 +46,7 @@ func (p *Proxy) forward(w http.ResponseWriter, r *http.Request, ex *exchange) {
 			panic(v)
 		}
 	}()
-	ex.snap.rp[ex.source].ServeHTTP(cw, r)
+	rp.ServeHTTP(cw, r)
 	if ex.outcome == "" {
 		ex.status = cw.status
 		ex.outcome = OutcomeOK
@@ -78,7 +79,7 @@ func rewriteDirect(pr *httputil.ProxyRequest) {
 }
 
 // modifyResponse turns a 407 into cuttle's own 502: a 407 must never reach a
-// client (design 0002 D5).
+// client (design 0002 D5, 0003 D4). Every other response passes unchanged.
 func modifyResponse(res *http.Response) error {
 	if res.StatusCode == http.StatusProxyAuthRequired {
 		return errProxyAuth
@@ -86,32 +87,45 @@ func modifyResponse(res *http.Response) error {
 	return nil
 }
 
-// forwardError answers failures of the direct transport (design 0002 D6).
+// forwardError answers failures of the direct and upstream transports
+// (design 0002 D6, 0003 D6). On upstream routes cuttle's member names the
+// upstream as next-hop.
 func (p *Proxy) forwardError(w http.ResponseWriter, r *http.Request, err error) {
 	ex := exchangeFrom(r.Context())
 	if ex == nil || ex.outcome != "" {
 		return
 	}
+	nextHop, peer := "", ex.target
+	timeout := ex.snap.cfg.Proxy.ResponseTimeout
+	upstream := ex.d.Action == policy.ActionUpstream
+	if upstream {
+		nextHop, peer = ex.d.Upstream, "upstream "+ex.d.Upstream
+		timeout = ex.snap.upstreams[ex.d.Upstream].cfg.ResponseTimeout
+	}
+	var held *heldError
 	switch {
 	case errors.Is(err, errProxyAuth):
-		member := ex.snap.cfg.Name + "; received-status=407"
-		p.writeGenerated(w, http.StatusBadGateway, member, "next hop answered 407 ("+ex.target+")")
+		p.writeGenerated(w, http.StatusBadGateway, receivedMember(ex.snap.cfg.Name, http.StatusProxyAuthRequired, nextHop),
+			"next hop answered 407 ("+ex.target+")")
 		ex.status, ex.outcome = http.StatusBadGateway, OutcomeUpstreamStatus
 		ex.detail = "received-status=407"
 		p.finish(ex)
+	case upstream && (isDialError(err) || errors.As(err, &held)):
+		p.upstreamDialFailure(w, ex, err)
 	case isDialError(err):
 		p.dialFailure(w, ex, err)
 	case errors.Is(err, context.Canceled):
 		ex.outcome = OutcomeClientClosed
 		p.finish(ex)
 	case isTimeout(err):
-		p.reply(w, ex, http.StatusGatewayTimeout, "http_response_timeout", "no response head within "+ex.snap.cfg.Proxy.ResponseTimeout.String(),
-			"no response from "+ex.target, OutcomeTimeout)
+		p.replyHop(w, ex, http.StatusGatewayTimeout, "http_response_timeout", nextHop, "no response head within "+timeout.String(),
+			"no response from "+peer, OutcomeTimeout)
 	case errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, io.EOF):
-		p.reply(w, ex, http.StatusBadGateway, "connection_refused", "connection closed before the response",
-			"connection closed by "+ex.target, OutcomeRefused)
+		p.replyHop(w, ex, http.StatusBadGateway, "connection_refused", nextHop, "connection closed before the response",
+			"connection closed by "+peer, OutcomeRefused)
 	default:
-		p.reply(w, ex, http.StatusBadGateway, "http_protocol_error", "unparsable response", "unparsable response from "+ex.target, OutcomeUpstreamProto)
+		p.replyHop(w, ex, http.StatusBadGateway, "http_protocol_error", nextHop, "unparsable response",
+			"unparsable response from "+peer, OutcomeUpstreamProto)
 	}
 }
 
@@ -149,6 +163,9 @@ type countingWriter struct {
 func (c *countingWriter) WriteHeader(code int) {
 	if c.status == 0 && (code >= 200 || code == http.StatusSwitchingProtocols) {
 		c.status = code
+	}
+	if !c.generated {
+		c.ex.relayed = true
 	}
 	c.ResponseWriter.WriteHeader(code)
 }
@@ -191,6 +208,7 @@ func (c *countingWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if c.status == 0 {
 		c.status = http.StatusSwitchingProtocols
 	}
+	c.ex.relayed = true
 	return &countingConn{Conn: conn, p: c.p, ex: c.ex}, brw, nil
 }
 

@@ -370,12 +370,14 @@ allow_private = true
 	checkDecision(t, byTarget(t, all, "connect", "nas.cuttle.test:443"), map[string]string{"rule": "default", "outcome": "prohibited"})
 }
 
-// TestUnsupportedConfig checks that New refuses upstream routes, which M1.3
-// delivers, for local and remote clients.
-func TestUnsupportedConfig(t *testing.T) {
+// TestUpstreamRoutesAccepted checks that New, which refused upstream routes
+// before M1.3, accepts them for local and remote clients alike, together
+// with non-loopback listeners.
+func TestUpstreamRoutesAccepted(t *testing.T) {
 	for _, c := range []struct{ name, cfg string }{
 		{"upstream remote default", `name = "cuttle-test"
 [proxy]
+listen = ["127.0.0.1:18080", "10.8.0.6:18080"]
 default = "direct"
 [proxy.remote]
 sources = ["10.8.0.1/32"]
@@ -398,19 +400,24 @@ disclosure = "via"
 default = "direct"
 [[upstream]]
 name = "gw"
-address = "10.8.0.6:3128"
-disclosure = "via"
+address = "proxy.internal.example:8080"
+disclosure = "none"
 [[rule]]
 domains = ["internal.example"]
 action = "upstream:gw"
 `},
 	} {
-		ln, _ := net.Listen("tcp", "127.0.0.1:0")
-		_, err := New(mustParse(t, c.cfg), Deps{Network: testenv.NewNet(), SelfAddrs: testenv.SelfAddrs, Listeners: []net.Listener{ln}})
-		ln.Close()
-		if !errors.Is(err, ErrUnsupported) {
-			t.Errorf("%s: %v", c.name, err)
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
 		}
+		p, err := New(mustParse(t, c.cfg), Deps{Network: testenv.NewNet(), SelfAddrs: testenv.SelfAddrs, Listeners: []net.Listener{ln}})
+		if err != nil {
+			t.Errorf("%s: %v", c.name, err)
+		} else if st := p.Upstreams(); len(st) != 1 || st[0].Name != "gw" || st[0].State != StateUp {
+			t.Errorf("%s: upstream states %+v", c.name, st)
+		}
+		ln.Close()
 	}
 }
 
