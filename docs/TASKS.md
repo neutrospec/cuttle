@@ -66,15 +66,16 @@ Decisions for TASK-0010 (2026-11-25):
 ### TASK-0011 — M2.2 admin access
 
 - Milestone: M2.2
-- Status: implement
+- Status: review
 - Iteration: 1/3
-- Workers: implementer on a T3 worktree branch, in parallel with TASK-0010
-- Base: this board update
-- Candidate: none
-- Evidence: none
-- Findings: none
-- Next action: implementer — build M2.2 (0005 A1–A7) with T0 and T1 and
-  return the candidate commit
+- Workers: implementer done on branch `t3/admin-access-auth`; fresh
+  reviewer pending
+- Base: `f94f8e7`
+- Candidate: `fe704d9` (tree `dc68654`)
+- Evidence: implementer ran `scripts/gate t0` and `t1` on `dc68654`, both
+  pass; 34 mutations on the security behavior each fail their test
+- Findings: none yet
+- Next action: reviewer — risk-based review of `f94f8e7..fe704d9`
 
 Decisions for TASK-0011 (2026-11-25):
 
