@@ -350,8 +350,20 @@ Move resolved items to Closed with their resolving commit or evidence.
     Both settled in TASK-0007 (M1.4): 0003 D5 says "fields that reveal a
     hop", the D6 known limit notes what `splitMembers` drops and trims,
     and `TestHTTPDirect` checks that `HTTP_USER_AGENT` arrives.
+  - M-R1–M-R4 (from the TASK-0007 re-check): M-R1 (implementer): assert
+    exit 1, the "cannot reach the running service at <path>" message, and
+    the socket path for `status` and `reload` with a private directory but
+    no socket and with a missing directory. M-R2 (design, M2): 0006 D6
+    adds up to 5 s drain + 1 s handler wait + 2 s statistics flush = 8 s
+    once M2 lands, leaving no slack for P5; state how the steps overlap or
+    shorten one bound. M-R3 (implementer, nit): move the `upgrade` helper
+    in `internal/proxy/live_test.go` above the TestUpgradedConnections doc
+    comment. M-R4 (implementer, optional): `ctlSrv.Close()` does not wait
+    for a reload in progress, so its `reloaded` line can follow `stopped`;
+    take `s.reloadMu` before logging `stopped`.
 - Next action: orchestrator — include the open items (V4–V6, V8, V11,
-  V12, P1, W1–W3, Z2, Z4, and G1–G2) in the briefs of the stages they
+  V12, P1, W1–W3, Z2, Z4, G1–G2, and M-R1–M-R4) in the briefs of the
+  stages they
   affect; the producer closes each item with the commit that settles it.
   The M1.4 items, R5 with the C13 remainder, the per-request source
   recheck of 0003 D10 with N5, the bind retry of V1, Z3, W-R1, and W-R2,
