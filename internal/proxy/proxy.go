@@ -72,6 +72,10 @@ type Deps struct {
 	Logger *slog.Logger
 	// Live receives the live counters; New creates one when nil.
 	Live *stats.Live
+	// Stats receives each completed decision and samples the bytes of open
+	// tunnels and exchanges for the hourly statistics; nil records nothing
+	// (design 0005 D4).
+	Stats *stats.Recorder
 	// Clock is the time source of the unreachable-upstream hold and of
 	// interface state times and demotion; nil means time.Now. Tests inject
 	// a clock (design 0003 U11, 0008 D9).
@@ -127,6 +131,7 @@ type Proxy struct {
 	deps Deps
 	log  *slog.Logger
 	live *stats.Live
+	rec  *stats.Recorder
 	snap atomic.Pointer[snapshot]
 	srv  *http.Server
 
@@ -273,6 +278,7 @@ func New(cfg *config.Config, deps Deps) (*Proxy, error) {
 		deps:    deps,
 		log:     deps.Logger,
 		live:    deps.Live,
+		rec:     deps.Stats,
 		tunnels: map[tracked]struct{}{},
 		warn:    newWarnLimiter(deps.Logger),
 		done:    make(chan struct{}),

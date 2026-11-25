@@ -1,5 +1,6 @@
-// Package stats holds cuttle's in-memory live counters (design 0002 D7). The
-// hourly SQLite statistics arrive in M2.
+// Package stats holds cuttle's in-memory live counters (design 0002 D7) and
+// the hourly per-host statistics: the in-memory aggregator, the SQLite
+// store, and the flusher between them (design 0005 D1-D4).
 package stats
 
 import (
@@ -30,6 +31,10 @@ const (
 	// InterfaceBytesTotal counts the bytes of each decision whose
 	// interface field is not empty, by interface and direction.
 	InterfaceBytesTotal = "interface_bytes_total"
+	// StatsWriteErrorsTotal counts failed statistics flushes, and
+	// StatsFoldedTotal the records folded into host * (design 0005 D4).
+	StatsWriteErrorsTotal = "stats_write_errors_total"
+	StatsFoldedTotal      = "stats_folded_total"
 )
 
 // Live is a set of counters keyed by name and labels. Labels are bounded:

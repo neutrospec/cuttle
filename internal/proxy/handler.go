@@ -401,6 +401,11 @@ func (p *Proxy) finish(ex *exchange) {
 	if ex.decided && ex.d.Action == policy.ActionUpstream {
 		p.live.Add(1, stats.UpstreamOutcomesTotal, "upstream", ex.d.Upstream, "outcome", ex.outcome)
 	}
+	// Statistics record decisions with a host; malformed requests and
+	// refused targets have none (design 0005 D1).
+	if ex.decided {
+		p.rec.Complete(ex, ex.kind == policy.KindConnect, failedOutcomes[ex.outcome])
+	}
 	if !ex.decided {
 		action = ""
 	}
@@ -435,6 +440,31 @@ func (p *Proxy) finish(ex *exchange) {
 	}
 	p.log.LogAttrs(context.Background(), slog.LevelInfo, "decision", attrs...)
 }
+
+// failedOutcomes are the outcomes that count as failures in the statistics
+// (design 0005 D1).
+var failedOutcomes = map[string]bool{
+	OutcomeLoop: true, OutcomeDNSError: true, OutcomeProhibited: true, OutcomeRefused: true,
+	OutcomeTimeout: true, OutcomeUnavailable: true, OutcomeNoInterface: true,
+	OutcomeUpstreamStatus: true, OutcomeUpstreamProto: true, OutcomeInternal: true,
+}
+
+// StatsKey returns the exchange's statistics key (design 0005 D1). The
+// decision fields are set before the recorder sees the exchange, and the
+// interface before any byte is counted.
+func (ex *exchange) StatsKey() stats.RowKey {
+	return stats.RowKey{
+		Host:      ex.d.Target.Host,
+		Action:    ex.d.Action.String(),
+		Upstream:  ex.d.Upstream,
+		Rule:      ex.d.Rule,
+		Source:    ex.source.String(),
+		Interface: ex.ifaceName(),
+	}
+}
+
+// StatsBytes returns the bytes counted so far.
+func (ex *exchange) StatsBytes() (up, down int64) { return ex.up.Load(), ex.down.Load() }
 
 // addBytes counts relayed bytes for the exchange and the live counters as
 // each write completes.

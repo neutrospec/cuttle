@@ -186,7 +186,7 @@ go list -deps ./cmd/cuttle >"$deps"
 rc=0
 grep -E 'internal/testenv|^golang\.org/x/net/' "$deps" || rc=$?
 test "$rc" -eq 1
-out=$(go list -deps -f '{{if .CgoFiles}}{{.ImportPath}}{{end}}' ./cmd/cuttle)
+out=$(CGO_ENABLED=1 go list -deps -f '{{if .CgoFiles}}{{.ImportPath}}{{end}}' ./cmd/cuttle)
 test -z "$out"
 CGO_ENABLED=0 go build -o /dev/null ./cmd/cuttle
 ```
@@ -201,10 +201,12 @@ status 1, no match; status 0 lists a forbidden package, and status 2 means
 `vendor/golang.org/x/net/...` packages, which every `net/http` program
 links, do not start with `golang.org` and pass. The last three commands
 show that cuttle uses no cgo ([0008 D16][d8-16]): the `go list` command
-runs in the default environment, where cgo is enabled, and lists every
-linked package that has cgo files, because `CGO_ENABLED=0 go build`
-silently leaves out a file that imports `C` and fails only when another
-file refers to it; the build then shows that cuttle builds without cgo.
+sets `CGO_ENABLED=1` itself and lists every linked package that has cgo
+files, because `CGO_ENABLED=0 go build` silently leaves out a file that
+imports `C` and fails only when another file refers to it. With
+`CGO_ENABLED=0` in the caller's environment, `go list` would leave such
+files out as well and list nothing, so the command does not rely on the
+environment. The build then shows that cuttle builds without cgo.
 
 T1:
 

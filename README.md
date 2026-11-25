@@ -60,9 +60,8 @@ dropping tunnels
 [0004 D6](docs/design/0004-configuration-and-reload.md#d6-reload)). A
 non-loopback listener that cannot bind, for example while a private link
 is down, is retried every 30 s and shows as `retrying`. `SIGTERM` drains
-in-flight requests for up to 5 s and closes tunnels. The statistics, the
-dashboard, and the settings page arrive in later stages of the
-[roadmap](docs/ROADMAP.md).
+in-flight requests for up to 5 s and closes tunnels. The dashboard and the
+settings page arrive in later stages of the [roadmap](docs/ROADMAP.md).
 
 Admin access is implemented for stage M2.2
 ([0005 D5–D8](docs/design/0005-statistics-and-admin.md#d5-admin-listener-and-host-allowlist)).
@@ -75,6 +74,15 @@ Sessions live in memory and end after 30 idle minutes, after 12 hours, at
 logout, when the password changes, and when cuttle restarts. After three
 failed sign-ins in a row, each attempt must wait, from 1 s doubling up to
 300 s.
+
+Stage M2.1 records hourly per-host statistics in
+`~/.local/state/cuttle/stats.db`: requests, failures, and bytes per host,
+route, rule, source, and interface, written every 10 s and at shutdown,
+and kept for `stats.retention_days`
+([0005 D1–D4](docs/design/0005-statistics-and-admin.md#d1-recorded-data)).
+The proxy never waits for the database; when it cannot be opened,
+`cuttle status` shows `stats  unavailable` with the reason and the proxy
+serves without statistics.
 
 Interface selection is implemented for stage M1.5
 ([design 0008](docs/design/0008-interface-selection.md)); its check on

@@ -109,8 +109,10 @@ type Status struct {
 	Counters map[string]int64 `json:"counters"`
 	// Tunnels lists up to 500 active tunnels and upgraded connections.
 	Tunnels []Tunnel `json:"tunnels"`
-	// Stats is the statistics state; "disabled" until M2.
+	// Stats is the statistics state: enabled, or unavailable with the
+	// reason in StatsErr (design 0005 D4).
 	Stats        string `json:"stats"`
+	StatsErr     string `json:"stats_error,omitempty"`
 	Log          Log    `json:"log"`
 	RlimitNofile uint64 `json:"rlimit_nofile"`
 }

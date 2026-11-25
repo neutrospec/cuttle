@@ -67,6 +67,11 @@ type envOptions struct {
 	interfaces  *testenv.Interfaces
 	timers      *testenv.Timers
 	selfChanged func()
+	// stats is the statistics recorder; nil records nothing (design 0005
+	// D4).
+	stats *stats.Recorder
+	// live, when set, is the instance's live counter set.
+	live *stats.Live
 }
 
 // env is one in-process cuttle instance with mock origins behind the test
@@ -185,6 +190,8 @@ func (e *env) start(cfgText string, opt envOptions) {
 		Logger:      logx.NewLogger(w, slog.LevelDebug),
 		Clock:       opt.clock,
 		SelfChanged: opt.selfChanged,
+		Stats:       opt.stats,
+		Live:        opt.live,
 	}
 	if opt.interfaces != nil {
 		deps.Interfaces = opt.interfaces

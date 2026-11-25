@@ -153,7 +153,7 @@ control   /var/folders/<id>/T/cuttle/control.sock     TMPDIR
               "action": "direct", "source": "local",
               "interface": "eth-a", "age_s": 42,
               "up": 3120, "down": 88000}],
- "stats": "disabled",
+ "stats": "enabled",
  "log": {"path": "/Users/me/.local/state/cuttle/cuttle.log",
          "rotation_failures": 0},
  "rlimit_nofile": 10240}
@@ -171,8 +171,10 @@ control   /var/folders/<id>/T/cuttle/control.sock     TMPDIR
   decision-log value of [0008 D15][d8-15]: a configured interface name,
   `other`, or empty. `interfaces` lists the `[[interface]]` definitions in
   configuration order with their state, and is empty without
-  definitions; it never contains a MAC address. `stats` is `disabled`
-  until M2.
+  definitions; it never contains a MAC address. `stats` is `enabled`,
+  or `unavailable` when the database could not be opened, migrated, or
+  written at start, with the reason in `stats_error`; the text form
+  prints `stats  unavailable: <reason>` ([0005 D4][d5-4]).
 - `log.rotation_failures` counts the failed rotations and reopens since
   start (D7), so an operator sees a log that cannot rotate without reading
   the launchd file.
@@ -218,12 +220,19 @@ On `SIGTERM` or `SIGINT`:
    `shutdown`. An exchange still in flight when the drain ends also logs
    `shutdown`. Then wait, for at most 1 s, until every request handler
    has returned, so every decision line is written before `stopped`.
-5. Flush statistics within 2 s and close SQLite.
+5. Flush statistics within 1 s and close SQLite. The flush writes every
+   pending row, including the final bytes and decisions of the tunnels
+   that step 4 closed, so it cannot start before step 4 ends; a write
+   still waiting for a lock when the second ends gives up, and its rows
+   are lost ([0005 D4][d5-4]).
 6. Log `stopped` and exit with status 0.
 
-The budget is 8 s, below the formula's `stop_timeout 15`; launchd's default
-of 5 s observed in research is too short
-([research 0001 §2][r1-2]). A second `SIGTERM` or `SIGINT` exits at once
+The steps take at most 5 s + 1 s + 1 s = 7 s, which leaves 1 s of P5's
+8 s for closing the log and exiting, and stays below the formula's
+`stop_timeout 15`; launchd's default of 5 s observed in research is too
+short ([research 0001 §2][r1-2]). A flush of the 20,000 keys that
+statistics hold at most before folding (0005 D4) took 72 ms in
+`TestStatsRowSize` without the race detector, so 1 s is ample. A second `SIGTERM` or `SIGINT` exits at once
 with status 1. `SIGHUP` reloads the configuration. A Go panic exits with
 status 2 and writes to stderr, which launchd sends to
 `$(brew --prefix)/var/log/cuttle.log`.
