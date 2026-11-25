@@ -41,18 +41,43 @@ A closed task becomes one line under Closed:
 
 ## Active
 
-### TASK-0013 — M2.3 dashboard and M2.4 settings
+### TASK-0014 — M1 client check run
 
-- Milestone: M2.3 and M2.4
-- Status: implement
+- Milestone: M1 close
+- Status: test
 - Iteration: 1/3
-- Workers: implementer on a T3 worktree branch, alongside TASK-0012
-- Base: this board update
+- Workers: tester on `main`, writing only `docs/COMPATIBILITY.md`
+- Base: `169df68`
 - Candidate: none
 - Evidence: none
 - Findings: none
-- Next action: implementer — build the dashboard and the settings page
-  (0005 A8–A10) with T0 and T1 and return the candidate commit
+- Next action: tester — run `go run ./tools/mockenv m1-check` with
+  headless Chrome and `/usr/bin/curl` and record the results and the V6
+  Local Network Access observation in COMPATIBILITY.md
+
+Decisions for TASK-0014 (2026-11-25):
+
+- The tester runs the tooling landed in TASK-0012 (0007 D8). The user
+  approved headless Chrome with a throwaway profile and the mock keychain.
+- If Chrome sends the private-literal fetch through cuttle with no Local
+  Network Access request, the orchestrator returns the 0003 D11 decision
+  to the user (OI-0006 V6).
+
+### TASK-0013 — M2.3 dashboard and M2.4 settings
+
+- Milestone: M2.3 and M2.4
+- Status: review
+- Iteration: 1/3
+- Workers: implementer done on branch `t3/dashboard-settings-admin`; fresh
+  reviewer running
+- Base: `cf2d682`
+- Candidate: `9b4d737` (tree `9825b25`)
+- Evidence: implementer ran `scripts/gate t0` and `t1` on `9825b25`, both
+  pass; A10 `scripts/admin-check` with Chrome 158 headless passes; 13 of
+  13 mutations killed, including the settings session, CSRF, and
+  cross-origin checks
+- Findings: none yet
+- Next action: reviewer — risk-based review of `cf2d682..9b4d737`
 
 Decisions for TASK-0013 (2026-11-25):
 
@@ -64,32 +89,6 @@ Decisions for TASK-0013 (2026-11-25):
 - A10 runs headless Chrome with a throwaway profile and the mock keychain,
   as approved for the M1 client check.
 
-### TASK-0012 — M1 close: mockenv and the client check tooling
-
-- Milestone: M1 close
-- Status: review
-- Iteration: 1/3
-- Workers: implementer done on branch `t3/mockenv-client-check`; fresh
-  reviewer pending
-- Base: `5d47322`
-- Candidate: `3753185` (tree `ae46bcd`)
-- Evidence: implementer ran `scripts/gate t0` and `t1` on `ae46bcd`, both
-  pass; three headless Chrome smoke runs of `mockenv m1-check`, the last
-  one passing every case; early V6 observation: Chrome sent a private
-  literal through cuttle with no Local Network Access request
-- Findings: none yet
-- Next action: reviewer — risk-based review of `5d47322..3753185`
-
-Decisions for TASK-0012 (2026-11-25):
-
-- Milestone-close checks run alongside M2 (AGENTS.md). This task builds
-  the tooling; a tester then runs the M1 client check with headless Chrome
-  and `/usr/bin/curl`, which the user approved, and the device check I20
-  runs with the user separately (OI-0008).
-- Also in scope: OI-0006 V4 (isolate headless Chrome's background requests
-  in mockenv sessions) and V6 (the Local Network Access observation in the
-  M1 client check).
-
 ## Closed
 
 The history was rewritten on 2026-11-25 (TASK-0003) to remove local
@@ -98,6 +97,10 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0012 — M1 close: mockenv and the client check tooling — landed
+  `169df68`, gates: T0 T1 @ `607aa63`; reviewed tree `ae46bcd` (iteration
+  1 of 3); follow-ups S-R1–S-R2 in OI-0006; the client check run is
+  TASK-0014
 - TASK-0010 — M2.1 statistics — landed `3b3a836`, gates: T0 T1 @ `9bfd095`;
   reviewed tree `2d0b06c` (iteration 1 of 3); follow-ups Q-R1–Q-R8 in
   OI-0006
