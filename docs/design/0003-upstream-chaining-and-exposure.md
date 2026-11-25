@@ -443,16 +443,17 @@ allow_private = true
 An edge instance sends restricted destinations over a private link to a
 gateway instance, which sends them through its network's egress proxy. A
 private link is any network path between the two sides, such as a VPN,
-WireGuard, Tailscale, or an SSH tunnel. In the cases below, one end of the
-link is a server or router on the edge machine's LAN, and the other end is
-the gateway machine.
+WireGuard, or Tailscale. One end of the link is the gateway machine. The
+other end is either a server or router on the edge machine's LAN or the
+edge machine itself.
 
 ```text
 client (browser or curl) on the edge machine
   -> edge instance 127.0.0.1:3128 (name cuttle-edge)
      restricted domains -> upstream "gateway" 10.8.0.6:3128,
                            disclosure = "via"
-  -> private link (edge-side server or router <-> gateway machine)
+  -> private link (edge-side server or router, or the edge machine itself,
+                   <-> gateway machine)
   -> gateway instance 10.8.0.6:3128 (name cuttle-gateway)
      restricted domains -> upstream "egress" proxy.internal.example:8080,
                            disclosure = "none"
@@ -466,22 +467,29 @@ intermediary (D5), and it attributes all of this traffic to the gateway
 machine. Operators must make sure that the network's policy allows
 relaying requests from other machines through the gateway machine.
 
-Which source address the gateway instance sees depends on the edge-side
-server or router:
+Which source address the gateway instance sees depends on where the link
+ends on the edge side:
 
 | Case | Source seen by the gateway instance | `proxy.remote.sources` | Consequence |
 | --- | --- | --- | --- |
 | Routed: the server forwards edge LAN traffic into the link unchanged | The edge machine's own LAN address, such as `192.168.1.20` | That address as `/32` | Only that machine is admitted. Keep its address fixed, for example with a DHCP reservation. Inference: the gateway side of the link must route the edge LAN back into the link, or replies will not return; with WireGuard, for example, the gateway machine's peer entry lists the edge LAN in `AllowedIPs`. |
 | NAT: the server masquerades edge LAN traffic | The server's link address, such as `10.8.0.1`, for every device on the edge LAN | That address as `/32` | Every device on the edge LAN can use the gateway instance's remote routes, which reach only the egress proxy for restricted destinations, attributed to the gateway machine. Restrict this at the server's firewall or switch to routing. |
+| Edge machine: the link ends on the edge machine itself, for example a VPN client or Tailscale there | The edge machine's own link address, such as `10.8.0.2` | That address as `/32` | Only that machine is admitted, so a single-address allowlist works. Keep its link address fixed in the link's configuration. |
 
 The observation that tells them apart: start the gateway instance with a
 placeholder `sources = ["192.0.2.1/32"]`, send one request from the edge
 machine through the edge instance, for example
 `curl -x http://127.0.0.1:3128 https://wiki.internal.example/`, and read
 the gateway log's rejected-source warning. A `source=` with the edge
-machine's LAN address means routed; the server's link address means NAT. A
-second device on the edge LAN shows the same address only under NAT. Then
-set `sources` and run `cuttle reload`.
+machine's own link address means the link ends on that machine; its LAN
+address means routed; the server's link address means NAT. A second device
+on the edge LAN shows the same address only under NAT. Then set `sources`
+and run `cuttle reload`.
+
+A forwarding that delivers connections to the gateway listener from the
+gateway machine's own loopback, such as `ssh -L` terminating on the
+gateway, makes the edge a local client, which bypasses the remote-client
+policy (D10). Such a setup is unsupported.
 
 Edge `~/.config/cuttle/config.toml`:
 
@@ -582,9 +590,10 @@ The maintainer's own setup is one instance of this deployment:
 | Original client | Chrome, Safari, or curl on the home Mac |
 
 The configurations above apply with this setup's names and addresses.
-Whether the home server routes or masquerades home LAN traffic, and
-assumptions A1–A4 about the corporate proxy and the VPN, are checked on
-this setup in [OI-0001][oi].
+The VPN ends on a home server or router, not on the home Mac, so the
+routed or NAT case applies. Which of the two, and assumptions A1–A4 about
+the corporate proxy and the VPN, are checked on this setup in
+[OI-0001][oi].
 
 ## Acceptance criteria
 

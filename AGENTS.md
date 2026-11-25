@@ -175,7 +175,8 @@ it.
 Use generated fixtures and controlled test destinations. Keep credentials,
 private keys, real traffic captures, and environment-specific artifacts outside
 Git.
-Tracked files never contain usernames, machine-specific paths, private
-hostnames or addresses, or local time zones. Keep such values in an
-untracked `.env` file; `.env.example` lists each variable with a
-placeholder.
+Tracked files never contain real usernames, machine-specific paths, real
+private hostnames or addresses, or local time zones. Documentation uses
+reserved example names and addresses or clearly labelled placeholders. Keep
+real values in an untracked `.env` file; `.env.example` lists each variable
+with a placeholder.

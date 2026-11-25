@@ -20,7 +20,7 @@ commits and the research notes use older wording; the
 - **Restricted destinations.** Destinations reachable only from inside
   another network or through its egress proxy.
 - **Private link.** The network path between instances, such as a VPN,
-  WireGuard, Tailscale, or an SSH tunnel.
+  WireGuard, or Tailscale.
 - **Edge → gateway → egress chain.** The chained deployment of
   [design 0003 D13][d3-13]. The edge instance sends restricted
   destinations over a private link to a gateway instance, which forwards

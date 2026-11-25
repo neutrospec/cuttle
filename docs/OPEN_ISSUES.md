@@ -157,7 +157,7 @@ Move resolved items to Closed with their resolving commit or evidence.
     (`DefaultMaxHeaderValueCount`) in 0002 D2 and build the C11 60 KiB head
     from fewer than 500 field lines.
   - V8 (design, docs): wording fixes in 0002 l.219 (`RequestURI` prefixes
-    `scheme:` for `//` opaque values), 0003 l.153–155 and l.634 (line
+    `scheme:` for `//` opaque values), 0003 l.153–155 and l.643 (line
     numbers after TASK-0002), OI-0001 step 2, the 0007 D7
     `check-disclosure` flags, the 0007 D8 chain evidence, 0005 A10
     "T2-lite", the COMPATIBILITY curl M3 WebSocket cell, and ragged wraps
