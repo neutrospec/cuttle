@@ -1,0 +1,5 @@
+# want: 5 proxy.response_timeout: invalid duration
+name = "cuttle-test"
+[proxy]
+default = "direct"
+response_timeout = "10 seconds"

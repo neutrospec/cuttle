@@ -1,0 +1,5 @@
+# want: 5 proxy.defualt: unknown key
+name = "cuttle-test"
+[proxy]
+default = "direct"
+defualt = "block"

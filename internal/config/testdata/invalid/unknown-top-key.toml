@@ -1,0 +1,6 @@
+# want: 3 rules: unknown key
+name = "cuttle-test"
+[[rules]]
+action = "block"
+[proxy]
+default = "direct"

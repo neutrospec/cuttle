@@ -1,0 +1,6 @@
+# want: 6 admin.listen: not a loopback address
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[admin]
+listen = "192.0.2.1:3129"

@@ -1,0 +1,5 @@
+# want: 4 proxy.listen[2]: equals the default admin.listen
+name = "cuttle-test"
+[proxy]
+listen = ["localhost:18080", "127.0.0.1:3129"]
+default = "direct"

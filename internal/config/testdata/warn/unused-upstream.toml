@@ -1,0 +1,8 @@
+# warn: 6 upstream[1].name: not used by any action
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[upstream]]
+name = "gateway"
+address = "10.8.0.6:3128"
+disclosure = "via"

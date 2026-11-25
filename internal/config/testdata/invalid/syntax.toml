@@ -1,0 +1,4 @@
+# want: 4 : TOML syntax
+name = "cuttle-test"
+[proxy]
+default = "direct

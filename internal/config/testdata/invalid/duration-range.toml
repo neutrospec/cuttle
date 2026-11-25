@@ -1,0 +1,5 @@
+# want: 5 proxy.connect_timeout: out of range
+name = "cuttle-test"
+[proxy]
+default = "direct"
+connect_timeout = "20m"

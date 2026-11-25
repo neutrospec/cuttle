@@ -79,7 +79,9 @@ control   /var/folders/<id>/T/cuttle/control.sock     TMPDIR
 | `cuttle version`, `cuttle --version` | Print the version and Go version |
 
 - Exit status 0 means success, 1 failure, and 2 a usage error. Warnings
-  from `cuttle check` leave the status at 0.
+  from `cuttle check` leave the status at 0. `cuttle check` reports a file
+  that `cuttle serve` would refuse under D2, writable by group or others or
+  owned by another user, as an error.
 - `explain` reads the file, not the running service. `TARGET` is
   `host:port` for a tunnel, or an `http://` or `https://` URL, which maps to
   a plain-HTTP request or a tunnel to port 443. Example:
@@ -165,8 +167,17 @@ status 2 and writes to stderr, which launchd sends to
   `.1`, then opens a new file. Five rotated files bound the total at
   60 MiB. The writer is in-house and needs no dependency
   ([research 0001 §7][r1-7]).
-- The launchd file receives only output from before the log opens and
-  runtime panics, so it stays small without rotation.
+- A failed rotation never stops logging. When a rename keeps failing, the
+  writer keeps appending to the current file, which then grows past
+  10 MiB, and tries again after each further 10 MiB. When the file cannot
+  be reopened, that line is lost and the next write tries again. Every
+  failure is counted, and the first failure of each run of failures is
+  written to stderr, which under launchd is the launchd file. A current
+  file deleted by someone else is not a failure: the next rotation opens a
+  new one without shifting the rotated files.
+- The launchd file receives only output from before the log opens, the
+  first failure of each run of log failures, and runtime panics, so it
+  stays small without rotation.
 - Levels: `debug` adds tunnel-open and connection events; `info` has
   decisions and lifecycle events; `warn` has rejected sources (rate
   limited), retrying listeners, and statistics write errors; `error` has

@@ -41,7 +41,7 @@ All mocks live in `internal/testenv` and are started by tests on
 | Mock | Behavior | Records |
 | --- | --- | --- |
 | CA set | Per test run: an origin root and an inspection root CA, ECDSA P-256. Leaves have a SAN (names, and `127.0.0.1` where needed), the serverAuth EKU, and 24-hour validity. Kept in memory; written as PEM to `t.TempDir()` only for curl. | — |
-| HTTPS origin | TLS with a leaf for `*.cuttle.test`. `/echo` returns method, path, field lines, and body; `/bytes?n=` sends n bytes; `/sink` counts an upload; `/slow?ms=` delays the response; `/chunked` answers with a chunked body and a trailer; `/ws` is a WebSocket echo. | Raw request bytes; connections |
+| HTTPS origin | TLS with a leaf for `*.cuttle.test`. `/echo` returns method, path, field lines, and body; `/bytes?n=` sends n bytes; `/sink` counts an upload; `/slow?ms=` delays the response; `/status?code=` answers with that status, and with `407` only in a test that enables it, which `tools/mockenv` never does (D6); `/chunked` answers with a chunked body and a trailer; `/ws` is a WebSocket echo. | Raw request bytes; connections |
 | HTTP origin | The same endpoints over plain HTTP, `/ws` for `ws://`, and `/ws.html`, a page that opens `ws://<host>/ws` and sends one message. | Same |
 | Recording upstream | A raw-socket HTTP proxy. Per target name the test selects `tunnel` (`200`), a status (`201`, `299`, `200` with `Content-Length: 3`, `403`, `407`, `502`, `504`), `buffered` (`200` followed at once by server bytes), `silent` (reads the head, never answers), or `reset`. Absolute-form requests, upgrades included, are forwarded to the origin unchanged, or answered with the chosen status. In `tools/mockenv` only, it can also pass an allowlist of public names (default `example.org`) through to the internet for the M3 matrix; tests never enable this. | Every request head and body, byte for byte, per connection and in order |
 | Inspecting egress mock | Accepts plain-HTTP proxy connections. On `CONNECT` it answers `200`, terminates TLS with a leaf for the SNI name signed by the inspection root CA, and forwards the decrypted HTTP/1.1 requests to the origin, trusting the origin root. Names on its refuse list get `403`. Absolute-form `http://` is proxied normally. | Raw `CONNECT` heads; decrypted request lines and `Host` |
@@ -160,14 +160,27 @@ T0, from the repository root:
 
 ```sh
 go version
-test -z "$(gofmt -l .)"
+out=$(gofmt -l .)
+test -z "$out"
 go mod tidy -diff
 go vet ./...
 go build ./...
 go test -short -count=1 ./...
-test -z "$(git ls-files '*.pem' '*.key' '*.crt' '*.p12')"
-test -z "$(go list -deps ./cmd/cuttle | grep -E 'internal/testenv|x/net/websocket')"
+out=$(git ls-files '*.pem' '*.key' '*.crt' '*.p12')
+test -z "$out"
+deps=$(mktemp)
+go list -deps ./cmd/cuttle >"$deps"
+rc=0
+grep -E 'internal/testenv|x/net/websocket' "$deps" || rc=$?
+test "$rc" -eq 1
 ```
+
+Output that must be empty is captured first, by an assignment or into a
+file that the script removes on exit: under `set -e` both fail with their
+command, while a failure inside `test -z "$(...)"` or on the left of `&&`
+would not stop the gate. The dependency check passes only on `grep`'s exit
+status 1, no match; status 0 lists a forbidden package, and status 2 means
+`grep` itself failed.
 
 T1:
 
@@ -273,7 +286,7 @@ macOS versions, the tested commit, and evidence links.
 | E3 | Git tracks no key or certificate file. | T0 command above |
 | E4 | `tools/mockenv` rejects any `407` mode. | T1 `TestMockenvRefuses407` |
 | E5 | The full T1 run completes within its 10-minute timeout. | T1 command above |
-| E6 | The binary-test helper refuses to start cuttle unless `HOME`, every `XDG_*` directory, and `XDG_RUNTIME_DIR` are test-owned temporary directories, `proxy.listen` avoids 3128 and 3129, and `admin.listen` is `""` or a port the test chose. | T0 `TestBinaryHelperIsolation` |
+| E6 | The binary-test helper refuses to start cuttle unless `HOME`, every `XDG_*` directory, and `XDG_RUNTIME_DIR` are test-owned temporary directories, and, for `cuttle serve`, the only command that binds, the configuration exists, `proxy.listen` avoids 3128 and 3129, and `admin.listen` is `""` or a port the test chose. Commands that bind nothing may read the unchanged starter file, as K2's `cuttle check` does. | T0 `TestBinaryHelperIsolation` |
 | E7 | `mockenv check-disclosure` reports and fails on a planted disclosure field, a value with an instance name or the client address, a changed target, and a changed body, and passes on identical records. | T1 `TestCheckDisclosure` |
 
 ## Alternatives considered

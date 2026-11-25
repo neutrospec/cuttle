@@ -183,7 +183,8 @@ Move resolved items to Closed with their resolving commit or evidence.
 - Origin: TASK-0001 iteration 3 review of candidate `a1e1e61`, verdict
   "approve with minor fixes", findings V1–V12. Landed in `dc52251`. P1
   comes from the TASK-0002 review.
-- Affected milestones: M1.2, M1.3, and M1 close; V5 also M3.2; P1 M3.3.
+- Affected milestones: M1.2, M1.3, M1.4, and M1 close; V5 also M3.2; P1
+  M3.3.
 - Iterations used: 3 of 3, so the fixes move to the first M1 task instead of
   another design loop.
 - Responsible step: design for wording and criteria, implementer for tests.
@@ -198,7 +199,9 @@ Move resolved items to Closed with their resolving commit or evidence.
     `X-Forwarded-*` fields pass unchanged on `disclosure = "via"` routes,
     on the CONNECT head and the plain-HTTP copy-back (U1, U5). Add an
     `HTTP_PROXY` environment check to C3 or drop the 0002 D5 claim that
-    every row has a check.
+    every row has a check. The `HTTP_PROXY` half is settled in `8af7956`
+    (TASK-0004): C3 and `TestHTTPDirect` check it. The `via` half remains
+    for M1.3.
   - V3 (design, implementer): check the unreachable hold in the handler
     before `ReverseProxy`, as for CONNECT, and close idle pooled connections
     when an upstream goes down (0003 D4, D8, U11).
@@ -219,7 +222,8 @@ Move resolved items to Closed with their resolving commit or evidence.
     return the decision to the user.
   - V7 (implementer): mention Go's 500 header-value cap
     (`DefaultMaxHeaderValueCount`) in 0002 D2 and build the C11 60 KiB head
-    from fewer than 500 field lines.
+    from fewer than 500 field lines. Settled in `8af7956` (TASK-0004):
+    0002 D2 and C11, `TestHeadSizeLimit`.
   - V8 (design, docs): wording fixes in 0002 D5 (the sentence that
     `RequestURI()` returns `URL.Opaque` unchanged, although it prefixes
     `scheme:` for `//` opaque values), 0003 D5 (where the disclosure filter
@@ -228,9 +232,13 @@ Move resolved items to Closed with their resolving commit or evidence.
     D8 chain evidence, 0005 A10 "T2-lite", the COMPATIBILITY curl M3
     WebSocket cell, and ragged wraps in 0003.
   - V9 (implementer): C4 sends the direct request before the block request,
-    because cuttle's own responses close the connection.
+    because cuttle's own responses close the connection. Settled in
+    `8af7956` (TASK-0004): 0002 C4, `TestHTTPReusedConnRoutesPerRequest`.
   - V10 (implementer): add a `/status?code=` endpoint to the mock origin for
-    C10; mockenv refuses 407 on it.
+    C10; mockenv refuses 407 on it. Settled in `8af7956` (TASK-0004): the
+    origin answers 407 only when a test sets `Allow407` (0007 D2, 0002 C10,
+    `TestHTTPExpectAnd407`, `TestOriginStatus`). E4, mockenv's own refusal,
+    is checked when M1 close builds `tools/mockenv`.
   - V11 (docs): add Consequences sections to records 0003–0007 or relax the
     convention in the design README.
   - V12 (design): note `proxy.remote.ports` in the 0003 D13 deployment notes
@@ -251,9 +259,16 @@ Move resolved items to Closed with their resolving commit or evidence.
     Instance entry (0004 D3, 0006 D5). In P1, say the edge LAN must be in
     the gateway side's `AllowedIPs` or the link's equivalent, and add to
     OI-0001 step 1: if no warning appears, see OI-0006 P1.
+  - R5 (from the TASK-0004 review; implementer at M1.4): after a `101`,
+    `httputil.ReverseProxy` owns the hijacked client connection. `Shutdown`
+    neither closes nor logs it, and no idle limit applies to it, so 0006
+    D6 step 4 and P5 need such upgraded connections tracked like tunnels.
+    The C13 remainder of 0002 D7 belongs to the same stage: socket-exact
+    plain-HTTP `up`, and exact totals after a `101`.
 - Next action: orchestrator — include V1–V12, P1, and W1–W3 in the first M1
   task brief; the producer closes each item with the commit that settles
-  it.
+  it. Include R5 and the C13 remainder of 0002 D7 (socket-exact plain-HTTP
+  `up`, exact totals after a `101`) in the M1.4 brief.
 
 ## Closed
 

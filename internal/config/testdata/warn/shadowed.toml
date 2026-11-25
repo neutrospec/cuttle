@@ -1,0 +1,15 @@
+# warn: 13 rule[2].domains[2]: repeats rule "restricted"
+name = "cuttle-test"
+[proxy]
+default = "direct"
+
+[[rule]]
+name = "restricted"
+domains = ["internal.example"]
+action = "block"
+
+[[rule]]
+name = "later"
+domains = ["other.example", "internal.example"]
+ports = [443]
+action = "direct"

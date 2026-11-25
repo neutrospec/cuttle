@@ -150,7 +150,9 @@ limits below. The same rule applies on every
 Disclosure fields are `Via`, `Forwarded`, every field whose name starts
 with `X-Forwarded-`, `X-Real-IP`, `Client-IP`, `True-Client-IP`,
 `X-Client-IP`, `X-Cluster-Client-IP`, `X-Originating-IP`,
-`CF-Connecting-IP`, `Fastly-Client-IP`, and `Proxy-Status`. One function in
+`CF-Connecting-IP`, `Fastly-Client-IP`, and `Proxy-Status`. Names match
+without regard to case and with `_` read as `-`, because some servers treat
+`X_Forwarded_For` as `X-Forwarded-For`. One function in
 `internal/proxy`, the disclosure filter, deletes them all from a header
 set. It is called from one place for each path: the plain-HTTP `Rewrite`
 and the `CONNECT` head writer (D3), on `direct` and `disclosure = "none"`
@@ -241,7 +243,7 @@ Limits:
 | --- | --- | --- | --- |
 | Request head | 30 s | fixed | Reading a client request head |
 | Keep-alive idle | 120 s | fixed | Between requests on a client connection |
-| Direct connect | 10 s | `proxy.connect_timeout` | TCP connect for a direct route, all addresses |
+| Direct connect | 10 s | `proxy.connect_timeout` | Name lookup and TCP connect for a direct route, all addresses |
 | Direct response | 60 s | `proxy.response_timeout` | Plain-HTTP response head from an origin |
 | Upstream connect | 10 s | `connect_timeout` in `[[upstream]]` | TCP connect to the upstream |
 | Upstream response | 60 s | `response_timeout` in `[[upstream]]` | Response head for `CONNECT` and plain HTTP |

@@ -1,0 +1,8 @@
+# want: 8 rule[1].allow_loopback: applies only to rules whose action is "direct"
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[rule]]
+hosts = ["localhost"]
+action = "block"
+allow_loopback = true

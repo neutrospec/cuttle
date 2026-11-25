@@ -1,0 +1,9 @@
+# want: 5 rule[1]: would match every destination
+name = "cuttle-test"
+[proxy]
+default = "block"
+[[rule]]
+name = "x"
+domains = []
+cidrs = []
+action = "direct"

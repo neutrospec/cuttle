@@ -1,0 +1,6 @@
+# want: 6 stats.retention_days: out of range 1-90
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[stats]
+retention_days = 91

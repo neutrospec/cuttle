@@ -1,0 +1,5 @@
+# want: 4 proxy.listen: must be an array
+name = "cuttle-test"
+[proxy]
+listen = "127.0.0.1:3128"
+default = "direct"

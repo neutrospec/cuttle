@@ -1,0 +1,11 @@
+# want: 9 rule[1].domains[2]: must be lowercase
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[rule]]
+name = "x"
+domains = [
+  "a.example",
+  "B.example",
+]
+action = "block"

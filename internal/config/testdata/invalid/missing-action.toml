@@ -1,0 +1,9 @@
+# want: 8 rule[2].action: required
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[rule]]
+hosts = ["a.example"]
+action = "block"
+[[rule]]
+hosts = ["b.example"]

@@ -1,0 +1,6 @@
+# want: 6 log.level: not debug, info, warn, or error
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[log]
+level = "verbose"

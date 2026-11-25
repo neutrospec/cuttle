@@ -1,0 +1,9 @@
+# want: 9 upstream[1].unreachable_hold: out of range
+name = "cuttle-test"
+[proxy]
+default = "upstream:gateway"
+[[upstream]]
+name = "gateway"
+address = "10.8.0.6:3128"
+disclosure = "via"
+unreachable_hold = "10m"

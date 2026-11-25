@@ -1,0 +1,54 @@
+#!/bin/sh
+# Runs the gate commands of design 0007 D7 from the repository root.
+#
+#   scripts/gate t0   formatting, module tidiness, vet, build, unit tests,
+#                     and the key-file and test-dependency checks
+#   scripts/gate t1   integration and binary tests with the race detector;
+#                     needs /usr/bin/curl or CUTTLE_CURL
+#
+# Each command is echoed before it runs. The script stops at the first
+# failing command and exits non-zero. Output that must be empty is captured
+# first, with a plain assignment or into a file, so that a failing command
+# fails the gate under set -e; a failure inside test -z "$(...)" or on the
+# left of && would not. The dependency check requires grep's exit status 1,
+# no match: 0 means a forbidden package is linked and prints it, and 2 means
+# grep itself failed.
+set -eu
+
+cd "$(dirname "$0")/.."
+
+t0() {
+	set -x
+	go version
+	out=$(gofmt -l .)
+	test -z "$out"
+	go mod tidy -diff
+	go vet ./...
+	go build ./...
+	go test -short -count=1 ./...
+	out=$(git ls-files '*.pem' '*.key' '*.crt' '*.p12')
+	test -z "$out"
+	deps=$(mktemp)
+	trap 'rm -f "$deps"' EXIT
+	go list -deps ./cmd/cuttle >"$deps"
+	rc=0
+	grep -E 'internal/testenv|x/net/websocket' "$deps" || rc=$?
+	test "$rc" -eq 1
+	{ set +x; } 2>/dev/null
+}
+
+t1() {
+	set -x
+	CUTTLE_REQUIRE_CURL=1 go test -race -count=1 -timeout 10m ./...
+	{ set +x; } 2>/dev/null
+}
+
+case "${1:-}" in
+t0) t0 ;;
+t1) t1 ;;
+*)
+	echo "usage: scripts/gate t0|t1" >&2
+	exit 2
+	;;
+esac
+echo "gate $1: pass"

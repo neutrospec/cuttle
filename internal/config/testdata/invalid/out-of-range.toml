@@ -1,0 +1,5 @@
+# want: 5 proxy.max_connections: out of range 16-65536
+name = "cuttle-test"
+[proxy]
+default = "direct"
+max_connections = 8

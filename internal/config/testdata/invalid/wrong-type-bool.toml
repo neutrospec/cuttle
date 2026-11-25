@@ -1,0 +1,9 @@
+# want: 9 rule[1].allow_loopback: must be true or false
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[rule]]
+name = "loopback"
+hosts = ["localhost"]
+action = "direct"
+allow_loopback = "yes"

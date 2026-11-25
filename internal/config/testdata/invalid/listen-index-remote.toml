@@ -1,0 +1,5 @@
+# want: 4 proxy.listen[3]: needs proxy.remote.sources
+name = "cuttle-test"
+[proxy]
+listen = [18080, "0.0.0.0:18080", "10.8.0.6:18080"]
+default = "direct"

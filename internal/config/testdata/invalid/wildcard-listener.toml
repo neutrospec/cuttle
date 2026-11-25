@@ -1,0 +1,7 @@
+# want: 4 proxy.listen[1]: wildcard address
+name = "cuttle-test"
+[proxy]
+listen = ["0.0.0.0:3128"]
+default = "direct"
+[proxy.remote]
+sources = ["10.8.0.1/32"]

@@ -1,0 +1,8 @@
+# want: 7 rule[1].hosts[2]: "example.com" in domains
+name = "cuttle-test"
+[proxy]
+default = "direct"
+[[rule]]
+name = "x"
+hosts = [1, "*.example.com"]
+action = "block"
