@@ -44,19 +44,18 @@ A closed task becomes one line under Closed:
 ### TASK-0006 — M1.3 upstreams and chaining
 
 - Milestone: M1.3
-- Status: implement
+- Status: review
 - Iteration: 2/3
-- Workers: implementer on branch `t3/implement-upstream-chaining`;
-  iteration 1 reviewer done
+- Workers: implementer done on branch `t3/implement-upstream-chaining`;
+  fresh re-check pending
 - Base: `8c2e801`
-- Candidate: `00d9465` (tree `360b6bf`), approved with minor fixes
-- Evidence: reviewer reran T0, T1, and `-race -count=5` on the proxy
-  package (pass); no non-disclosure leak found on any probed path
-- Findings: open U-R1 (Connection-listed fields copied back on via
-  routes), U-R2-U-R6 (test and mock gaps), U-R8 (nit); U-R7 and design
-  questions decided below
-- Next action: implementer — fix the findings with the decisions below,
-  rerun T0 and T1, then a fresh re-check
+- Candidate: `bf49f03` (tree `023dbe7`) on top of `00d9465`
+- Evidence: implementer ran `scripts/gate t0`, `t1`, and `-race -count=3`
+  on the proxy package for `023dbe7`, all pass; each fix proven by a
+  mutation
+- Findings: U-R1-U-R8 and the decisions reported fixed; the orchestrator
+  accepts filtering trailer keys on `direct` and `none` routes
+- Next action: reviewer — fresh re-check of `00d9465..bf49f03`
 
 Decisions for TASK-0006 (2026-11-25):
 
