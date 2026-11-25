@@ -44,19 +44,18 @@ A closed task becomes one line under Closed:
 ### TASK-0008 — M1.5 interface selection: research and design
 
 - Milestone: M1.5 (new)
-- Status: review
-- Iteration: 2/3
-- Workers: designer done on branch `t3/interface-selection-design`; fresh
-  reviewer pending
-- Base: merge `e0c4979` of `main` at `508f50e` into the branch
-- Candidate: `328778b` (tree `1610faf`); record 0008 rewritten and the
-  changes applied to 0002-0007, README, ROADMAP, glossary, COMPATIBILITY,
-  and OPEN_ISSUES (OI-0008 new, OI-0007 updated)
-- Evidence: designer docs checks passed; orchestrator link check passed on
-  the candidate tree
-- Findings: I-R1-I-R20 and the user decisions reported addressed, pending
-  review
-- Next action: reviewer — fresh review of `508f50e..328778b`
+- Status: design
+- Iteration: 3/3
+- Workers: designer on branch `t3/interface-selection-design`; iteration 2
+  reviewer done
+- Base: merge `e0c4979` of `main` at `508f50e`
+- Candidate: `328778b` (tree `1610faf`), approved with minor fixes
+- Evidence: reviewer ran the new T0 dependency and no-cgo checks (pass),
+  verified constants and SDK headers, and scanned MACs and links
+- Findings: open J-R1 (MAC values via TOML syntax errors and `device`),
+  J-R2 (`iface.Source` seam), J-R3 (upstream pools after a definition
+  change), J-R4 (VPN bypass, document only), J-R5-J-R14 (nits)
+- Next action: designer — fix J-R1-J-R14, then a fresh final re-check
 
 Decisions for TASK-0008 from the user (2026-11-25):
 
@@ -81,6 +80,9 @@ Decisions for TASK-0008 from the user (2026-11-25):
   which stays a documented limitation with per-interface DNS under Later;
   per-destination interface needs on upstream routes use two `[[upstream]]`
   entries with the same address.
+- Iteration 3 (user): public destinations are never sent through a VPN,
+  so the VPN bypass of bound `direct` dials is documented only; no rule
+  option for system routing.
 
 ## Closed
 
