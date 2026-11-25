@@ -77,18 +77,17 @@ Decisions for TASK-0008 from the user (2026-11-25):
 ### TASK-0007 — M1.4 live operation
 
 - Milestone: M1.4
-- Status: implement
+- Status: review
 - Iteration: 2/3
-- Workers: implementer on branch `t3/m1-live-operation`; iteration 1
-  reviewer done
+- Workers: implementer done on branch `t3/m1-live-operation`; fresh
+  re-check pending
 - Base: `05e6109`
-- Candidate: `dd84277` (tree `816b96f`), approved with minor fixes
-- Evidence: reviewer reran T0, T1, and `-race -count=5` (pass); byte
-  counting held in every probed edge case
-- Findings: open L-R1 (shutdown can log `stopped` and close the log before
-  every `shutdown` line, medium), L-R2-L-R6 (low), L-R7 (nit)
-- Next action: implementer — fix L-R1-L-R7, rerun T0 and T1, then a fresh
-  re-check
+- Candidate: `4e72171` (tree `b1febdc`) on top of `dd84277`
+- Evidence: implementer ran `scripts/gate t0`, `t1`, and `-race -count=3`
+  on proxy, cuttle, and control for `b1febdc`, all pass; each fix proven by
+  a mutation
+- Findings: L-R1-L-R7 reported fixed, pending re-check
+- Next action: reviewer — fresh re-check of `dd84277..4e72171`
 
 Decisions for TASK-0007 (2026-11-25):
 
