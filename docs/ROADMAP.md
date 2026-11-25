@@ -98,6 +98,12 @@ T1, and the T2 headless Chrome admin check extended to the form flows.
 Decisions (user, 2026-11-26):
 
 - All UI text is English.
+- The UI is a finished product, not one form field per configuration
+  key: it is designed for appearance and convenience as well as coverage,
+  with one visual system across the dashboard and the settings, light and
+  dark themes, phone-width layouts, field-level validation, and guidance
+  in place of the starter file's comments. The design includes a
+  clickable prototype that the user approves before implementation.
 - A form save rewrites the whole file in cuttle's canonical TOML form,
   with short generated comments; comments written by hand are not kept.
   The previous file stays in `.bak`, and the page shows the change as a
