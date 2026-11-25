@@ -44,19 +44,19 @@ A closed task becomes one line under Closed:
 ### TASK-0008 — M1.5 interface selection: research and design
 
 - Milestone: M1.5 (new)
-- Status: design
+- Status: review
 - Iteration: 2/3
-- Workers: designer on branch `t3/interface-selection-design`; iteration 1
-  reviewer done
-- Base: `c7ef543`; the designer merges current `main` (M1.4 landed) into
-  the branch
-- Candidate: `12c6fd0` (tree `b473181`), returned for revision
-- Evidence: iteration 1 review "revise": pin and restrict hold, destination
-  checks hold, platform constants verified
-- Findings: open I-R1-I-R3 (major), I-R4-I-R14 (minor), I-R15-I-R20
-  (nits); user decisions below
-- Next action: designer — merge main, revise 0008, apply the changes to
-  records 0002-0007, README, and OPEN_ISSUES, then a fresh review
+- Workers: designer done on branch `t3/interface-selection-design`; fresh
+  reviewer pending
+- Base: merge `e0c4979` of `main` at `508f50e` into the branch
+- Candidate: `328778b` (tree `1610faf`); record 0008 rewritten and the
+  changes applied to 0002-0007, README, ROADMAP, glossary, COMPATIBILITY,
+  and OPEN_ISSUES (OI-0008 new, OI-0007 updated)
+- Evidence: designer docs checks passed; orchestrator link check passed on
+  the candidate tree
+- Findings: I-R1-I-R20 and the user decisions reported addressed, pending
+  review
+- Next action: reviewer — fresh review of `508f50e..328778b`
 
 Decisions for TASK-0008 from the user (2026-11-25):
 
@@ -81,73 +81,6 @@ Decisions for TASK-0008 from the user (2026-11-25):
   which stays a documented limitation with per-interface DNS under Later;
   per-destination interface needs on upstream routes use two `[[upstream]]`
   entries with the same address.
-
-### TASK-0008 — M1.5 interface selection: research and design
-
-- Milestone: M1.5 (new)
-- Status: review
-- Iteration: 1/3
-- Workers: designer done on branch `t3/interface-selection-design`; fresh
-  reviewer pending
-- Base: `c7ef543`
-- Candidate: `12c6fd0` (tree `b473181`): record 0008, ROADMAP M1.5, design
-  index, glossary, compatibility rows
-- Evidence: designer docs checks passed; orchestrator link check passed on
-  the candidate tree
-- Findings: none yet; 26 changes to other records and 2 open-issue items
-  listed in 0008 for the orchestrator to apply after TASK-0007 lands
-- Next action: reviewer — independent review of `c7ef543..12c6fd0`
-
-Decisions for TASK-0008 from the user (2026-11-25):
-
-- New requirement (translated): because network cost differs, cuttle
-  chooses among several network interfaces. Example: with NICs A, B, and C
-  in priority order, use B only when A is not online, then C. Some
-  destinations, such as large system updates, may be pinned to B even when
-  A is online. This applies to `direct` routes, not only to upstreams.
-- Placement: a new stage M1.5 after M1.4, before M1 close, so that the M2
-  statistics can show traffic per interface.
-- "Online" means the link is up with a usable address; a fast connect
-  failure moves to the next interface. No periodic probe traffic.
-- The user's interfaces are one Wi-Fi interface joined to one fixed
-  network, two Ethernet interfaces, and two USB-tethered phones. Interfaces
-  of the same kind must be distinguishable; no hotspot joins over Wi-Fi.
-- cuttle supports macOS only, so darwin-only mechanisms are acceptable; cgo
-  remains a cost to weigh against pure-Go options.
-
-### TASK-0007 — M1.4 live operation
-
-- Milestone: M1.4
-- Status: review
-- Iteration: 2/3
-- Workers: implementer done on branch `t3/m1-live-operation`; fresh
-  re-check pending
-- Base: `05e6109`
-- Candidate: `4e72171` (tree `b1febdc`) on top of `dd84277`
-- Evidence: implementer ran `scripts/gate t0`, `t1`, and `-race -count=3`
-  on proxy, cuttle, and control for `b1febdc`, all pass; each fix proven by
-  a mutation
-- Findings: L-R1-L-R7 reported fixed, pending re-check
-- Next action: reviewer — fresh re-check of `dd84277..4e72171`
-
-Decisions for TASK-0007 (2026-11-25):
-
-- OI-0006 items settled in this task: R5 (upgraded connections tracked for
-  shutdown and idle limits), the C13 remainder (socket-exact plain-HTTP
-  `up`, exact totals after a `101`), the per-request source recheck after
-  reload (N5), the bind retry (N7, V1), the status half of Z3, upstream
-  state in `cuttle status`, and keeping unchanged upstreams and their hold
-  across a reload. G1 and G2 go with any change to `warn.go`; W-R1 and
-  W-R2 may go with this task's docs and tests.
-- Iteration 2 (orchestrator): when the control socket path under
-  `XDG_RUNTIME_DIR` exceeds the 104-byte limit, cuttle falls back to the
-  `TMPDIR` location with a source note; if that is also too long, `serve`
-  logs one clear error and runs without the socket, and `cuttle paths` and
-  `cuttle status` report the cause.
-- After TASK-0007 lands (orchestrator, docs): reword the two remaining
-  "corporate" rows in the 0003 D13 example table (egress proxy, inspection
-  root CA) in general terms, per the user's request to drop the in-house
-  framing.
 
 ## Closed
 
