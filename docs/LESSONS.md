@@ -132,3 +132,14 @@ removes entries. Append new entries at the end, oldest first.
   reach the code: Go's `Transport.CloseIdleConnections` also closes
   connections that become idle later, until the next request queues on
   the transport, so a pooled-connection test needs such a request.
+
+### 2026-11-25 — reviewer — stopping a backgrounded binary in `sh`
+
+- Task: TASK-0007, probing `cuttle serve` shutdown from a script.
+- Attempts: 1, recorded because it left a `cuttle serve` process running.
+- What failed: With `run()` defined as a shell function, `run serve &` made
+  `$!` the PID of a subshell, so `kill -TERM $!` stopped the subshell and
+  left the `cuttle` process running.
+- What to do instead: Background the binary itself (`./cuttle serve &`), or
+  record its PID another way, and confirm with `pgrep` that no `cuttle`
+  process remains before finishing.
