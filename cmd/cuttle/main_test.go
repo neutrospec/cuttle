@@ -27,14 +27,23 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// tempEnv returns a lookup over a temporary HOME and XDG directories.
+// tempEnv returns a lookup over a temporary HOME and XDG directories, with
+// XDG_RUNTIME_DIR in a fresh 0700 directory under /tmp, so a control socket
+// path stays short and never reaches a live one (design 0007 D4).
 func tempEnv(t *testing.T) (env, map[string]string) {
 	root := t.TempDir()
+	rt, err := os.MkdirTemp("/tmp", "cuttle-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Chmod(rt, 0o700)
+	t.Cleanup(func() { os.RemoveAll(rt) })
 	vars := map[string]string{
 		"HOME":            filepath.Join(root, "home"),
 		"XDG_CONFIG_HOME": filepath.Join(root, "home", ".config"),
 		"XDG_DATA_HOME":   filepath.Join(root, "home", ".local", "share"),
 		"XDG_STATE_HOME":  filepath.Join(root, "home", ".local", "state"),
+		"XDG_RUNTIME_DIR": rt,
 		"TMPDIR":          filepath.Join(root, "tmp"),
 	}
 	os.MkdirAll(vars["HOME"], 0o700)

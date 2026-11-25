@@ -28,7 +28,7 @@ ordered rules on host name, domain, IP prefix, and port:
 
 ## Status
 
-Milestone stages M1.1 to M1.3 are implemented: `direct`, `block`, and
+Milestone stages M1.1 to M1.4 are implemented: `direct`, `block`, and
 `upstream:<name>` routes, the starter configuration, the decision log with
 rotation, and `cuttle init`, `check`, `explain`, and `paths`, for local
 clients and for remote clients on non-loopback listeners. Remote clients
@@ -48,9 +48,16 @@ relay that hands remote connections to cuttle from loopback, such as an
 `ssh -L` forward or a VPN client that delivers connections from loopback,
 gives them a local client's full reach; such setups are unsupported
 ([0003 D13](docs/design/0003-upstream-chaining-and-exposure.md#d13-edge-gateway-and-egress-deployment)).
-`cuttle reload` and `status`, the retry of a listener that cannot bind,
-the statistics, and the admin UI arrive in later stages of the
-[roadmap](docs/ROADMAP.md); every listener must bind at startup.
+`cuttle status` shows the listeners, upstreams, live counters, and open
+tunnels over a control socket under `XDG_RUNTIME_DIR` or `$TMPDIR`, and
+`cuttle reload` or `SIGHUP` applies an edited configuration without
+dropping tunnels
+([0006 D4](docs/design/0006-packaging-paths-and-lifecycle.md#d4-control-socket),
+[0004 D6](docs/design/0004-configuration-and-reload.md#d6-reload)). A
+non-loopback listener that cannot bind, for example while a private link
+is down, is retried every 30 s and shows as `retrying`. `SIGTERM` drains
+in-flight requests for up to 5 s and closes tunnels. The statistics and
+the admin UI arrive in later stages of the [roadmap](docs/ROADMAP.md).
 
 Try it from a checkout:
 
@@ -61,6 +68,8 @@ go build -o cuttle ./cmd/cuttle
 ./cuttle explain https://example.com/
 ./cuttle serve                # proxy on 127.0.0.1:3128; Ctrl-C stops it
 curl -x http://127.0.0.1:3128 https://example.com/
+./cuttle status               # in another terminal
+./cuttle reload               # after editing the configuration
 ```
 
 The log is `~/.local/state/cuttle/cuttle.log`; `cuttle paths` lists every

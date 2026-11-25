@@ -77,14 +77,17 @@ func (p *Proxy) newUpstream(u config.Upstream) (*upstream, error) {
 		state:   StateUp,
 		since:   p.now(),
 	}
-	up.hold.publishLocked()
 	up.transport = &http.Transport{
 		// Fixed to the upstream: the transport writes absolute-form and
 		// pools connections to the upstream across clients and hosts. The
 		// URL carries no userinfo, so no Proxy-Authorization is sent.
 		Proxy: http.ProxyURL(&url.URL{Scheme: "http", Host: u.Address}),
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return up.dialHTTP(ctx)
+			c, err := up.dialHTTP(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return p.newOutConn(c), nil
 		},
 		DisableCompression:    true,
 		ForceAttemptHTTP2:     false,
@@ -106,6 +109,15 @@ func (p *Proxy) newUpstream(u config.Upstream) (*upstream, error) {
 		ErrorLog:       slog.NewLogLogger(p.log.Handler(), slog.LevelDebug),
 	}
 	return up, nil
+}
+
+// retire ends an upstream that a reload replaced or removed: its hold stops
+// changing state and publishing gauges, and its idle pooled connections
+// close. Requests and tunnels that already use it continue (design 0004
+// D6).
+func (u *upstream) retire() {
+	u.hold.retire()
+	u.transport.CloseIdleConnections()
 }
 
 // dialHTTP is the plain-HTTP transport's dial function. It applies the
@@ -476,7 +488,11 @@ type hold struct {
 	live          *stats.Live
 	onDown        func()
 
-	mu         sync.Mutex
+	mu sync.Mutex
+	// retired is set when a reload replaced or removed the upstream: the
+	// hold then keeps its state and publishes nothing, so the gauges show
+	// the state of the upstream in the current configuration.
+	retired    bool
 	state      string
 	since      time.Time // start of the current state
 	downSince  time.Time // start of the outage
@@ -518,6 +534,9 @@ func (h *hold) done(probe bool, err error) {
 			closeIdle()
 		}
 	}()
+	if h.retired {
+		return
+	}
 	now := h.now()
 	if err == nil {
 		h.upLocked(now)
@@ -555,7 +574,7 @@ func (h *hold) done(probe bool, err error) {
 func (h *hold) settle(reached bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.state != StateProbing {
+	if h.retired || h.state != StateProbing {
 		return
 	}
 	now := h.now()
@@ -581,9 +600,26 @@ func (h *hold) setLocked(state string, now time.Time) {
 	h.publishLocked()
 }
 
+// retire stops the hold from changing state or publishing gauges.
+func (h *hold) retire() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.retired = true
+}
+
+// publish sets the upstream_state gauges for the current state.
+func (h *hold) publish() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.publishLocked()
+}
+
 // publishLocked sets the upstream_state gauges: 1 for the current state and
 // 0 for the others.
 func (h *hold) publishLocked() {
+	if h.retired {
+		return
+	}
 	for _, s := range upstreamStates {
 		v := int64(0)
 		if s == h.state {
@@ -599,12 +635,19 @@ type UpstreamStatus struct {
 	Name, Address string
 	State         string // StateUp, StateDown, or StateProbing
 	Since         time.Time
-	LastError     string // Proxy-Status error type of the last failed connect
-	FailedFast    int64  // requests failed at once during the current or last outage
+	// DownFor is the time since the first failure of the current outage,
+	// while the state is down or probing; 0 when up.
+	DownFor    time.Duration
+	LastError  string // Proxy-Status error type of the last failed connect
+	FailedFast int64  // requests failed at once during the current or last outage
 }
 
 func (h *hold) status() UpstreamStatus {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return UpstreamStatus{Name: h.name, Address: h.address, State: h.state, Since: h.since, LastError: h.lastErr, FailedFast: h.failedFast}
+	st := UpstreamStatus{Name: h.name, Address: h.address, State: h.state, Since: h.since, LastError: h.lastErr, FailedFast: h.failedFast}
+	if h.state != StateUp {
+		st.DownFor = h.now().Sub(h.downSince)
+	}
+	return st
 }

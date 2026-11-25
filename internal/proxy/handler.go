@@ -58,6 +58,13 @@ type exchange struct {
 	// relayed records that a response from the next hop reached the client.
 	ticket  *ticket
 	relayed bool
+	// out is the outbound connection of a plain-HTTP exchange, which counts
+	// up (design 0002 D7).
+	out atomic.Pointer[outConn]
+	// writes counts socket writes in progress on the exchange's outbound
+	// connection and on its client connection after a 101, so the decision
+	// line of an upgraded connection waits for their counts.
+	writes atomic.Int64
 
 	outcome string
 	status  int
@@ -88,6 +95,8 @@ func newID() string {
 
 // ServeHTTP is the root handler: no ServeMux (design 0002 D2).
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	p.handlers.enter()
+	defer p.handlers.leave()
 	ex := &exchange{
 		id:     newID(),
 		start:  time.Now(),
@@ -110,6 +119,17 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ex.source = tc.source
+	if _, ok := classify(tc.peer, ex.snap.cfg.Proxy.Remote.Sources); !ok {
+		// A reload removed the source after the connection was accepted.
+		// The request gets no response and the connection closes; tunnels
+		// are never re-evaluated (design 0003 D10, 0004 D6).
+		p.warnSource(tc.peer)
+		if c, _, err := http.NewResponseController(w).Hijack(); err == nil {
+			c.Close()
+			return
+		}
+		panic(http.ErrAbortHandler)
+	}
 	if ex.kind == policy.KindConnect {
 		p.serveConnect(w, r, ex)
 		return

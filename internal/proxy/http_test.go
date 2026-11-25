@@ -196,14 +196,17 @@ func TestHTTPDirect(t *testing.T) {
 		}
 		// Underscore spellings that some servers read as the hyphenated names.
 		req.WriteString("X_forwarded_for: 198.51.100.7\r\nx_real_ip: 198.51.100.7\r\nX-FORWARDED_HOST: front\r\nClient_IP: 198.51.100.7\r\n")
-		req.WriteString("x-forwarded-anything: 1\r\nX-Kept: yes\r\nX_Kept_Underscore: yes\r\nConnection: close\r\n\r\n")
+		// HTTP_USER_AGENT carries the http- prefix of CGI-style names, but
+		// User-Agent is no disclosure field, so it passes (OI-0006 W-R2).
+		req.WriteString("x-forwarded-anything: 1\r\nX-Kept: yes\r\nX_Kept_Underscore: yes\r\nHTTP_USER_AGENT: harmless/1.0\r\nConnection: close\r\n\r\n")
 		res, _ := e.raw(req.String())
 		if res.StatusCode != 200 {
 			t.Fatalf("status %d", res.StatusCode)
 		}
 		rec := e.http.Requests()[0]
 		checkNoDisclosure(t, rec.Header)
-		if rec.Header.Get("X-Kept") != "yes" || rec.Header.Get("X_Kept_Underscore") != "yes" {
+		if rec.Header.Get("X-Kept") != "yes" || rec.Header.Get("X_Kept_Underscore") != "yes" ||
+			rec.Header.Get("HTTP_USER_AGENT") != "harmless/1.0" {
 			t.Errorf("end-to-end field lost: %v", rec.Header)
 		}
 		if _, ok := rec.Header["User-Agent"]; ok {

@@ -31,9 +31,17 @@ calls `os.UserConfigDir` or `os.UserCacheDir`.
 | launchd stdout and stderr | `$(brew --prefix)/var/log/cuttle.log` | set by launchd |
 
 - `XDG_RUNTIME_DIR` is used only when it is absolute, owned by the user,
-  and mode 0700. macOS does not set it; `$TMPDIR` is the per-user 0700
-  directory that the shell and the LaunchAgent share
-  ([research 0001 §2][r1-2]). The socket path fits the 104-byte limit.
+  and mode 0700, and when the socket path under it fits the Unix socket
+  path limit: 103 bytes, because the 104-byte `sun_path` of a darwin
+  `sockaddr_un` ends with a NUL. macOS does not set it; `$TMPDIR` is the
+  per-user 0700 directory that the shell and the LaunchAgent share
+  ([research 0001 §2][r1-2]). When the fallback is taken, the source
+  names the reason, such as
+  `TMPDIR; XDG_RUNTIME_DIR path too long (120 bytes, limit 103)`.
+- When the `$TMPDIR` socket path is too long as well, the source adds
+  `too long (N bytes, limit 103): no control socket`. `cuttle serve` then
+  logs one error and runs without the socket, and `cuttle status` and
+  `cuttle reload` exit 1 with the same cause before they dial.
 - Missing directories are created with mode 0700. Existing directories keep
   their modes, as the specification requires.
 - The service sees only default XDG paths unless the user copies non-default
@@ -61,8 +69,12 @@ control   /var/folders/<id>/T/cuttle/control.sock     TMPDIR
 - Startup fails if the configuration file is writable by group or others,
   or owned by another user, since that user could reroute traffic.
 - The password file rules are in [0005 D6][d5-6].
-- The control socket directory must be owned by the user with mode 0700.
-  Otherwise cuttle warns and runs without the control socket.
+- The control socket directory must be a directory, not a symbolic link,
+  owned by the user with mode 0700. Otherwise cuttle warns and runs
+  without the control socket. `cuttle status` and `cuttle reload` check
+  the directory the same way before they dial and exit 1 otherwise, so
+  another user's directory, such as a planted `/tmp/cuttle`, can neither
+  answer a status request nor receive a reload.
 
 ### D3. Command line
 
@@ -97,31 +109,68 @@ control   /var/folders/<id>/T/cuttle/control.sock     TMPDIR
 
 - An HTTP/1.1 server on a Unix stream socket, socket mode 0600 in a 0700
   directory. File system permissions are the access control; there is no
-  password.
+  password. The package is `internal/control`.
 - At start, if the socket accepts a connection, another instance is running
-  and `cuttle serve` exits with status 1. A stale socket is removed. If the
-  socket cannot be created, cuttle logs a warning and runs without it.
+  and `cuttle serve` exits with status 1 before it binds a listener. A
+  stale socket is removed. If the socket cannot be created, or its path
+  exists and is not a socket, cuttle logs a warning and runs without it.
+  The socket closes, and its file is removed, at the first step of
+  shutdown (D6).
 
 | Method | Path | Response |
 | --- | --- | --- |
-| `GET` | `/v1/status` | Version, PID, start time, name, paths, listeners with state, upstreams with state, configuration state, counters ([0002 D7][d2-7]), up to 500 active tunnels, statistics state, open-file limit |
+| `GET` | `/v1/status` | Version, PID, start time, name, paths, listeners with state, upstreams with state, configuration state, counters ([0002 D7][d2-7]), up to 500 active tunnels, statistics state, log state with the rotation failure count, open-file limit |
 | `POST` | `/v1/reload` | `200` with `restart_required` and warnings, or `422` with errors |
 
 ```json
 {"version": "0.1.0", "name": "cuttle-edge", "pid": 4242,
  "started_at": "2026-11-25T00:00:00Z",
- "listeners": [{"address": "127.0.0.1:3128", "state": "bound"}],
- "upstreams": [{"name": "gateway", "state": "down",
-                "since": "2026-11-25T00:58:00Z",
+ "paths": {"config": {"path": "...", "source": "XDG_CONFIG_HOME unset"}},
+ "listeners": [{"address": "127.0.0.1:3128", "state": "bound",
+                "since": "2026-11-25T00:00:00Z"},
+               {"address": "10.8.0.6:3128", "state": "retrying",
+                "error": "listen tcp 10.8.0.6:3128: bind: can't assign requested address",
+                "since": "2026-11-25T00:00:00Z"}],
+ "upstreams": [{"name": "gateway", "address": "10.8.0.6:3128",
+                "state": "down", "since": "2026-11-25T00:58:00Z",
+                "down_s": 42.3, "failed_fast": 17,
                 "last_error": "connection_timeout"}],
  "config": {"path": "/Users/me/.config/cuttle/config.toml",
             "sha256": "9f2c...", "loaded_at": "2026-11-25T00:00:00Z",
             "restart_required": [], "last_reload_error": ""},
  "counters": {"tunnels_active": 3, "connections_active": 5},
- "tunnels": [{"target": "example.com:443", "action": "direct",
-              "source": "local", "age_s": 42, "up": 3120, "down": 88000}],
- "stats": "ok", "rlimit_nofile": 10240}
+ "tunnels": [{"target": "example.com:443", "kind": "connect",
+              "action": "direct", "source": "local", "age_s": 42,
+              "up": 3120, "down": 88000}],
+ "stats": "disabled",
+ "log": {"path": "/Users/me/.local/state/cuttle/cuttle.log",
+         "rotation_failures": 0},
+ "rlimit_nofile": 10240}
 ```
+
+- `paths` equals the output of `cuttle paths --json` for the service's
+  environment (D1). `counters` holds every live counter by its key, such
+  as `bytes_total{action="direct",direction="up"}` ([0002 D7][d2-7]).
+- An upstream's `down_s` is the time since the first failure of the
+  current outage while it is `down` or `probing`, and 0 when it is `up`;
+  `failed_fast` counts the requests answered at once during the current
+  or last outage ([0003 D8][d3-8]). A tunnel's `kind` is `connect`, or
+  `upgrade` for a connection upgraded after a `101`, and `upstream` names
+  the upstream of an upstream route. `stats` is `disabled` until M2.
+- `log.rotation_failures` counts the failed rotations and reopens since
+  start (D7), so an operator sees a log that cannot rotate without reading
+  the launchd file.
+- `cuttle status` prints these fields as text, and `--json` prints the
+  object. When a path the service reports differs from the one the command
+  resolves, the command writes a warning per path to stderr and still
+  exits 0.
+- `cuttle reload` exits 0 after a reload and prints `restart required:`
+  with the keys of `restart_required` and each warning. When the service
+  refuses the file it prints each error to stderr and exits 1.
+- Without a reachable socket, `cuttle status` and `cuttle reload` exit 1
+  and name the socket path.
+- `listeners` follows the order of `proxy.listen`, retrying listeners
+  included.
 
 ### D5. First run
 
@@ -146,8 +195,13 @@ On `SIGTERM` or `SIGINT`:
 
 1. Close the proxy, admin, and control listeners.
 2. Close idle client connections and stop reading new requests.
-3. Wait up to 5 s for in-flight plain-HTTP exchanges.
-4. Close every tunnel and remaining connection with outcome `shutdown`.
+3. Wait up to 5 s for in-flight plain-HTTP exchanges, and stop retrying
+   listeners that have not bound ([0003 D9][d3-9]).
+4. Close every tunnel, every connection upgraded after a `101`
+   ([0002 D5][d2-5]), and every remaining connection with outcome
+   `shutdown`. An exchange still in flight when the drain ends also logs
+   `shutdown`. Then wait, for at most 1 s, until every request handler
+   has returned, so every decision line is written before `stopped`.
 5. Flush statistics within 2 s and close SQLite.
 6. Log `stopped` and exit with status 0.
 
@@ -171,10 +225,15 @@ status 2 and writes to stderr, which launchd sends to
   writer keeps appending to the current file, which then grows past
   10 MiB, and tries again after each further 10 MiB. When the file cannot
   be reopened, that line is lost and the next write tries again. Every
-  failure is counted, and the first failure of each run of failures is
-  written to stderr, which under launchd is the launchd file. A current
-  file deleted by someone else is not a failure: the next rotation opens a
-  new one without shifting the rotated files.
+  failure is counted, `cuttle status` shows the count as
+  `log.rotation_failures` (D4), and the first failure of each run of
+  failures is written to stderr, which under launchd is the launchd file.
+  A current file deleted by someone else is not a failure: the next
+  rotation opens a new one without shifting the rotated files. Until that
+  rotation, lines go to the deleted file and are lost. A deleted log
+  directory is recreated only at the next start: until then the rotation
+  cannot open a new file, and each later line is lost and counted as a
+  failure.
 - The launchd file receives only output from before the log opens, the
   first failure of each run of log failures, and runtime panics, so it
   stays small without rotation.
@@ -326,8 +385,10 @@ and the log.
 - **A PID file.** launchd tracks the process; the control socket guards
   against a second instance.
 
+[d2-5]: 0002-proxy-core-and-routing.md#d5-actions-and-forwarding
 [d2-7]: 0002-proxy-core-and-routing.md#d7-byte-accounting-and-live-counters
 [d2-8]: 0002-proxy-core-and-routing.md#d8-decision-log
+[d3-8]: 0003-upstream-chaining-and-exposure.md#d8-unreachable-upstream-hold
 [d3-9]: 0003-upstream-chaining-and-exposure.md#d9-listeners
 [d3-12]: 0003-upstream-chaining-and-exposure.md#d12-connection-limits
 [d4-5]: 0004-configuration-and-reload.md#d5-starter-configuration

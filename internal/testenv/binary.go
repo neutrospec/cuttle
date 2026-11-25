@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -125,15 +126,36 @@ func (s *Sandbox) LogPath() string {
 
 // Env is the complete environment cuttle runs with.
 func (s *Sandbox) Env() []string {
+	return s.envWith(nil)
+}
+
+// overridable are the variables RunEnv may change; each must still name a
+// directory inside the sandbox.
+var overridable = []string{"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"}
+
+func (s *Sandbox) envWith(over map[string]string) []string {
+	dirs := s.dirs(over)
 	return []string{
 		"PATH=/usr/bin:/bin",
-		"HOME=" + s.Home,
-		"XDG_CONFIG_HOME=" + s.ConfigHome,
-		"XDG_DATA_HOME=" + s.DataHome,
-		"XDG_STATE_HOME=" + s.StateHome,
+		"HOME=" + dirs["HOME"],
+		"XDG_CONFIG_HOME=" + dirs["XDG_CONFIG_HOME"],
+		"XDG_DATA_HOME=" + dirs["XDG_DATA_HOME"],
+		"XDG_STATE_HOME=" + dirs["XDG_STATE_HOME"],
 		"XDG_RUNTIME_DIR=" + s.RuntimeDir,
-		"TMPDIR=" + s.TmpDir,
+		"TMPDIR=" + dirs["TMPDIR"],
 	}
+}
+
+// dirs returns the sandbox directories by variable, with overrides applied.
+func (s *Sandbox) dirs(over map[string]string) map[string]string {
+	d := map[string]string{
+		"HOME": s.Home, "XDG_CONFIG_HOME": s.ConfigHome, "XDG_DATA_HOME": s.DataHome,
+		"XDG_STATE_HOME": s.StateHome, "TMPDIR": s.TmpDir,
+	}
+	for k, v := range over {
+		d[k] = v
+	}
+	return d
 }
 
 // FreePort chooses a port by binding 127.0.0.1:0 and releasing it. It never
@@ -182,16 +204,25 @@ func realPath(p string) string {
 // bind nothing (init, check, explain, paths, version) may read any
 // configuration in the sandbox.
 func (s *Sandbox) Check(args []string) error {
+	return s.check(args, nil)
+}
+
+// check is Check for a command run with environment overrides (RunEnv).
+// Only the variables in overridable may change, and the new values are
+// checked like the others.
+func (s *Sandbox) check(args []string, over map[string]string) error {
+	for k := range over {
+		if !slices.Contains(overridable, k) {
+			return fmt.Errorf("%s may not be overridden", k)
+		}
+	}
 	tmpRoot := realPath(os.TempDir())
 	root := realPath(s.Root)
 	if !within(tmpRoot, root) {
 		return fmt.Errorf("sandbox root %s is not inside the temporary directory %s", s.Root, tmpRoot)
 	}
 	realHome := os.Getenv("HOME")
-	for name, dir := range map[string]string{
-		"HOME": s.Home, "XDG_CONFIG_HOME": s.ConfigHome, "XDG_DATA_HOME": s.DataHome,
-		"XDG_STATE_HOME": s.StateHome, "TMPDIR": s.TmpDir,
-	} {
+	for name, dir := range s.dirs(over) {
 		if !filepath.IsAbs(dir) || !within(root, realPath(dir)) && !within(s.Root, dir) {
 			return fmt.Errorf("%s=%s is not inside the sandbox %s", name, dir, s.Root)
 		}
@@ -274,13 +305,13 @@ func (s *Sandbox) Check(args []string) error {
 	return nil
 }
 
-func (s *Sandbox) command(args []string) *exec.Cmd {
+func (s *Sandbox) command(args []string, over map[string]string) *exec.Cmd {
 	s.t.Helper()
-	if err := s.Check(args); err != nil {
+	if err := s.check(args, over); err != nil {
 		s.t.Fatalf("refusing to start cuttle %s: %v", strings.Join(args, " "), err)
 	}
 	cmd := exec.Command(s.Bin, args...)
-	cmd.Env = s.Env()
+	cmd.Env = s.envWith(over)
 	cmd.Dir = s.Root
 	return cmd
 }
@@ -296,7 +327,14 @@ type Result struct {
 // fails the test.
 func (s *Sandbox) Run(timeout time.Duration, args ...string) Result {
 	s.t.Helper()
-	cmd := s.command(args)
+	return s.RunEnv(timeout, nil, args...)
+}
+
+// RunEnv is Run with some XDG directories replaced by other directories
+// inside the sandbox, such as another XDG_STATE_HOME.
+func (s *Sandbox) RunEnv(timeout time.Duration, over map[string]string, args ...string) Result {
+	s.t.Helper()
+	cmd := s.command(args, over)
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	if err := cmd.Start(); err != nil {
@@ -354,7 +392,7 @@ func (b *syncBuffer) String() string {
 // connections, and stops the process when the test ends.
 func (s *Sandbox) Start(addr string, args ...string) *Process {
 	s.t.Helper()
-	cmd := s.command(args)
+	cmd := s.command(args, nil)
 	p := &Process{cmd: cmd, out: &syncBuffer{}, errb: &syncBuffer{}, done: make(chan struct{}), t: s.t}
 	cmd.Stdout, cmd.Stderr = p.out, p.errb
 	if err := cmd.Start(); err != nil {
@@ -411,6 +449,20 @@ func (p *Process) code() int {
 		return -1
 	}
 	return 0
+}
+
+// Signal sends sig to the process.
+func (p *Process) Signal(sig os.Signal) error { return p.cmd.Process.Signal(sig) }
+
+// Wait waits up to timeout for the process to exit and returns its exit
+// status; exited is false if it is still running.
+func (p *Process) Wait(timeout time.Duration) (code int, exited bool) {
+	select {
+	case <-p.done:
+		return p.code(), true
+	case <-time.After(timeout):
+		return 0, false
+	}
 }
 
 // Stderr returns what the process wrote to stderr so far.

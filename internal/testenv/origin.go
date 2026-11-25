@@ -68,6 +68,7 @@ type Origin struct {
 	reqs  []Request
 	raw   map[int]*bytes.Buffer
 	conns int
+	open  int // connections not yet closed or hijacked
 }
 
 type connIDKey struct{}
@@ -95,6 +96,16 @@ func NewOrigin(t testing.TB, opt OriginOptions) *Origin {
 		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
 			return context.WithValue(ctx, connIDKey{}, c.(*recordingConn).id)
 		},
+		ConnState: func(_ net.Conn, st http.ConnState) {
+			o.mu.Lock()
+			defer o.mu.Unlock()
+			switch st {
+			case http.StateNew:
+				o.open++
+			case http.StateClosed, http.StateHijacked:
+				o.open--
+			}
+		},
 		ErrorLog: newDiscardLogger(),
 	}
 	go o.srv.Serve(&recordingListener{Listener: ln, o: o})
@@ -114,6 +125,14 @@ func (o *Origin) Connections() int {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	return o.conns
+}
+
+// OpenConnections returns how many connections the origin holds open, not
+// counting hijacked ones.
+func (o *Origin) OpenConnections() int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.open
 }
 
 // Raw returns the bytes read on connection id (1-based), after TLS

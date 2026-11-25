@@ -87,6 +87,15 @@ func (l *Live) Set(v int64, name string, labels ...string) {
 	l.Counter(name, labels...).Store(v)
 }
 
+// Delete removes a counter, such as the state gauges of an upstream that a
+// reload removed. A later Add or Set creates it again.
+func (l *Live) Delete(name string, labels ...string) {
+	k := Key(name, labels...)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.m, k)
+}
+
 // Get returns a counter's value, 0 if it does not exist.
 func (l *Live) Get(name string, labels ...string) int64 {
 	k := Key(name, labels...)
