@@ -53,10 +53,17 @@ copies, such as commands, configuration, and paths.
 - The view is never the record. Decisions and evidence go to the tracked
   documents first, and the view shows the same data, taken from Git, the
   board, and worker reports rather than memory.
-- Write the HTML in a scratch directory, never in the repository. Keep it
-  self-contained with inline styles and no remote resources. Check it with
-  `html_preview` in dark and light appearance, then show it with
-  `html_render` at the previewed content height.
+- Delegate the drawing so that previews stay out of the orchestrator's
+  context. A forked subagent, when the runtime offers forks, writes the HTML
+  in a scratch directory, never in the repository. It keeps the file
+  self-contained, with inline styles and no remote resources, and checks it
+  with `html_preview` in dark and light appearance and at phone width. It
+  returns only a short English report: the file path, the content height
+  at 728 px, what it checked, and any problem it could not fix. The
+  orchestrator then shows the file with `html_render` at that height.
+- Fork when the view needs the conversation's context. When the data fits
+  in a brief, a fresh agent given that data is cheaper. The runner does not
+  draw views, because they need visual judgment.
 - Follow the renderer's layout rules: no background, card, border, title
   banner, or side padding on the outer element; fluid widths; theme CSS
   variables instead of fixed colors; fixed pixel heights for charts; no
