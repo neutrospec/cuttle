@@ -44,17 +44,18 @@ A closed task becomes one line under Closed:
 ### TASK-0005 — M1.2 exposure controls
 
 - Milestone: M1.2
-- Status: review
-- Iteration: 2/3
-- Workers: implementer done on branch `t3/add-remote-proxy-exposure`;
-  fresh re-check pending
+- Status: implement
+- Iteration: 3/3
+- Workers: implementer on branch `t3/add-remote-proxy-exposure`; iteration
+  2 reviewer done
 - Base: `cbf0b07`
-- Candidate: `4aea9fa` (tree `483e2d8`) on top of `c7c6217`
-- Evidence: implementer ran `scripts/gate t0`, `t1`, and `-race -count=3`
-  on the proxy package for `483e2d8`, all pass
-- Findings: E1-E7 and the decisions reported fixed; the orchestrator
-  accepts mapped prefixes as errors in rule `cidrs` too
-- Next action: reviewer — fresh re-check of `c7c6217..4aea9fa`
+- Candidate: `4aea9fa` (tree `483e2d8`), approved with minor fixes
+- Evidence: reviewer reran T0, T1, and `-race -count=5` on the proxy
+  package (pass); E1-E7 and the decisions resolved
+- Findings: open F1 (warning tests miss the rollover summary path and wait
+  in real time), F2 (summary count definition), F3, F4 (nits)
+- Next action: implementer — fix F1-F4, rerun T0 and T1, then a fresh
+  final re-check
 
 Decisions for TASK-0005 (2026-11-25):
 
@@ -69,6 +70,9 @@ Decisions for TASK-0005 (2026-11-25):
   with a hint. The once-a-minute limit warning (0003 D12, 0006 D7) is
   ratified. 0007 D3 names a dedicated rejected-source address. The
   per-request source recheck after reload goes to the M1.4 brief.
+- Iteration 3 (orchestrator): the summary `count` stays a count of
+  rejected or limited connections that got no warning line and were not
+  covered by one in the last minute; D12 and D7 define it that way.
 
 ## Closed
 
