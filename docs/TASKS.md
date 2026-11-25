@@ -44,21 +44,17 @@ A closed task becomes one line under Closed:
 ### TASK-0009 — M1.5 interface selection implementation
 
 - Milestone: M1.5
-- Status: implement
+- Status: review
 - Iteration: 2/3
-- Workers: implementer on branch `t3/interface-selection`; iteration 1
-  reviewer done
+- Workers: implementer done on branch `t3/interface-selection`; fresh
+  re-check pending
 - Base: `8161b53`
-- Candidate: `b6aa8de` (tree `1c2d912`), approved with minor fixes
-- Evidence: reviewer reran T0, T1, and `-race -count=5` over internal and
-  cmd (pass); 60 s fuzzing of each parser found no panic; no correctness
-  bug in routing, failover, demotion, pools, upstreams, or reload
-- Findings: open N-R1 (MAC-shaped keys in unknown-key errors, medium),
-  N-R2 (`interfaces --watch` can drop a change for 30 s, medium), N-R3,
-  N-R4 (test gaps), N-R5 (gate cgo check), N-R6, N-R7 (nits), N-R8 (design
-  text)
-- Next action: implementer — fix N-R1-N-R8, rerun T0 and T1, then a fresh
-  re-check
+- Candidate: `30b8f84` (tree `36a2c83`) on top of `b6aa8de`
+- Evidence: implementer ran `scripts/gate t0`, `t1`, and `-race -count=3`
+  over internal and cmd on `36a2c83`, all pass; 14 mutations and two
+  controls fail their targeted tests
+- Findings: N-R1-N-R8 reported fixed, pending re-check
+- Next action: reviewer — fresh re-check of `b6aa8de..30b8f84`
 
 Decisions for TASK-0009 (2026-11-25):
 
