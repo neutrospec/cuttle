@@ -44,17 +44,18 @@ A closed task becomes one line under Closed:
 ### TASK-0002 — Generalize terminology for a public project
 
 - Milestone: none (prepares M1)
-- Status: review
-- Iteration: 1/3
-- Workers: docs done on branch `t3/generalize-proxy-docs` (T3 worktree);
-  fresh reviewer pending
+- Status: implement
+- Iteration: 2/3
+- Workers: docs on branch `t3/generalize-proxy-docs` (T3 worktree);
+  iteration 1 reviewer done
 - Base: `7159f37`
-- Candidate: `88c8110` (tree `9b5867e`); history `d561197`, `88c8110`
-  (producer fix before review)
-- Evidence: docs role acceptance checks 1-7 and docs checks passed on
+- Candidate: `88c8110` (tree `9b5867e`), approved with minor fixes
+- Evidence: docs role acceptance checks and reviewer reruns passed on
   `9b5867e`
-- Findings: none yet
-- Next action: reviewer — independent review of `7159f37..88c8110`
+- Findings: open T1-T6, T8, T9, T11-T14 (minor and nits, docs); T7 and T10
+  decided by the orchestrator; P1 recorded for OI-0006
+- Next action: docs — fix the findings in a new commit, then a fresh
+  re-check of the fix diff
 
 Decisions for TASK-0002 from the user (2026-11-25):
 
