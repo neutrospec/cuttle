@@ -44,15 +44,17 @@ A closed task becomes one line under Closed:
 ### TASK-0006 — M1.3 upstreams and chaining
 
 - Milestone: M1.3
-- Status: implement
+- Status: review
 - Iteration: 1/3
-- Workers: implementer on a T3 worktree branch
-- Base: `024649b` plus this board update
-- Candidate: none
-- Evidence: none
-- Findings: none
-- Next action: implementer — build M1.3 with the T0 and T1 gates and return
-  the candidate commit
+- Workers: implementer done on branch `t3/implement-upstream-chaining`;
+  fresh reviewer pending
+- Base: `8c2e801`
+- Candidate: `00d9465` (tree `360b6bf`)
+- Evidence: implementer ran `scripts/gate t0` and `t1` on `360b6bf`, both
+  pass; nine mutation checks fail their targeted tests
+- Findings: none yet; implementer lists 10 design questions
+- Next action: reviewer — independent review of `8c2e801..00d9465` with a
+  gate rerun
 
 Decisions for TASK-0006 (2026-11-25):
 
