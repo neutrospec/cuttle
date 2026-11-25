@@ -60,8 +60,21 @@ dropping tunnels
 [0004 D6](docs/design/0004-configuration-and-reload.md#d6-reload)). A
 non-loopback listener that cannot bind, for example while a private link
 is down, is retried every 30 s and shows as `retrying`. `SIGTERM` drains
-in-flight requests for up to 5 s and closes tunnels. The statistics and
-the admin UI arrive in later stages of the [roadmap](docs/ROADMAP.md).
+in-flight requests for up to 5 s and closes tunnels. The statistics, the
+dashboard, and the settings page arrive in later stages of the
+[roadmap](docs/ROADMAP.md).
+
+Admin access is implemented for stage M2.2
+([0005 D5–D8](docs/design/0005-statistics-and-admin.md#d5-admin-listener-and-host-allowlist)).
+`cuttle admin passwd` stores an Argon2id hash of the admin password in
+`~/.local/share/cuttle/admin-password`, and `cuttle serve` answers on
+`admin.listen`, `http://127.0.0.1:3129/` by default, with a sign-in page
+and, once signed in, a placeholder that the M2.3 dashboard replaces. Only
+the Host values `127.0.0.1:<port>` and `localhost:<port>` are served.
+Sessions live in memory and end after 30 idle minutes, after 12 hours, at
+logout, when the password changes, and when cuttle restarts. After three
+failed sign-ins in a row, each attempt must wait, from 1 s doubling up to
+300 s.
 
 Interface selection is implemented for stage M1.5
 ([design 0008](docs/design/0008-interface-selection.md)); its check on
@@ -96,6 +109,7 @@ go build -o cuttle ./cmd/cuttle
 curl -x http://127.0.0.1:3128 https://example.com/
 ./cuttle status               # in another terminal
 ./cuttle reload               # after editing the configuration
+./cuttle admin passwd         # then open http://127.0.0.1:3129/
 ```
 
 The log is `~/.local/state/cuttle/cuttle.log`; `cuttle paths` lists every

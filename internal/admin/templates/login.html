@@ -1,0 +1,18 @@
+{{define "content"}}
+<h1>Sign in</h1>
+{{if .Disabled}}
+<p>Admin sign-in is disabled because no usable password file exists.
+Set a password from a terminal on this Mac:</p>
+<pre>cuttle admin passwd</pre>
+<p>The password file must have mode 0600 and belong to the user that runs
+cuttle. Then reload this page.</p>
+{{else}}
+{{if .Message}}<p class="message" role="alert">{{.Message}}</p>{{end}}
+<form method="post" action="/login">
+<input type="hidden" name="login_token" value="{{.Token}}">
+<label for="password">Password</label>
+<input type="password" id="password" name="password" autocomplete="current-password" required autofocus>
+<button type="submit">Sign in</button>
+</form>
+{{end}}
+{{end}}

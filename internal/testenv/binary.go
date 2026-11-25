@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/netip"
 	"os"
@@ -334,9 +335,20 @@ func (s *Sandbox) Run(timeout time.Duration, args ...string) Result {
 // inside the sandbox, such as another XDG_STATE_HOME.
 func (s *Sandbox) RunEnv(timeout time.Duration, over map[string]string, args ...string) Result {
 	s.t.Helper()
+	return s.run(timeout, over, nil, args)
+}
+
+// RunInput is Run with input on standard input.
+func (s *Sandbox) RunInput(timeout time.Duration, input string, args ...string) Result {
+	s.t.Helper()
+	return s.run(timeout, nil, strings.NewReader(input), args)
+}
+
+func (s *Sandbox) run(timeout time.Duration, over map[string]string, stdin io.Reader, args []string) Result {
+	s.t.Helper()
 	cmd := s.command(args, over)
 	var out, errb bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &errb
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, &out, &errb
 	if err := cmd.Start(); err != nil {
 		s.t.Fatal(err)
 	}
