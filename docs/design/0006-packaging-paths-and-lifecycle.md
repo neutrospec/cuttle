@@ -85,8 +85,9 @@ control   /var/folders/<id>/T/cuttle/control.sock     TMPDIR
 | `cuttle check [--config PATH]` | Validate the configuration and print errors and warnings |
 | `cuttle explain [--config PATH] [--remote] TARGET` | Show how the configuration routes `TARGET` |
 | `cuttle reload` | Ask the running service to reload ([0004 D6][d4-6]) |
-| `cuttle status [--json]` | Show the running service's listeners, counters, tunnels, and paths |
+| `cuttle status [--json]` | Show the running service's listeners, upstreams, interfaces, counters, tunnels, and paths |
 | `cuttle paths [--json]` | Print resolved paths (D1) |
+| `cuttle interfaces [--json] [--all] [--watch] [--config PATH]` | List the system interfaces with their kind, MAC, media, addresses, and default routes, and how they match the configuration's `[[interface]]` definitions; `--watch` prints state changes ([0008 D15][d8-15]) |
 | `cuttle admin passwd [--stdin]` | Set the admin password ([0005 D6][d5-6]) |
 | `cuttle version`, `cuttle --version` | Print the version and Go version |
 
@@ -100,10 +101,15 @@ control   /var/folders/<id>/T/cuttle/control.sock     TMPDIR
 
   ```text
   $ cuttle explain https://wiki.internal.example/
-  target  wiki.internal.example:443 (connect, local client)
-  rule    restricted (#2)
-  action  upstream:gateway -> 10.8.0.6:3128 (disclosure via)
+  target      wiki.internal.example:443 (connect, local client)
+  rule        restricted (#2)
+  action      upstream:gateway -> 10.8.0.6:3128 (disclosure via)
+  interfaces  system routing
   ```
+
+  The `interfaces` line names the interface list in force and its
+  source: a rule, `proxy.interfaces`, or an upstream's own list, or
+  `system routing` when none applies ([0008 D15][d8-15]).
 
 ### D4. Control socket
 
@@ -119,7 +125,7 @@ control   /var/folders/<id>/T/cuttle/control.sock     TMPDIR
 
 | Method | Path | Response |
 | --- | --- | --- |
-| `GET` | `/v1/status` | Version, PID, start time, name, paths, listeners with state, upstreams with state, configuration state, counters ([0002 D7][d2-7]), up to 500 active tunnels, statistics state, log state with the rotation failure count, open-file limit |
+| `GET` | `/v1/status` | Version, PID, start time, name, paths, listeners with state, upstreams with state, interfaces with state ([0008 D15][d8-15]), configuration state, counters ([0002 D7][d2-7]), up to 500 active tunnels, statistics state, log state with the rotation failure count, open-file limit |
 | `POST` | `/v1/reload` | `200` with `restart_required` and warnings, or `422` with errors |
 
 ```json
@@ -135,12 +141,17 @@ control   /var/folders/<id>/T/cuttle/control.sock     TMPDIR
                 "state": "down", "since": "2026-11-25T00:58:00Z",
                 "down_s": 42.3, "failed_fast": 17,
                 "last_error": "connection_timeout"}],
+ "interfaces": [{"name": "eth-a", "device": "en7", "state": "online",
+                 "reason": "", "families": ["ipv4"],
+                 "primary": ["ipv4"], "since": "2026-11-25T00:00:00Z",
+                 "demoted_until": ""}],
  "config": {"path": "/Users/me/.config/cuttle/config.toml",
             "sha256": "9f2c...", "loaded_at": "2026-11-25T00:00:00Z",
             "restart_required": [], "last_reload_error": ""},
  "counters": {"tunnels_active": 3, "connections_active": 5},
  "tunnels": [{"target": "example.com:443", "kind": "connect",
-              "action": "direct", "source": "local", "age_s": 42,
+              "action": "direct", "source": "local",
+              "interface": "eth-a", "age_s": 42,
               "up": 3120, "down": 88000}],
  "stats": "disabled",
  "log": {"path": "/Users/me/.local/state/cuttle/cuttle.log",
@@ -156,7 +167,12 @@ control   /var/folders/<id>/T/cuttle/control.sock     TMPDIR
   `failed_fast` counts the requests answered at once during the current
   or last outage ([0003 D8][d3-8]). A tunnel's `kind` is `connect`, or
   `upgrade` for a connection upgraded after a `101`, and `upstream` names
-  the upstream of an upstream route. `stats` is `disabled` until M2.
+  the upstream of an upstream route. A tunnel's `interface` is the
+  decision-log value of [0008 D15][d8-15]: a configured interface name,
+  `other`, or empty. `interfaces` lists the `[[interface]]` definitions in
+  configuration order with their state, and is empty without
+  definitions; it never contains a MAC address. `stats` is `disabled`
+  until M2.
 - `log.rotation_failures` counts the failed rotations and reopens since
   start (D7), so an operator sees a log that cannot rotate without reading
   the launchd file.
@@ -238,8 +254,10 @@ status 2 and writes to stderr, which launchd sends to
   first failure of each run of log failures, and runtime panics, so it
   stays small without rotation.
 - Levels: `debug` adds tunnel-open and connection events; `info` has
-  decisions and lifecycle events; `warn` has rejected sources and
-  connection limits, retrying listeners, and statistics write errors;
+  decisions, lifecycle events, and interfaces coming online or leaving
+  demotion; `warn` has rejected sources and connection limits, retrying
+  listeners, statistics write errors, interfaces going offline or demoted,
+  and the interface identity warnings ([0008 D3][d8-3]);
   `error` has failures that stop a component. Rejected-source and limit
   warnings come at most once per source per minute and at most 60 per
   minute in all. One `warnings suppressed` line per minute then gives the
@@ -396,6 +414,8 @@ and the log.
 [d4-7]: 0004-configuration-and-reload.md#d7-atomic-write
 [d5-4]: 0005-statistics-and-admin.md#d4-write-path
 [d5-6]: 0005-statistics-and-admin.md#d6-password
+[d8-3]: 0008-interface-selection.md#d3-matching-system-interfaces
+[d8-15]: 0008-interface-selection.md#d15-status-command-line-logging-counters-and-statistics
 [oi]: ../OPEN_ISSUES.md
 [r1]: ../research/0001-homebrew-launchd-xdg.md
 [r1-1]: ../research/0001-homebrew-launchd-xdg.md#1-homebrew-formula-for-a-go-program-in-a-personal-tap

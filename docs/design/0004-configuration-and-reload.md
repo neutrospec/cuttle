@@ -70,10 +70,13 @@ Top level:
 | --- | --- | --- | --- | --- |
 | `listen` | array of `IP:port` | `["127.0.0.1:3128"]` | restart | Proxy listeners ([0003 D9][d3-9]) |
 | `default` | action | required | reload | Action for local clients when no rule matches |
-| `connect_timeout` | duration | `"10s"` | reload | Direct name lookup and TCP connect together, 100 ms–10 min |
+| `connect_timeout` | duration | `"10s"` | reload | Direct name lookup and TCP connect together, across all addresses and interfaces, 100 ms–10 min |
 | `response_timeout` | duration | `"60s"` | reload | Direct plain-HTTP response head, 100 ms–10 min |
 | `idle_timeout` | duration | `"1h"` | reload | Tunnel idle limit; `"0s"` disables |
 | `max_connections` | integer | `1024` | reload | Client connection cap, 16–65536 |
+| `interfaces` | array of interface names | `[]` | reload | Default interface list for `direct` routes, in priority order; `[]` follows system routing ([0008 D6][d8-6]) |
+| `interface_attempt_timeout` | duration | `"3s"` | reload | Connect time one interface gets before the next interface of the list is tried, 100 ms–10 min ([0008 D8][d8-8]) |
+| `interface_demotion` | duration | `"30s"` | reload | How long an interface that failed while a later one connected stays behind the others, 1 s–10 min; `"0s"` disables ([0008 D9][d8-9]) |
 
 `[proxy.remote]`:
 
@@ -87,6 +90,15 @@ Top level:
 
 Local clients have no port policy.
 
+`[[interface]]`, zero or more ([0008 D2][d8-2]):
+
+| Key | Type | Default | Applies | Meaning |
+| --- | --- | --- | --- | --- |
+| `name` | string | required | reload | `^[a-z][a-z0-9-]{0,31}$`, unique; `other` is reserved |
+| `mac` | string | none | reload | EUI-48 hardware address; at least one of `mac` and `device` |
+| `device` | string | none | reload | BSD name such as `en0` |
+| `kind` | string | none | reload | Guard: `wired`, `wifi`, or `cellular` |
+
 `[[upstream]]`, zero or more:
 
 | Key | Type | Default | Applies | Meaning |
@@ -94,9 +106,10 @@ Local clients have no port policy.
 | `name` | string | required | reload | `^[a-z][a-z0-9-]{0,31}$`, unique |
 | `address` | `host:port` | required | reload | Plain-HTTP proxy address |
 | `disclosure` | string | required | reload | `via` for another cuttle instance; `none` for an egress proxy or any proxy that must not see an intermediary ([0003 D1][d3-1]) |
-| `connect_timeout` | duration | `"10s"` | reload | 100 ms–10 min |
+| `connect_timeout` | duration | `"10s"` | reload | Lookup and TCP connect, across all addresses and interfaces, 100 ms–10 min |
 | `response_timeout` | duration | `"60s"` | reload | Response head for `CONNECT` and plain HTTP, 100 ms–10 min |
 | `unreachable_hold` | duration | `"5s"` | reload | Fail fast after a connect failure, 100 ms–5 min; `"0s"` disables ([0003 D8][d3-8]) |
+| `interfaces` | array of interface names | none | reload | Interface list for dials to this upstream's public addresses; unset follows system routing ([0008 D11][d8-11]) |
 
 `[[rule]]`, zero or more, evaluated in file order:
 
@@ -110,6 +123,7 @@ Local clients have no port policy.
 | `action` | action | required | `direct`, `block`, or `upstream:<name>` |
 | `allow_loopback` | boolean | `false` | `direct` only: local clients may reach loopback addresses, and names that resolve to this Mac's own addresses ([0003 D11][d3-11]) |
 | `allow_private` | boolean | `false` | `direct` only: local clients may reach private addresses that a name resolves to ([0003 D11][d3-11]) |
+| `interfaces` | array of interface names | none | `direct` only: this rule's interface list, which replaces `proxy.interfaces` ([0008 D6][d8-6]) |
 
 All rule keys apply on reload.
 
@@ -165,6 +179,21 @@ Errors:
 - An upstream address equal to a listener ([0003 D1][d3-1]).
 - An `admin.listen` that is not a loopback literal, or whose effective
   value, the default `127.0.0.1:3129` included, equals a proxy listener.
+- The interface errors of [0008 D6][d8-6]: an `[[interface]]` without
+  `mac` and `device`, an invalid `mac`, `device`, or `kind`, a duplicate
+  definition name, `mac`, or `device`, the name `other`, a list naming an
+  unknown or repeated interface, an empty `interfaces` list in a rule or an
+  upstream, `interfaces` on a rule whose action is not `direct`, and the
+  interface timeouts out of range. No message about an `[[interface]]` key
+  or an `interfaces` list repeats the value it is about. A TOML syntax
+  error whose `LastKey` is `interface`, starts with `interface.`, or ends
+  with `interfaces` is reported with its position and the fixed text
+  `TOML syntax: invalid value; put it in double quotes` instead of the
+  parser's message, which would quote part of an unquoted MAC.
+
+Upstream addresses need not be distinct; only upstream names must be
+unique. Two `[[upstream]]` entries with one address and different
+`interfaces` give one proxy two interface lists ([0008 D11][d8-11]).
 
 Warnings, printed by `cuttle check` and the settings page:
 
@@ -174,6 +203,13 @@ Warnings, printed by `cuttle check` and the settings page:
 - `proxy.remote.sources` contains `0.0.0.0/0` or `::/0`, which admits every
   address that can reach a non-loopback listener.
 - An upstream that no action uses.
+- The interface warnings of [0008 D6][d8-6]: a definition with `device`
+  and neither `mac` nor `kind`; a rule with `interfaces` and
+  `allow_loopback` or `allow_private`, or whose `cidrs` are all loopback or
+  private; an upstream without its own `interfaces` while
+  `proxy.interfaces` is set; an upstream with `interfaces` whose address is
+  a loopback or private literal; and `proxy.interface_attempt_timeout` at
+  or above `proxy.connect_timeout`.
 
 ### D5. Starter configuration
 
@@ -190,6 +226,9 @@ name = "cuttle-<hex>"  # unique per instance; appears in Via headers
 [proxy]
 listen = ["127.0.0.1:3128"]
 default = "direct"  # direct, block, or upstream:<name>
+# Interfaces for direct routes, in priority order; list them with
+# `cuttle interfaces`. Unset, macOS chooses as for other applications.
+# interfaces = ["eth-a", "wifi"]
 
 [admin]
 listen = "127.0.0.1:3129"  # set a password with `cuttle admin passwd`
@@ -222,6 +261,16 @@ allow_loopback = true
 # name = "restricted"
 # domains = ["internal.example"]
 # action = "upstream:gateway"
+
+# Network interfaces named for proxy.interfaces and rule lists:
+# [[interface]]
+# name = "eth-a"
+# mac = "00:00:5e:00:53:0a"  # from `cuttle interfaces`
+#
+# [[interface]]
+# name = "wifi"
+# device = "en0"
+# kind = "wifi"
 ```
 
 With the starter default `direct` on a loopback listener, a local client
@@ -250,11 +299,13 @@ Triggers: `SIGHUP`, `cuttle reload` through the control socket
    ([0006 D2][d6-2]). On failure, keep the running configuration, log the
    errors, and return them to the caller. `cuttle status` shows them as
    `last_reload_error` until a reload succeeds.
-2. Build a new immutable policy snapshot: compiled rules, remote settings,
-   upstream table, timeouts, and name.
+2. Re-read the interface table ([0008 D14][d8-14]) and build a new
+   immutable policy snapshot: compiled rules, remote settings, upstream
+   table, timeouts, name, interface definitions, and interface lists.
 3. Keep the transport and reachability state of each upstream whose
-   settings, `address`, `disclosure`, the timeouts, and
-   `unreachable_hold`, are unchanged under the same name. Create new ones
+   settings, `address`, `disclosure`, the timeouts, `unreachable_hold`,
+   `interfaces`, and the `mac`, `device`, and `kind` of each definition
+   that list names, are unchanged under the same name. Create new ones
    for the rest, close the idle connections of the replaced transports,
    and create new direct transports for the snapshot
    ([0003 D8][d3-8]).
@@ -339,3 +390,9 @@ The target always exists, holding the old or the new content.
 [d6-2]: 0006-packaging-paths-and-lifecycle.md#d2-permissions
 [d6-4]: 0006-packaging-paths-and-lifecycle.md#d4-control-socket
 [d7-4]: 0007-test-environment-and-gates.md#d4-instances-chains-and-loops
+[d8-2]: 0008-interface-selection.md#d2-interface-definitions
+[d8-6]: 0008-interface-selection.md#d6-interface-lists
+[d8-8]: 0008-interface-selection.md#d8-failover
+[d8-9]: 0008-interface-selection.md#d9-demotion
+[d8-11]: 0008-interface-selection.md#d11-upstreams
+[d8-14]: 0008-interface-selection.md#d14-reload

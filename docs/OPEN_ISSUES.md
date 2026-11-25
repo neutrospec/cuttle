@@ -192,12 +192,45 @@ Move resolved items to Closed with their resolving commit or evidence.
   behind an `allow_private` rule or an egress proxy on the gateway
   machine's LAN. Processes started from Terminal or SSH are exempt, so the
   current tests and manual runs do not show it. A denial fails at once and
-  could look like an interface or upstream failure.
+  could look like an interface or upstream failure. Design 0008 D8 treats
+  `EPERM` and `EACCES` as refusals that never fail over and dials
+  loopback, own, and private addresses unbound, so it relies on the denial
+  returning such an error for local network addresses only (assumption
+  F6). If a denial returns a failover error instead, a LAN numbered with
+  public addresses is the unprotected case, and the deployment guide must
+  name it.
 - Next action: researcher — on the user's machine, run cuttle as a
   LaunchAgent with the user's approval, connect to a LAN address, and
-  record whether a prompt appears, the error a denial returns, and how
-  approval persists; the M1.5 and M3 designs then name the outcome and the
-  deployment guide step.
+  record whether a prompt appears, the exact errno a denial returns, and
+  how approval persists; the M1.5 and M3 designs then name the outcome and
+  the deployment guide step.
+
+### OI-0008 — Interface behavior on the user's devices
+
+- Origin: research 0003 [open questions][r3-oq] 1–6 and 9; design 0008
+  [assumptions][d8-a] F1–F5, F7, and F8; the review of TASK-0008
+  iteration 1 (I-R2, I-R3).
+- Affected milestones: M1.5 and M1 close.
+- Iterations used: 2 of 3 in TASK-0008, for the design; the check itself
+  has not run.
+- Responsible step: test, with the user.
+- Status: open.
+- Blocking reason: the design rests on source reading and on observations
+  without phones or USB adapters attached. Whether tethered phones keep
+  their MACs and BSD names, what kind and media they report, how fast
+  notices arrive, what a phone without cellular data does to a connect,
+  and whether a bound flow leaves through a non-primary interface need the
+  user's devices and presence. A dead uplink behind the primary interface's
+  live link fails names at DNS (`502 dns_error` after up to
+  `connect_timeout`) before any interface is chosen, so failover and
+  demotion help only IP literals and cached names there; the user accepted
+  this as a documented limitation in iteration 2, and per-interface name
+  lookups are on the roadmap's Later list.
+- Next action: tester — run the [0008 device check][d8-dc] with the user
+  after M1.5 is implemented, including the optional dead-uplink step if the
+  user can cut the router's uplink, and record the results in the
+  compatibility matrix. If phone MACs prove unstable (F2), the identity
+  question returns to the user before M1 closes.
 
 ### OI-0006 — Design follow-ups from the TASK-0001 final review
 
@@ -377,6 +410,9 @@ Move resolved items to Closed with their resolving commit or evidence.
 [d6-8]: design/0006-packaging-paths-and-lifecycle.md#d8-tap-and-formula
 [d6-a]: design/0006-packaging-paths-and-lifecycle.md#assumptions
 [d7-8]: design/0007-test-environment-and-gates.md#d8-client-checks
+[d8-a]: design/0008-interface-selection.md#assumptions
+[d8-dc]: design/0008-interface-selection.md#device-check-i20
 [r1-oq]: research/0001-homebrew-launchd-xdg.md#open-questions
 [r2-oq]: research/0002-proxy-chaining-and-interception.md#open-questions
 [r3-lnp]: research/0003-interface-selection.md#local-network-privacy
+[r3-oq]: research/0003-interface-selection.md#open-questions

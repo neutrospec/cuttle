@@ -12,11 +12,13 @@ and an independent review is complete.
 cuttle routes `CONNECT` tunnels and plain `http://` requests to `direct`,
 an upstream proxy, or `block`; protects a remote listener; reaches an
 egress proxy through an edge → gateway chain without disclosing an
-intermediary; and reports live traffic. Acceptance uses T0 and T1 with Go,
-raw-socket, and curl clients against the mocks, plus the T2 M1 client check
-with headless Chrome and `/usr/bin/curl` against cuttle binaries and the
-mocks ([design 0007 D8][d7-8]). No installation, no Safari, no system proxy
-setting, and no keychain change.
+intermediary; reports live traffic; and chooses the network interface of
+each connection by priority and per destination. Acceptance uses T0 and T1
+with Go, raw-socket, and curl clients against the mocks, plus the T2 M1
+client check with headless Chrome and `/usr/bin/curl` against cuttle
+binaries and the mocks ([design 0007 D8][d7-8]) and the M1.5 device check
+on the user's interfaces ([design 0008][d8-dc]). No installation, no
+Safari, no system proxy setting, and no keychain change.
 
 Each stage uses only features of its own or earlier stages. Live counters
 exist in memory from M1.1, and tests read them through the Go API; M1.4
@@ -28,12 +30,16 @@ exposes them through the control socket and proves exact byte accounting.
 | M1.2 — Exposure | Listeners accept only explicit addresses, and `cuttle serve` accepts non-loopback listeners. Sources are classified on accept: remote sources need the allowlist, get their own ports and default, and cannot go `direct` unless allowed, and then only to public addresses. Direct connection pools are kept apart per client class. Connection limits apply. Upstream routes stay unsupported until M1.3, and every listener must bind at startup until M1.4 adds the retry. Criteria: 0002 C15; 0003 N1, N2, N3, and N6. |
 | M1.3 — Upstreams and chaining | `disclosure = "via"` upstreams receive one cuttle `Via` entry; `disclosure = "none"` upstreams receive requests that disclose no intermediary, shown by the non-disclosure chain test. Any upstream 2xx yields exactly `200`; `CONNECT` failures map to `502`, `503`, or `504` with `Proxy-Status`, plain-HTTP responses pass through, and nothing falls back to `direct`. An unreachable upstream is held so later requests fail at once. Edge → gateway → inspecting egress mock delivers a leaf signed by the inspection root CA, and an edge ↔ gateway loop stops after two `CONNECT` requests. Criteria: 0003 U1–U12. |
 | M1.4 — Live operation | Live counters show exact byte deltas during and after a controlled transfer. `cuttle status` and `cuttle reload` work over the control socket. A reload keeps established tunnels; after it removes a source, that source's kept-alive connections close at their next request, while its established tunnels survive until they close or reach the idle timeout. A non-loopback listener that cannot bind is retried while the other listeners serve, and shows as retrying. `SIGTERM` drains and exits within 8 s. Criteria: 0002 C12–C13; 0003 N5 and N7; 0004 K3–K6; 0006 P2, P4, and P5. |
+| M1.5 — Interface selection | `[[interface]]` definitions match system interfaces by MAC or BSD name with an optional kind guard and are online only with an active link, a usable address, and a default route of the family, read without probe traffic and refreshed on routing and kernel event notices. `direct` routes follow `proxy.interfaces` or a rule's own list, which pins and restricts, and bind each public-address dial with `IP_BOUND_IF` or `IPV6_BOUND_IF`; loopback, own, and private addresses stay on system routing. A local or path connect error, or a 3 s attempt timeout, moves to the next listed interface, a refusal does not, an interface that failed while a later one connected is demoted for 30 s in every list, and a list with no usable interface answers `503`. Upstreams keep system routing unless they set a list, which binds only their public addresses; two upstream entries with one address give one proxy two lists. Pools follow the list, reload applies definitions, and `cuttle status`, `cuttle interfaces`, the decision log, and per-interface counters show the interface used. DNS stays on the primary interface as a documented limitation, so a dead uplink behind the primary fails names before failover ([OI-0008][oi-8]). No new module and no cgo. Criteria: 0008 I1–I19, and the I20 device check with the user. |
 
-M1 also needs the test environment criteria 0007 E1–E7 and the M1 client
-check: direct HTTPS and HTTP, block, upstream, WebSocket over `CONNECT` to
-port 80, the edge → gateway chain, and `mockenv check-disclosure`
-comparing Chrome and curl requests sent directly to a mock and through
-edge → gateway with `disclosure = "none"`.
+M1 also needs the test environment criteria 0007 E1–E7, the M1 client
+check, and the M1.5 device check. The client check covers direct HTTPS and
+HTTP, block, upstream, WebSocket over `CONNECT` to port 80, the edge →
+gateway chain, and `mockenv check-disclosure` comparing Chrome and curl
+requests sent directly to a mock and through edge → gateway with
+`disclosure = "none"`. The device check runs [design 0008][d8-dc] I20 on
+the user's Mac with the user's Wi-Fi, Ethernet adapters, and tethered
+phones.
 
 Changes from the suggested split, with reasons:
 
@@ -50,6 +56,10 @@ Changes from the suggested split, with reasons:
 - Exposure comes before upstreams. The chain tests need remote source
   classes, the allowlist, and the remote default, so the stage that
   delivers them goes first.
+- Interface selection (M1.5) comes after live operation and before M1
+  closes, as the user decided. It reuses M1.4's reload, status, and
+  counters, and it puts the interface into the decision log and counters
+  before M2, so the M2 statistics carry it from their first schema.
 
 ## M2 — Statistics and admin
 
@@ -88,6 +98,10 @@ chained deployment. Acceptance uses T0, T1, and full T2.
 - Converting U-labels, and remote `direct` routes to private ranges by
   explicit rule.
 - Closing established tunnels that a reload newly blocks.
+- Name lookups per interface, so that a pinned destination resolves
+  through its own interface and a dead uplink behind the primary interface
+  no longer fails names ([design 0008 D13][d8-13]).
+- Moving long-lived tunnels back to a preferred interface when it returns.
 - A PAC file, SOCKS, and Linux support.
 
 ## Non-goals
@@ -109,8 +123,11 @@ chained deployment. Acceptance uses T0, T1, and full T2.
 [d3-5]: design/0003-upstream-chaining-and-exposure.md#d5-non-disclosure-toward-an-egress-proxy
 [d3-13]: design/0003-upstream-chaining-and-exposure.md#d13-edge-gateway-and-egress-deployment
 [d7-8]: design/0007-test-environment-and-gates.md#d8-client-checks
+[d8-13]: design/0008-interface-selection.md#d13-name-resolution
+[d8-dc]: design/0008-interface-selection.md#device-check-i20
 [oi-1]: OPEN_ISSUES.md#oi-0001--real-egress-proxy-and-private-link-in-the-example-deployment
 [oi-2]: OPEN_ISSUES.md#oi-0002--safari-and-cfnetwork-behavior-unverified
 [oi-3]: OPEN_ISSUES.md#oi-0003--homebrew-and-launchd-behavior-unverified
 [oi-4]: OPEN_ISSUES.md#oi-0004--tap-hosting-repository-remote-and-licence
 [oi-5]: OPEN_ISSUES.md#oi-0005--private-root-trust-through-the-chain
+[oi-8]: OPEN_ISSUES.md#oi-0008--interface-behavior-on-the-users-devices

@@ -20,6 +20,10 @@ ordered rules on host name, domain, IP prefix, and port:
   supported, with loop detection and source and destination controls for
   listeners reachable over a private link. Requests toward an egress proxy
   disclose no intermediary.
+- Where connection costs differ, cuttle can choose the network interface of
+  each connection: named Wi-Fi, Ethernet, or tethered-phone interfaces in
+  priority order, with per-rule lists that pin a destination to one of
+  them.
 - Live counters, a decision log, hourly per-domain statistics in SQLite, and
   a password-protected dashboard and settings page on loopback show where
   traffic went.
@@ -58,6 +62,22 @@ non-loopback listener that cannot bind, for example while a private link
 is down, is retried every 30 s and shows as `retrying`. `SIGTERM` drains
 in-flight requests for up to 5 s and closes tunnels. The statistics and
 the admin UI arrive in later stages of the [roadmap](docs/ROADMAP.md).
+
+Interface selection is designed for stage M1.5 and not yet implemented
+([design 0008](docs/design/0008-interface-selection.md)). The
+configuration will name interfaces in `[[interface]]` tables by MAC
+address or BSD name, which a new `cuttle interfaces` command lists, and
+order them in `proxy.interfaces`; a `direct` rule or an upstream can carry
+its own `interfaces` list. Two limits matter in practice. Name lookups
+still go through the interface that macOS treats as primary, so set the
+macOS network service order to match `proxy.interfaces`. When that primary
+interface keeps its link but loses its internet connection, names fail to
+resolve before cuttle can move to another interface
+([0008 D13](docs/design/0008-interface-selection.md#d13-name-resolution)).
+With `proxy.interfaces` or a rule list set, `direct` connections to public
+addresses leave through the listed interface and bypass full-tunnel and
+split-tunnel VPN routes; private addresses keep system routing
+([0008 D7](docs/design/0008-interface-selection.md#d7-dial-plan)).
 
 Try it from a checkout:
 

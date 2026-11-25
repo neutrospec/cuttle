@@ -51,7 +51,10 @@ egress proxy ([research 0002 §3][r2-3], open question 6).
   upstream addresses, which are often loopback or private.
 - A failed upstream ends the request. cuttle never tries `direct` or another
   upstream. An upstream that could not be reached is held briefly so later
-  requests fail at once (D8). Failover lists are a later topic.
+  requests fail at once (D8). Failover lists are a later topic. An
+  upstream with its own interface list may try the same upstream through
+  another interface of that list ([0008 D11][d8-11]); this is interface
+  failover, not upstream failover.
 - Configuration validation rejects an upstream whose address equals one of
   this instance's listener addresses, comparing IP literals and treating
   `localhost` as loopback. At dial time, an upstream whose resolved address
@@ -224,6 +227,7 @@ Limits:
 | Refused, reset, or unreachable | 502 | `error=connection_refused; next-hop="<upstream>"` |
 | TCP connect timeout | 504 | `error=connection_timeout; next-hop="<upstream>"` |
 | Held as unreachable (D8) | 503 | `error=destination_unavailable; next-hop="<upstream>"` |
+| No usable interface in the upstream's list ([0008 D10][d8-10]) | 503 | `error=destination_unavailable; next-hop="<upstream>"`, with `details` for local clients only |
 | No response head within `response_timeout` | 504 | `error=http_response_timeout; next-hop="<upstream>"` |
 | Closed or reset after the TCP connect, before the `CONNECT` answer or response head | 502 | `error=connection_refused; next-hop="<upstream>"` |
 | Response unparsable | 502 | `error=http_protocol_error; next-hop="<upstream>"` |
@@ -270,9 +274,10 @@ Limits:
 | --- | --- | --- | --- |
 | Request head | 30 s | fixed | Reading a client request head |
 | Keep-alive idle | 120 s | fixed | Between requests on a client connection |
-| Direct connect | 10 s | `proxy.connect_timeout` | Name lookup and TCP connect for a direct route, all addresses |
+| Direct connect | 10 s | `proxy.connect_timeout` | Name lookup and TCP connect for a direct route, all addresses and interfaces |
 | Direct response | 60 s | `proxy.response_timeout` | Plain-HTTP response head from an origin |
-| Upstream connect | 10 s | `connect_timeout` in `[[upstream]]` | Lookup of the upstream's own host name and TCP connect to it, all addresses |
+| Upstream connect | 10 s | `connect_timeout` in `[[upstream]]` | Lookup of the upstream's own host name and TCP connect to it, all addresses and interfaces |
+| Interface attempt | 3 s | `proxy.interface_attempt_timeout` | One interface's share of a direct or upstream connect budget before the next interface of the list is tried ([0008 D8][d8-8]) |
 | Upstream response | 60 s | `response_timeout` in `[[upstream]]` | Response head for `CONNECT` and plain HTTP |
 | Tunnel idle | 1 h | `proxy.idle_timeout` | No bytes in either direction; `0s` disables it |
 | Shutdown drain | 5 s | fixed | [0006 D6][d6-6] |
@@ -306,7 +311,11 @@ by another upstream.
   or reset after the TCP connect and before the `CONNECT` answer or
   response head, and errors after the `200` do not trigger it, because the
   upstream was reachable and the fault may lie further along the chain. A
-  dial abandoned because the client left is not a failure.
+  dial abandoned because the client left is not a failure. For an
+  upstream with an interface list, the failure is that of the whole plan,
+  after every interface was tried ([0008 D11][d8-11]); a plan with no
+  usable interface answers `503` with outcome `no_interface` and neither
+  starts nor extends a hold.
 - **Hold.** The upstream is `down` for `unreachable_hold` in its
   `[[upstream]]` table, default `"5s"`, range 100 ms–5 min; `"0s"` disables
   the hold ([0004 D3][d4-3]). Every request routed to it during the hold
@@ -325,8 +334,9 @@ by another upstream.
   without a dial, ends as `up` when it relays a response, and otherwise
   leaves the upstream due for another probe. cuttle sends no background
   probes (D5).
-- **Reload.** An upstream whose settings are unchanged keeps its state
-  and its transport with the pooled connections; a changed or new upstream
+- **Reload.** An upstream whose settings, its `interfaces` list and the
+  definitions that list names included, are unchanged keeps its state and
+  its transport with the pooled connections; a changed or new upstream
   starts `up` with a new transport. A replaced or removed upstream still
   serves the requests and tunnels that already use it, but its state no
   longer changes or reaches the gauges, and its idle connections close. A
@@ -422,7 +432,10 @@ including its loopback admin UI and other local services
 4. Dial only the remaining addresses, as literals, through
    `Network.DialContext`. Attempts follow the resolver's order, starting the
    next address 300 ms after the previous one if it has not connected, as
-   in RFC 8305. There is no second lookup, so a rebinding answer cannot
+   in RFC 8305. When an interface list is in force, the addresses are
+   dialed through the [0008 D7][d8-7] plan instead: `loopback`, `self`, and
+   `private` addresses unbound first, then `public` addresses per listed
+   interface. There is no second lookup, so a rebinding answer cannot
    slip in between the check and the connection
    ([research 0002 §7][r2-7]).
 
@@ -430,7 +443,7 @@ including its loopback admin UI and other local services
 | --- | --- | --- | --- | --- |
 | `unusable` | `0.0.0.0/8`, `::`, `169.254.0.0/16`, `fe80::/10`, `224.0.0.0/4`, `ff00::/8`, `240.0.0.0/4` | Refused | Refused | Refused |
 | `loopback` | `127.0.0.0/8`, `::1` | Through a rule with `allow_loopback` | Through a rule with `allow_loopback` | Refused |
-| `self` | This host's interface addresses, refreshed at most every 10 s | Allowed | Through a rule with `allow_loopback` | Refused |
+| `self` | This host's interface addresses, refreshed at most every 10 s, and at the next use after each interface re-read while the [0008 D5][d8-5] monitor runs | Allowed | Through a rule with `allow_loopback` | Refused |
 | `private` | `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `100.64.0.0/10`, `fc00::/7` | Allowed | Through a rule with `allow_private` | Refused |
 | `public` | Everything else | Allowed | Allowed | Allowed |
 
@@ -539,6 +552,12 @@ private-link address. The egress proxy receives requests that disclose no
 intermediary (D5), and it attributes all of this traffic to the gateway
 machine. Operators must make sure that the network's policy allows
 relaying requests from other machines through the gateway machine.
+
+An edge instance that also uses interface lists reaches the gateway at
+its private-link address through system routing, even when the `gateway`
+upstream has an `interfaces` list: private upstream addresses are always
+dialed unbound ([0008 D11][d8-11]). A link that ends on the edge machine,
+whose route runs through a `utun` interface, therefore keeps working.
 
 Which source address the gateway instance sees depends on where the link
 ends on the edge side:
@@ -748,6 +767,11 @@ deployment of D13 ([OI-0001][oi]).
 [d5-1]: 0005-statistics-and-admin.md#d1-recorded-data
 [d6-4]: 0006-packaging-paths-and-lifecycle.md#d4-control-socket
 [d6-6]: 0006-packaging-paths-and-lifecycle.md#d6-signals-and-shutdown
+[d8-5]: 0008-interface-selection.md#d5-reading-state-and-noticing-changes
+[d8-7]: 0008-interface-selection.md#d7-dial-plan
+[d8-8]: 0008-interface-selection.md#d8-failover
+[d8-10]: 0008-interface-selection.md#d10-no-usable-interface
+[d8-11]: 0008-interface-selection.md#d11-upstreams
 [oi]: ../OPEN_ISSUES.md
 [r2]: ../research/0002-proxy-chaining-and-interception.md
 [r2-1]: ../research/0002-proxy-chaining-and-interception.md#1-connect-through-chained-http-proxies

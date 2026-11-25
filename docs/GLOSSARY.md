@@ -86,6 +86,37 @@ commits and the research notes use older wording; the
   rule, action, upstream, outcome, and byte counts, and never paths,
   queries, header values, or bodies ([0002 D8][d2-8]).
 
+## Interfaces
+
+- **System interface.** A network interface as macOS reports it, with a
+  BSD name such as `en0`, an index, and usually a MAC address.
+- **Interface.** A named `[[interface]]` definition that matches one
+  system interface by MAC address, BSD name, or both, with an optional
+  kind guard ([0008 D2][d8-2]). Lists, logs, counters, and statistics use
+  its name; the MAC stays in the configuration file.
+- **Online.** The state of an interface whose link is active and that has
+  a usable address and a default route for at least one address family,
+  read from the system without sending traffic ([0008 D4][d8-4]).
+- **Interface list.** An ordered list of interface names:
+  `proxy.interfaces` for `direct` routes, a rule's own `interfaces`, or an
+  upstream's `interfaces`. The list in force is the only set of interfaces
+  a request may use, and its order is the priority ([0008 D6][d8-6]).
+- **Bound dial.** A TCP connection restricted to one interface with the
+  socket option `IP_BOUND_IF` or `IPV6_BOUND_IF`. An unbound dial follows
+  system routing ([0008 D7][d8-7]).
+- **System routing.** macOS's own choice of interface for an unbound
+  dial: the primary interface's default route, or a more specific route
+  such as a VPN's.
+- **Primary interface.** The interface that holds the unscoped default
+  route. It carries name lookups and unbound dials ([0008 D13][d8-13]).
+- **Failover.** Moving to the next interface in the list in force after a
+  fast connect failure or an attempt timeout ([0008 D8][d8-8]). It keeps
+  the route: it is neither a fallback from an upstream to `direct` nor a
+  move to another upstream.
+- **Demotion.** Placing an interface after the others in every list for a
+  short period after it failed while a later interface connected
+  ([0008 D9][d8-9]). It applies to all destinations at once.
+
 ## Testing
 
 - **Mocks.** Controlled origins and upstream proxies in `internal/testenv`
@@ -145,3 +176,10 @@ notes, which keep their original wording.
 [d7-2]: design/0007-test-environment-and-gates.md#d2-mocks
 [d7-7]: design/0007-test-environment-and-gates.md#d7-gates
 [d7-8]: design/0007-test-environment-and-gates.md#d8-client-checks
+[d8-2]: design/0008-interface-selection.md#d2-interface-definitions
+[d8-4]: design/0008-interface-selection.md#d4-online-state
+[d8-6]: design/0008-interface-selection.md#d6-interface-lists
+[d8-7]: design/0008-interface-selection.md#d7-dial-plan
+[d8-8]: design/0008-interface-selection.md#d8-failover
+[d8-9]: design/0008-interface-selection.md#d9-demotion
+[d8-13]: design/0008-interface-selection.md#d13-name-resolution
