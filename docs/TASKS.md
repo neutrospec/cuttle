@@ -44,15 +44,20 @@ A closed task becomes one line under Closed:
 ### TASK-0009 — M1.5 interface selection implementation
 
 - Milestone: M1.5
-- Status: implement
+- Status: review
 - Iteration: 1/3
-- Workers: implementer on a T3 worktree branch
-- Base: this board update
-- Candidate: none
-- Evidence: none
-- Findings: none
-- Next action: implementer — build M1.5 from design 0008 with the T0 and
-  T1 gates and return the candidate commit
+- Workers: implementer done on branch `t3/interface-selection`; fresh
+  reviewer pending
+- Base: `8161b53`
+- Candidate: `b6aa8de` (tree `1c2d912`)
+- Evidence: implementer ran `scripts/gate t0` and `t1` on `1c2d912`, both
+  pass; 41 code mutations and 3 gate controls each fail their targeted
+  test
+- Findings: none yet; implementer lists 13 design questions, including a
+  hand-written route parser because `syscall.ParseRoutingMessage` fails
+  checkptr under `-race`
+- Next action: reviewer — independent review of `8161b53..b6aa8de` with a
+  gate rerun
 
 Decisions for TASK-0009 (2026-11-25):
 
