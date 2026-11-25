@@ -103,6 +103,10 @@ Decisions for TASK-0007 (2026-11-25):
   `TMPDIR` location with a source note; if that is also too long, `serve`
   logs one clear error and runs without the socket, and `cuttle paths` and
   `cuttle status` report the cause.
+- After TASK-0007 lands (orchestrator, docs): reword the two remaining
+  "corporate" rows in the 0003 D13 example table (egress proxy, inspection
+  root CA) in general terms, per the user's request to drop the in-house
+  framing.
 
 ## Closed
 
