@@ -44,16 +44,18 @@ A closed task becomes one line under Closed:
 ### TASK-0015 — M3.1 Homebrew formula and service
 
 - Milestone: M3.1
-- Status: implement
+- Status: review
 - Iteration: 1/3
-- Workers: infra on a T3 worktree branch
-- Base: this board update
-- Candidate: none
-- Evidence: none
-- Findings: none
-- Next action: infra — add the licence, module path, `cuttle version`,
-  formula, and publish scan, run the OI-0003 checks and 0006 P8–P12 with a
-  throwaway local tap, and return the candidate
+- Workers: infra done on branch `t3/homebrew-formula-service`; fresh
+  reviewer running
+- Base: `587f645`
+- Candidate: `c4b6c12` (tree `8ece173`)
+- Evidence: infra ran `scripts/gate t0` and `t1` on `8ece173`, both pass;
+  with a throwaway local tap, `brew install`, `brew test`, `brew audit
+  --strict`, and the service checks P9–P12 and 0003 A5 pass, and cleanup
+  was verified; the final P8 with the real tag follows publication
+- Findings: none yet
+- Next action: reviewer — risk-based review of `587f645..c4b6c12`
 
 Decisions for TASK-0015 (2026-11-26):
 

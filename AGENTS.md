@@ -1,7 +1,7 @@
 # Agent operating rules
 
-`squid` is an explicit HTTPS forward proxy with rule-based routing and traffic
-metrics. The [roadmap](docs/ROADMAP.md) defines milestone outcomes. Read
+`cuttle` is an explicit HTTPS forward proxy with rule-based routing and
+traffic metrics. The [roadmap](docs/ROADMAP.md) defines milestone outcomes. Read
 [LESSONS.md](docs/LESSONS.md), the [documentation index](docs/README.md), and
 the relevant design before starting work.
 
