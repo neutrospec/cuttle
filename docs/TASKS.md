@@ -65,29 +65,6 @@ Decisions for TASK-0012 (2026-11-25):
   in mockenv sessions) and V6 (the Local Network Access observation in the
   M1 client check).
 
-### TASK-0010 — M2.1 statistics
-
-- Milestone: M2.1
-- Status: review
-- Iteration: 1/3
-- Workers: implementer done on branch `t3/implement-hourly-statistics`;
-  fresh reviewer pending
-- Base: `f94f8e7`
-- Candidate: `866aced` (tree `2d0b06c`)
-- Evidence: implementer ran `scripts/gate t0` and `t1` on `2d0b06c`, both
-  pass; mutation proofs for S2, S3, and S7 each fail their test
-- Findings: none yet
-- Next action: reviewer — risk-based review of `f94f8e7..866aced`
-
-Decisions for TASK-0010 (2026-11-25):
-
-- The user wants the admin page soon; M2.1 and M2.2 run in parallel, and
-  the second to land merges the first.
-- Also in scope: OI-0006 M-R2 (fit the statistics flush into the 8 s
-  shutdown budget) and the cgo gate fix (`CGO_ENABLED=1 go list` in
-  `scripts/gate` and 0007 D7).
-- Review follows the risk-based policy in AGENTS.md.
-
 ## Closed
 
 The history was rewritten on 2026-11-25 (TASK-0003) to remove local
@@ -96,6 +73,9 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0010 — M2.1 statistics — landed `3b3a836`, gates: T0 T1 @ `9bfd095`;
+  reviewed tree `2d0b06c` (iteration 1 of 3); follow-ups Q-R1–Q-R8 in
+  OI-0006
 - TASK-0011 — M2.2 admin access — landed `d5f3603`, gates: T0 T1 @ `21c216f`;
   reviewed tree `dc68654` plus the P-R1 test fix (tree `04d8845`),
   iteration 1 of 3; follow-ups P-R2–P-R7 in OI-0006
