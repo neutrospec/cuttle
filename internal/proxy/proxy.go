@@ -44,6 +44,10 @@ const (
 	// RetryInterval is how often a non-loopback listener that cannot bind
 	// is tried again (design 0003 D9).
 	RetryInterval = 30 * time.Second
+	// handlerWait bounds how long Shutdown waits, after closing tunnels and
+	// connections, for their handlers to write their decision lines, so
+	// shutdown stays within the 8 s budget of design 0006 D6.
+	handlerWait = time.Second
 )
 
 // Deps are the proxy's injected dependencies. Network and SelfAddrs are
@@ -75,6 +79,10 @@ type Deps struct {
 type RetryListener struct {
 	Address string // as configured, IP:port
 	Err     error  // the bind error
+	// Index is the address's position in proxy.listen, so status lists the
+	// listeners in configuration order; Deps.Listeners fill the other
+	// positions in their order.
+	Index int
 }
 
 // Listener states for status displays (design 0003 D9, 0006 D4).
@@ -132,6 +140,56 @@ type Proxy struct {
 	// forced is set when Shutdown closes connections whose exchanges did not
 	// finish within the drain, so they log outcome shutdown.
 	forced atomic.Bool
+	// handlers counts root handler calls in progress; Shutdown waits for
+	// them, so every decision line comes before the caller logs stopped.
+	handlers handlerCount
+}
+
+// handlerCount counts calls in progress and lets one waiter wait, with a
+// bound, until none is left.
+type handlerCount struct {
+	mu   sync.Mutex
+	n    int
+	zero chan struct{} // closed when n drops to 0 while someone waits
+}
+
+func (h *handlerCount) enter() {
+	h.mu.Lock()
+	h.n++
+	h.mu.Unlock()
+}
+
+func (h *handlerCount) leave() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.n--; h.n == 0 && h.zero != nil {
+		close(h.zero)
+		h.zero = nil
+	}
+}
+
+// wait waits until no call is in progress or timeout passes, and returns
+// how many calls are still in progress.
+func (h *handlerCount) wait(timeout time.Duration) int {
+	h.mu.Lock()
+	if h.n == 0 {
+		h.mu.Unlock()
+		return 0
+	}
+	if h.zero == nil {
+		h.zero = make(chan struct{})
+	}
+	ch := h.zero
+	h.mu.Unlock()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-ch:
+	case <-timer.C:
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.n
 }
 
 // sourceClasses lists the client classes; each has its own direct
@@ -190,13 +248,9 @@ func New(cfg *config.Config, deps Deps) (*Proxy, error) {
 		warn:    newWarnLimiter(deps.Logger),
 		done:    make(chan struct{}),
 	}
-	now := time.Now()
+	p.lstates = listenerStates(deps.Listeners, deps.Retry, time.Now())
 	for _, l := range deps.Listeners {
-		p.lstates = append(p.lstates, &listenerState{addr: l.Addr().String(), state: ListenerBound, since: now, ln: l})
 		p.addBoundLocked(l)
-	}
-	for _, r := range deps.Retry {
-		p.lstates = append(p.lstates, &listenerState{addr: r.Address, state: ListenerRetrying, err: r.Err.Error(), since: now})
 	}
 	ups := map[string]*upstream{}
 	for _, u := range cfg.Upstreams {
@@ -236,6 +290,35 @@ func ruleRoutes(cfg *config.Config) []policy.Route {
 		out[i] = r.Route
 	}
 	return out
+}
+
+// listenerStates orders the bound and the retried listeners as configured:
+// each retried one at its Index, the bound ones in the remaining positions
+// in their order. A retried listener whose Index is out of range or taken
+// fills a remaining position.
+func listenerStates(bound []net.Listener, retry []RetryListener, now time.Time) []*listenerState {
+	slots := make([]*listenerState, len(bound)+len(retry))
+	var rest []*listenerState
+	for _, r := range retry {
+		st := &listenerState{addr: r.Address, state: ListenerRetrying, err: r.Err.Error(), since: now}
+		if r.Index >= 0 && r.Index < len(slots) && slots[r.Index] == nil {
+			slots[r.Index] = st
+		} else {
+			rest = append(rest, st)
+		}
+	}
+	for i := range slots {
+		if slots[i] != nil {
+			continue
+		}
+		if len(bound) > 0 {
+			slots[i] = &listenerState{addr: bound[0].Addr().String(), state: ListenerBound, since: now, ln: bound[0]}
+			bound = bound[1:]
+		} else {
+			slots[i], rest = rest[0], rest[1:]
+		}
+	}
+	return slots
 }
 
 // checkRoutes refuses a configuration whose routes name an upstream that the
@@ -488,7 +571,10 @@ func (p *Proxy) retry(st *listenerState) {
 // Shutdown closes the listeners and idle connections, stops retrying
 // listeners, waits for in-flight plain-HTTP exchanges until ctx ends, then
 // closes every remaining connection, tunnels and upgraded connections
-// included, with outcome shutdown (design 0006 D6).
+// included, with outcome shutdown (design 0006 D6). Before it returns it
+// waits, for at most handlerWait, until every handler has returned, so
+// their decision lines are written before the caller logs stopped and
+// closes the log.
 func (p *Proxy) Shutdown(ctx context.Context) error {
 	p.mu.Lock()
 	p.closing = true
@@ -507,6 +593,9 @@ func (p *Proxy) Shutdown(ctx context.Context) error {
 	p.mu.Unlock()
 	for _, t := range ts {
 		t.shutdown()
+	}
+	if n := p.handlers.wait(handlerWait); n > 0 {
+		p.log.Warn("shutdown: handlers still running", "count", n, "waited", handlerWait.String())
 	}
 	p.snap.Load().closeIdle()
 	p.warn.stop()

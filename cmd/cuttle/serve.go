@@ -171,13 +171,20 @@ func (s *serveState) run(stderr io.Writer, listen func(network, address string) 
 
 	// D5 step 6: the control socket. Another running instance stops
 	// startup; any other failure leaves cuttle running without the socket.
-	ctl, err := control.Listen(s.paths.Control.Path)
-	switch {
-	case errors.Is(err, control.ErrRunning):
-		return fail("control socket", err)
-	case err != nil:
-		s.log.Warn("control socket unavailable; running without it", "path", s.paths.Control.Path, "error", err.Error())
-		ctl = nil
+	// A socket path over the Unix limit is a configuration error of the
+	// environment, logged once as an error (design 0006 D1).
+	var ctl net.Listener
+	if err := s.paths.ControlError(); err != nil {
+		s.log.Error("control socket unavailable; running without it", "error", err.Error())
+	} else {
+		ctl, err = control.Listen(s.paths.Control.Path)
+		switch {
+		case errors.Is(err, control.ErrRunning):
+			return fail("control socket", err)
+		case err != nil:
+			s.log.Warn("control socket unavailable; running without it", "path", s.paths.Control.Path, "error", err.Error())
+			ctl = nil
+		}
 	}
 	closeCtl := func() {
 		if ctl != nil {
@@ -198,7 +205,7 @@ func (s *serveState) run(stderr io.Writer, listen func(network, address string) 
 		}
 		closeCtl()
 	}
-	for _, addr := range cfg.Proxy.Listen {
+	for i, addr := range cfg.Proxy.Listen {
 		l, err := listen("tcp", addr.String())
 		if err != nil {
 			if addr.Addr().Unmap().IsLoopback() {
@@ -206,7 +213,7 @@ func (s *serveState) run(stderr io.Writer, listen func(network, address string) 
 				return fail("bind "+addr.String(), err)
 			}
 			s.log.Warn("listener retrying", "address", addr.String(), "error", err.Error(), "retry", retryInterval.String())
-			retry = append(retry, proxy.RetryListener{Address: addr.String(), Err: err})
+			retry = append(retry, proxy.RetryListener{Address: addr.String(), Err: err, Index: i})
 			continue
 		}
 		listeners = append(listeners, l)

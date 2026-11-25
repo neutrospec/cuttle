@@ -190,6 +190,14 @@ func (u *RecordingUpstream) Connections() int {
 	return u.n
 }
 
+// OpenConnections returns how many accepted connections the mock still
+// serves; one counts until the peer closes it.
+func (u *RecordingUpstream) OpenConnections() int {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return len(u.conns)
+}
+
 // Reset clears the recorded requests.
 func (u *RecordingUpstream) Reset() {
 	u.mu.Lock()

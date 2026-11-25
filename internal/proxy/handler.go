@@ -95,6 +95,8 @@ func newID() string {
 
 // ServeHTTP is the root handler: no ServeMux (design 0002 D2).
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	p.handlers.enter()
+	defer p.handlers.leave()
 	ex := &exchange{
 		id:     newID(),
 		start:  time.Now(),

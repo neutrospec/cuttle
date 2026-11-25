@@ -42,18 +42,8 @@ func Listen(path string) (net.Listener, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	fi, err := os.Lstat(dir)
-	if err != nil {
+	if err := CheckDir(dir); err != nil {
 		return nil, err
-	}
-	if !fi.IsDir() {
-		return nil, fmt.Errorf("%w: %s is not a directory", ErrInsecureDir, dir)
-	}
-	if st, ok := fi.Sys().(*syscall.Stat_t); ok && int(st.Uid) != os.Getuid() {
-		return nil, fmt.Errorf("%w: %s is owned by another user (uid %d)", ErrInsecureDir, dir, st.Uid)
-	}
-	if perm := fi.Mode().Perm(); perm != 0o700 {
-		return nil, fmt.Errorf("%w: %s has mode %04o, not 0700", ErrInsecureDir, dir, perm)
 	}
 	if fi, err := os.Lstat(path); err == nil {
 		if c, err := net.DialTimeout("unix", path, time.Second); err == nil {
@@ -76,6 +66,28 @@ func Listen(path string) (net.Listener, error) {
 		return nil, err
 	}
 	return l, nil
+}
+
+// CheckDir checks that the socket directory is a directory, not a symbolic
+// link, that the user owns with mode 0700 (design 0006 D2). The server
+// checks it before it listens, and the client before it dials, so another
+// user's directory can neither serve a status nor receive a reload. A
+// missing directory gives an error that wraps fs.ErrNotExist.
+func CheckDir(dir string) error {
+	fi, err := os.Lstat(dir)
+	if err != nil {
+		return err
+	}
+	if !fi.IsDir() {
+		return fmt.Errorf("%w: %s is not a directory", ErrInsecureDir, dir)
+	}
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok && int(st.Uid) != os.Getuid() {
+		return fmt.Errorf("%w: %s is owned by another user (uid %d)", ErrInsecureDir, dir, st.Uid)
+	}
+	if perm := fi.Mode().Perm(); perm != 0o700 {
+		return fmt.Errorf("%w: %s has mode %04o, not 0700", ErrInsecureDir, dir, perm)
+	}
+	return nil
 }
 
 // Status is the response of GET /v1/status (design 0006 D4).
@@ -237,6 +249,12 @@ func (c *Client) Reload(ctx context.Context) (res *ReloadResult, ok bool, err er
 }
 
 func (c *Client) do(ctx context.Context, method, path string, v any) (int, error) {
+	if err := CheckDir(filepath.Dir(c.path)); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return 0, fmt.Errorf("cannot reach the running service at %s: %w", c.path, err)
+		}
+		return 0, fmt.Errorf("refusing the control socket at %s: %w", c.path, err)
+	}
 	req, err := http.NewRequestWithContext(ctx, method, "http://cuttle"+path, nil)
 	if err != nil {
 		return 0, err

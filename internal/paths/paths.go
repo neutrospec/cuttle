@@ -19,6 +19,11 @@ type Item struct {
 	Source string `json:"source"`
 }
 
+// MaxSocketPath is the longest usable control socket path in bytes: the
+// sun_path of a darwin sockaddr_un has 104 bytes, the terminating NUL
+// included (design 0006 D1).
+const MaxSocketPath = 103
+
 // Paths are cuttle's resolved files.
 type Paths struct {
 	Config   Item `json:"config"`
@@ -59,8 +64,14 @@ func Resolve(lookupEnv func(string) (string, bool)) (Paths, error) {
 		why = checkRuntimeDir(runtime)
 	}
 	if why == "" {
-		p.Control = Item{filepath.Join(runtime, "cuttle", "control.sock"), "XDG_RUNTIME_DIR"}
-	} else {
+		sock := filepath.Join(runtime, "cuttle", "control.sock")
+		if n := len(sock); n > MaxSocketPath {
+			why = fmt.Sprintf("XDG_RUNTIME_DIR path too long (%d bytes, limit %d)", n, MaxSocketPath)
+		} else {
+			p.Control = Item{sock, "XDG_RUNTIME_DIR"}
+		}
+	}
+	if why != "" {
 		tmp, src := getenv("TMPDIR"), "TMPDIR"
 		if tmp == "" || !filepath.IsAbs(tmp) {
 			tmp, src = "/tmp", "/tmp (TMPDIR unset or not absolute)"
@@ -69,8 +80,21 @@ func Resolve(lookupEnv func(string) (string, bool)) (Paths, error) {
 		if why == "XDG_RUNTIME_DIR unset" {
 			p.Control.Source = src
 		}
+		if n := len(p.Control.Path); n > MaxSocketPath {
+			p.Control.Source += fmt.Sprintf("; too long (%d bytes, limit %d): no control socket", n, MaxSocketPath)
+		}
 	}
 	return p, nil
+}
+
+// ControlError reports why the control socket path cannot be used, or nil.
+// A path longer than MaxSocketPath bytes can be neither bound nor dialed.
+func (p Paths) ControlError() error {
+	if n := len(p.Control.Path); n > MaxSocketPath {
+		return fmt.Errorf("control socket path %s is %d bytes, longer than the %d-byte limit of a Unix socket path; "+
+			"set XDG_RUNTIME_DIR or TMPDIR to a shorter directory", p.Control.Path, n, MaxSocketPath)
+	}
+	return nil
 }
 
 // WithPresence returns p with "; missing" added to the password source when

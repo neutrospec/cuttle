@@ -213,6 +213,11 @@ order an operator reads is the order cuttle applies. `cuttle explain`
   connection upgraded after a `101` is tracked like a tunnel: the tunnel
   idle limit below applies to it, shutdown closes it with outcome
   `shutdown` ([0006 D6][d6-6]), and status lists it with kind `upgrade`.
+  Known limit: bytes that a client sends after its upgrade request and
+  before the `101` arrives stay in the server's read buffer, and
+  `ReverseProxy` never forwards them (`handleUpgradeResponse`, Go
+  1.27.4). They are lost and not counted. WebSocket clients wait for the
+  `101` before they send.
 
 Request target. Left alone, Go would change it: `ReverseProxy` re-encodes
 a query that contains `;` or an invalid `%` escape before calling `Rewrite`

@@ -777,7 +777,10 @@ func TestUpstreamUnreachableHold(t *testing.T) {
 			probe <- rawStatus(e.addr, "CONNECT hole.cuttle.test:443 HTTP/1.1\r\nHost: hole.cuttle.test:443\r\n\r\n")
 		}()
 		waitFor(t, "probe dial", func() bool { return dialsTo(e.net, "10.8.0.6:8081") == 2 })
-		if st := state("hole"); st.State != StateProbing || gauge("hole", "probing") != 1 {
+		// While probing, the upstream has been down since the first failure
+		// of the outage, 1.1 s ago on the injected clock, not since the probe
+		// started (cuttle status down_s, design 0006 D4).
+		if st := state("hole"); st.State != StateProbing || gauge("hole", "probing") != 1 || st.DownFor != 1100*time.Millisecond {
 			t.Errorf("state during the probe %+v", st)
 		}
 		res, el := connect("hole.cuttle.test")

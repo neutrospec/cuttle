@@ -23,7 +23,7 @@ func cmdStatus(args []string, lookup env, stdout, stderr io.Writer) int {
 	if fl.Parse(args) != nil || fl.NArg() != 0 {
 		return exitUsage
 	}
-	p, err := paths.Resolve(lookup)
+	p, err := controlPaths(lookup)
 	if err != nil {
 		fmt.Fprintln(stderr, "cuttle:", err)
 		return exitFailure
@@ -44,6 +44,16 @@ func cmdStatus(args []string, lookup env, stdout, stderr io.Writer) int {
 	}
 	printStatus(stdout, st, time.Now())
 	return exitOK
+}
+
+// controlPaths resolves the paths and refuses a control socket path that no
+// Unix socket can use (design 0006 D1).
+func controlPaths(lookup env) (paths.Paths, error) {
+	p, err := paths.Resolve(lookup)
+	if err != nil {
+		return p, err
+	}
+	return p, p.ControlError()
 }
 
 // warnPathMismatch warns about each path that the service resolved
@@ -146,7 +156,7 @@ func cmdReload(args []string, lookup env, stdout, stderr io.Writer) int {
 	if fl.Parse(args) != nil || fl.NArg() != 0 {
 		return exitUsage
 	}
-	p, err := paths.Resolve(lookup)
+	p, err := controlPaths(lookup)
 	if err != nil {
 		fmt.Fprintln(stderr, "cuttle:", err)
 		return exitFailure

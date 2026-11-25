@@ -501,23 +501,26 @@ func bodyMask(t *testing.T, wire []byte) []bool {
 // 101 is tracked like a tunnel. Status lists it, the idle limit closes it,
 // and Shutdown closes it with outcome shutdown (design 0002 D5, 0006 D6).
 // An exchange still in flight when the drain ends also logs shutdown.
-func TestUpgradedConnections(t *testing.T) {
-	upgrade := func(t *testing.T, e *env) (net.Conn, *bufio.Reader) {
-		t.Helper()
-		c := e.dial()
-		io.WriteString(c, "GET http://ws.cuttle.test/ws HTTP/1.1\r\nHost: ws.cuttle.test\r\nUpgrade: websocket\r\n"+
-			"Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n"+
-			"Origin: http://ws.cuttle.test\r\n\r\n")
-		br := bufio.NewReader(c)
-		if head, err := readHead(br); err != nil || !strings.HasPrefix(head, "HTTP/1.1 101 ") {
-			t.Fatalf("upgrade: %q %v", head, err)
-		}
-		c.Write(wsClientFrame(0x1, []byte("ping")))
-		if echo, _, err := readWSFrame(br); err != nil || string(echo) != "ping" {
-			t.Fatalf("echo %q %v", echo, err)
-		}
-		return c, br
+// upgrade opens an absolute-form WebSocket through the instance and
+// completes one echo of "ping".
+func upgrade(t *testing.T, e *env) (net.Conn, *bufio.Reader) {
+	t.Helper()
+	c := e.dial()
+	io.WriteString(c, "GET http://ws.cuttle.test/ws HTTP/1.1\r\nHost: ws.cuttle.test\r\nUpgrade: websocket\r\n"+
+		"Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n"+
+		"Origin: http://ws.cuttle.test\r\n\r\n")
+	br := bufio.NewReader(c)
+	if head, err := readHead(br); err != nil || !strings.HasPrefix(head, "HTTP/1.1 101 ") {
+		t.Fatalf("upgrade: %q %v", head, err)
 	}
+	c.Write(wsClientFrame(0x1, []byte("ping")))
+	if echo, _, err := readWSFrame(br); err != nil || string(echo) != "ping" {
+		t.Fatalf("echo %q %v", echo, err)
+	}
+	return c, br
+}
+
+func TestUpgradedConnections(t *testing.T) {
 	closedWithin := func(t *testing.T, br *bufio.Reader, max time.Duration) time.Duration {
 		t.Helper()
 		start := time.Now()
@@ -572,4 +575,46 @@ func TestUpgradedConnections(t *testing.T) {
 		e.p.Shutdown(ctx)
 		checkDecision(t, e.waitDecisions(1)[0], map[string]string{"kind": "http", "outcome": "shutdown"})
 	})
+}
+
+// TestShutdownWaitsForHandlers checks the order of design 0006 D6 (L-R1 of
+// the TASK-0007 review): when Shutdown returns, every tunnel, upgraded
+// connection, and exchange it closed has written its decision line with
+// outcome shutdown, so the caller's stopped line comes last.
+func TestShutdownWaitsForHandlers(t *testing.T) {
+	e := newEnv(t, baseConfig)
+	const tunnels, upgrades, slow = 50, 5, 5
+	for range tunnels {
+		e.connectRaw("plain.cuttle.test:80")
+	}
+	for range upgrades {
+		upgrade(t, e)
+	}
+	for range slow {
+		c := e.dial()
+		io.WriteString(c, "GET http://plain.cuttle.test/slow?ms=5000 HTTP/1.1\r\nHost: plain.cuttle.test\r\n\r\n")
+	}
+	waitFor(t, "every connection open", func() bool {
+		return len(e.p.Tunnels()) == tunnels+upgrades && e.p.Live().Get(stats.HTTPRequestsActive) == upgrades+slow
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	e.p.Shutdown(ctx)
+	el := time.Since(start)
+	n := 0
+	for _, d := range e.logs.decisions() {
+		if d["outcome"] == OutcomeShutdown {
+			n++
+		}
+	}
+	if n != tunnels+upgrades+slow {
+		t.Errorf("%d shutdown decision lines when Shutdown returned, want %d", n, tunnels+upgrades+slow)
+	}
+	if el > 200*time.Millisecond+handlerWait {
+		t.Errorf("Shutdown took %v", el)
+	}
+	if strings.Contains(e.logs.String(), "handlers still running") {
+		t.Errorf("handlers outlived the wait:\n%s", e.logs.String())
+	}
 }

@@ -369,7 +369,8 @@ plain HTTP, the edge relays the gateway's `503` unchanged (D6).
   serve; later failures log at `debug`. Once it binds, cuttle logs
   `listener bound` and serves it. A configuration whose listeners are all
   non-loopback starts with every listener retrying.
-  `cuttle status` shows the listener as `retrying` with the error.
+  `cuttle status` shows the listener as `retrying` with the error, in the
+  order of `proxy.listen`.
 - Listener changes take effect at the next start
   ([0004 D6][d4-6]).
 

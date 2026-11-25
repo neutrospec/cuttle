@@ -204,8 +204,12 @@ func TestControlSocket(t *testing.T) {
 	if !strings.Contains(log, "not 0700") {
 		t.Errorf("warning does not name the mode:\n%s", log)
 	}
-	if r := sb2.Run(10*time.Second, "status"); r.Code != 1 || !strings.Contains(r.Stderr, "cannot reach the running service") {
-		t.Errorf("status without a socket: exit %d %q", r.Code, r.Stderr)
+	// The client applies the same directory check before it dials.
+	for _, cmd := range []string{"status", "reload"} {
+		if r := sb2.Run(10*time.Second, cmd); r.Code != 1 || !strings.Contains(r.Stderr, "refusing the control socket") ||
+			!strings.Contains(r.Stderr, "not 0700") {
+			t.Errorf("%s with a 0755 socket directory: exit %d %q", cmd, r.Code, r.Stderr)
+		}
 	}
 	c := proxyClient(t, addr3)
 	if code := getStatus(t, c, "http://blocked.cuttle.test/"); code != http.StatusForbidden {
@@ -394,15 +398,17 @@ func TestListenerBindRetry(t *testing.T) {
 		t.Skip("binary test")
 	}
 	sb := testenv.NewSandbox(t, testenv.BuildCuttle(t))
-	local := testenv.Port(sb.FreePort())
+	local, local2 := testenv.Port(sb.FreePort()), testenv.Port(sb.FreePort())
 	absent := fmt.Sprintf("192.0.2.1:%d", sb.FreePort())
-	writeConfig(t, sb, serveConfig([]string{local, absent}, "\n[proxy.remote]\nsources = [\"10.8.0.1/32\"]\n"))
+	// The retried listener sits between two bound ones in proxy.listen, and
+	// status keeps that order.
+	writeConfig(t, sb, serveConfig([]string{local, absent, local2}, "\n[proxy.remote]\nsources = [\"10.8.0.1/32\"]\n"))
 	proc := sb.Start(local, "serve")
 	if code := getStatus(t, proxyClient(t, local), "http://blocked.cuttle.test/"); code != 403 {
 		t.Errorf("loopback listener answered %d", code)
 	}
 	st := statusJSON(t, sb)
-	want := map[string]string{local: "bound", absent: "retrying"}
+	want := map[string]string{local: "bound", absent: "retrying", local2: "bound"}
 	for _, l := range st.Listeners {
 		if want[l.Address] != l.State {
 			t.Errorf("listener %+v", l)
@@ -414,6 +420,10 @@ func TestListenerBindRetry(t *testing.T) {
 	}
 	if len(want) != 0 {
 		t.Errorf("listeners missing: %v (have %+v)", want, st.Listeners)
+	}
+	if len(st.Listeners) != 3 || st.Listeners[0].Address != local || st.Listeners[1].Address != absent ||
+		st.Listeners[2].Address != local2 {
+		t.Errorf("listeners not in configuration order: %+v", st.Listeners)
 	}
 	if r := sb.Run(10*time.Second, "status"); !strings.Contains(r.Stdout, absent) || !strings.Contains(r.Stdout, "retrying") {
 		t.Errorf("text status:\n%s", r.Stdout)
@@ -533,24 +543,42 @@ func TestServeSIGTERM(t *testing.T) {
 	proc := sb.Start(addr, "serve")
 	c := proxyClient(t, addr)
 
-	// An open tunnel to the origin through the loopback rule.
-	tun, err := net.DialTimeout("tcp", addr, 5*time.Second)
+	// Open tunnels to the origin through the loopback rule, and one
+	// connection upgraded after a 101.
+	const tunnels = 8
+	target := origin.Addr.String()
+	var tbrs []*bufio.Reader
+	for range tunnels {
+		tun, err := net.DialTimeout("tcp", addr, 5*time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tun.Close()
+		tun.SetDeadline(time.Now().Add(20 * time.Second))
+		io.WriteString(tun, "CONNECT "+target+" HTTP/1.1\r\nHost: "+target+"\r\n\r\n")
+		tbr := bufio.NewReader(tun)
+		if res, err := http.ReadResponse(tbr, &http.Request{Method: http.MethodConnect}); err != nil || res.StatusCode != 200 {
+			t.Fatalf("CONNECT: %v %v", res, err)
+		}
+		io.WriteString(tun, "GET /echo HTTP/1.1\r\nHost: "+target+"\r\n\r\n")
+		if res, err := http.ReadResponse(tbr, nil); err != nil || res.StatusCode != 200 {
+			t.Fatalf("request through the tunnel: %v %v", res, err)
+		} else {
+			io.Copy(io.Discard, res.Body)
+		}
+		tbrs = append(tbrs, tbr)
+	}
+	ws, err := net.DialTimeout("tcp", addr, 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tun.Close()
-	tun.SetDeadline(time.Now().Add(20 * time.Second))
-	target := origin.Addr.String()
-	io.WriteString(tun, "CONNECT "+target+" HTTP/1.1\r\nHost: "+target+"\r\n\r\n")
-	tbr := bufio.NewReader(tun)
-	if res, err := http.ReadResponse(tbr, &http.Request{Method: http.MethodConnect}); err != nil || res.StatusCode != 200 {
-		t.Fatalf("CONNECT: %v %v", res, err)
-	}
-	io.WriteString(tun, "GET /echo HTTP/1.1\r\nHost: "+target+"\r\n\r\n")
-	if res, err := http.ReadResponse(tbr, nil); err != nil || res.StatusCode != 200 {
-		t.Fatalf("request through the tunnel: %v %v", res, err)
-	} else {
-		io.Copy(io.Discard, res.Body)
+	defer ws.Close()
+	ws.SetDeadline(time.Now().Add(20 * time.Second))
+	io.WriteString(ws, "GET http://"+target+"/ws HTTP/1.1\r\nHost: "+target+"\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"+
+		"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nOrigin: http://"+target+"\r\n\r\n")
+	wsbr := bufio.NewReader(ws)
+	if res, err := http.ReadResponse(wsbr, &http.Request{Method: http.MethodGet}); err != nil || res.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("upgrade: %v %v", res, err)
 	}
 
 	// An in-flight 2 s response.
@@ -590,8 +618,13 @@ func TestServeSIGTERM(t *testing.T) {
 	if r.err != nil || r.code != 200 || r.body != "slow" {
 		t.Errorf("in-flight response: %d %q %v", r.code, r.body, r.err)
 	}
-	if n, err := tbr.ReadByte(); err == nil {
-		t.Errorf("tunnel still open: read %q", n)
+	for _, tbr := range tbrs {
+		if n, err := tbr.ReadByte(); err == nil {
+			t.Errorf("tunnel still open: read %q", n)
+		}
+	}
+	if n, err := wsbr.ReadByte(); err == nil {
+		t.Errorf("upgraded connection still open: read %q", n)
 	}
 	code, exited := proc.Wait(8*time.Second - time.Since(start))
 	if !exited || code != 0 {
@@ -603,12 +636,22 @@ func TestServeSIGTERM(t *testing.T) {
 	log, _ := os.ReadFile(sb.LogPath())
 	for _, want := range []string{
 		"kind=connect target=" + target + " rule=loopback action=direct upstream=\"\" outcome=shutdown status=200",
+		"kind=http target=" + target + " rule=loopback action=direct upstream=\"\" outcome=shutdown status=101",
 		"kind=http target=" + target + " rule=loopback action=direct upstream=\"\" outcome=ok status=200",
 		"msg=stopping signal=terminated", "msg=stopped",
 	} {
 		if !strings.Contains(string(log), want) {
 			t.Errorf("log lacks %q:\n%s", want, log)
 		}
+	}
+	// Every decision line comes before stopped, the last line (design 0006
+	// D6 step 6).
+	lines := strings.Split(strings.TrimSpace(string(log)), "\n")
+	if last := lines[len(lines)-1]; !strings.Contains(last, "msg=stopped") {
+		t.Errorf("last log line %q, want stopped", last)
+	}
+	if n := strings.Count(string(log), "outcome=shutdown"); n != tunnels+1 {
+		t.Errorf("%d shutdown decision lines, want %d:\n%s", n, tunnels+1, log)
 	}
 
 	// A second signal during the drain exits at once with status 1.
@@ -640,5 +683,76 @@ func TestServeSIGTERM(t *testing.T) {
 	}
 	if el := time.Since(start); el > time.Second {
 		t.Errorf("second signal took %v", el)
+	}
+}
+
+// TestControlSocketPathTooLong checks design 0006 D1 for socket paths over
+// the Unix limit: with XDG_RUNTIME_DIR and TMPDIR both too long, cuttle
+// paths names the cause, cuttle status and cuttle reload refuse with it
+// before dialing, and cuttle serve logs one error and serves without the
+// socket. It runs serve in-process on a loopback port the test chose.
+func TestControlSocketPathTooLong(t *testing.T) {
+	if testing.Short() {
+		t.Skip("serves")
+	}
+	lookup, vars := tempEnv(t)
+	long := filepath.Join(t.TempDir(), strings.Repeat("r", 90))
+	if err := os.Mkdir(long, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	vars["XDG_RUNTIME_DIR"] = long
+	vars["TMPDIR"] = filepath.Join(t.TempDir(), strings.Repeat("t", 90))
+
+	code, out, _ := runCLI(lookup, "paths")
+	if code != 0 || !strings.Contains(out, "XDG_RUNTIME_DIR path too long") || !strings.Contains(out, "no control socket") {
+		t.Errorf("paths: %d\n%s", code, out)
+	}
+	for _, cmd := range []string{"status", "reload"} {
+		if code, _, errOut := runCLI(lookup, cmd); code != 1 || !strings.Contains(errOut, "longer than the 103-byte limit") {
+			t.Errorf("%s: %d %q", cmd, code, errOut)
+		}
+	}
+
+	dir := filepath.Join(vars["XDG_CONFIG_HOME"], "cuttle")
+	os.MkdirAll(dir, 0o700)
+	os.WriteFile(filepath.Join(dir, "config.toml"), []byte(serveConfig([]string{"127.0.0.1:18080"}, "")), 0o600)
+	s, err := prepareServe(lookup, "", io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.close()
+	bound := make(chan string, 1)
+	listen := func(network, _ string) (net.Listener, error) {
+		ln, err := net.Listen(network, "127.0.0.1:0")
+		if err == nil {
+			bound <- ln.Addr().String()
+		}
+		return ln, err
+	}
+	signals := make(chan os.Signal, 1)
+	done := make(chan int, 1)
+	go func() { done <- s.run(io.Discard, listen, signals) }()
+	var addr string
+	select {
+	case addr = <-bound:
+	case code := <-done:
+		t.Fatalf("serve exited with %d", code)
+	case <-time.After(10 * time.Second):
+		t.Fatal("listener not bound")
+	}
+	if code := getStatus(t, proxyClient(t, addr), "http://blocked.cuttle.test/"); code != http.StatusForbidden {
+		t.Errorf("proxy without a control socket answered %d", code)
+	}
+	signals <- syscall.SIGTERM
+	if code := <-done; code != exitOK {
+		t.Errorf("exit %d", code)
+	}
+	log, _ := os.ReadFile(s.paths.Log.Path)
+	if n := strings.Count(string(log), `level=ERROR msg="control socket unavailable; running without it"`); n != 1 ||
+		!strings.Contains(string(log), "longer than the 103-byte limit") {
+		t.Errorf("%d control socket errors:\n%s", n, log)
+	}
+	if _, err := os.Stat(vars["TMPDIR"]); err == nil {
+		t.Errorf("serve created %s", vars["TMPDIR"])
 	}
 }

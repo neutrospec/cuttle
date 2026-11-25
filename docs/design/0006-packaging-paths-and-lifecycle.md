@@ -31,9 +31,17 @@ calls `os.UserConfigDir` or `os.UserCacheDir`.
 | launchd stdout and stderr | `$(brew --prefix)/var/log/cuttle.log` | set by launchd |
 
 - `XDG_RUNTIME_DIR` is used only when it is absolute, owned by the user,
-  and mode 0700. macOS does not set it; `$TMPDIR` is the per-user 0700
-  directory that the shell and the LaunchAgent share
-  ([research 0001 §2][r1-2]). The socket path fits the 104-byte limit.
+  and mode 0700, and when the socket path under it fits the Unix socket
+  path limit: 103 bytes, because the 104-byte `sun_path` of a darwin
+  `sockaddr_un` ends with a NUL. macOS does not set it; `$TMPDIR` is the
+  per-user 0700 directory that the shell and the LaunchAgent share
+  ([research 0001 §2][r1-2]). When the fallback is taken, the source
+  names the reason, such as
+  `TMPDIR; XDG_RUNTIME_DIR path too long (120 bytes, limit 103)`.
+- When the `$TMPDIR` socket path is too long as well, the source adds
+  `too long (N bytes, limit 103): no control socket`. `cuttle serve` then
+  logs one error and runs without the socket, and `cuttle status` and
+  `cuttle reload` exit 1 with the same cause before they dial.
 - Missing directories are created with mode 0700. Existing directories keep
   their modes, as the specification requires.
 - The service sees only default XDG paths unless the user copies non-default
@@ -61,8 +69,12 @@ control   /var/folders/<id>/T/cuttle/control.sock     TMPDIR
 - Startup fails if the configuration file is writable by group or others,
   or owned by another user, since that user could reroute traffic.
 - The password file rules are in [0005 D6][d5-6].
-- The control socket directory must be owned by the user with mode 0700.
-  Otherwise cuttle warns and runs without the control socket.
+- The control socket directory must be a directory, not a symbolic link,
+  owned by the user with mode 0700. Otherwise cuttle warns and runs
+  without the control socket. `cuttle status` and `cuttle reload` check
+  the directory the same way before they dial and exit 1 otherwise, so
+  another user's directory, such as a planted `/tmp/cuttle`, can neither
+  answer a status request nor receive a reload.
 
 ### D3. Command line
 
@@ -157,6 +169,8 @@ control   /var/folders/<id>/T/cuttle/control.sock     TMPDIR
   refuses the file it prints each error to stderr and exits 1.
 - Without a reachable socket, `cuttle status` and `cuttle reload` exit 1
   and name the socket path.
+- `listeners` follows the order of `proxy.listen`, retrying listeners
+  included.
 
 ### D5. First run
 
@@ -186,7 +200,8 @@ On `SIGTERM` or `SIGINT`:
 4. Close every tunnel, every connection upgraded after a `101`
    ([0002 D5][d2-5]), and every remaining connection with outcome
    `shutdown`. An exchange still in flight when the drain ends also logs
-   `shutdown`.
+   `shutdown`. Then wait, for at most 1 s, until every request handler
+   has returned, so every decision line is written before `stopped`.
 5. Flush statistics within 2 s and close SQLite.
 6. Log `stopped` and exit with status 0.
 
