@@ -46,13 +46,15 @@ A closed task becomes one line under Closed:
 - Milestone: M1.5 (new)
 - Status: design
 - Iteration: 1/3
-- Workers: researcher done (note 0003 landed in `df894eb`); designer next,
-  after TASK-0007 lands
-- Base: `df894eb`
+- Workers: researcher done (note 0003 landed in `df894eb`); designer on a
+  T3 worktree branch, limited to a new record 0008, the ROADMAP M1.5 row,
+  the design index, and the glossary, so it does not collide with
+  TASK-0007
+- Base: `bb36ea5` plus this board update
 - Candidate: none
 - Evidence: research note 0003; OI-0007 opened for local network privacy
 - Findings: none
-- Next action: designer — after TASK-0007 lands, design M1.5 from note 0003
+- Next action: designer — write design record 0008 and the M1.5 roadmap row
   and return the candidate commit for review
 
 Decisions for TASK-0008 from the user (2026-11-25):
