@@ -41,6 +41,26 @@ A closed task becomes one line under Closed:
 
 ## Active
 
+### TASK-0006 — M1.3 upstreams and chaining
+
+- Milestone: M1.3
+- Status: implement
+- Iteration: 1/3
+- Workers: implementer on a T3 worktree branch
+- Base: `024649b` plus this board update
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: implementer — build M1.3 with the T0 and T1 gates and return
+  the candidate commit
+
+Decisions for TASK-0006 (2026-11-25):
+
+- OI-0006 items settled in this task: V2 (the `via`-route half), V3 (the
+  unreachable hold for plain HTTP), and the M1.3 parts of V4 (recording
+  upstreams answer 403 outside `cuttle.test`). G1 and G2 go with any change
+  to `internal/proxy/warn.go`.
+
 ## Closed
 
 The history was rewritten on 2026-11-25 (TASK-0003) to remove local
