@@ -127,8 +127,11 @@ type RecordingUpstream struct {
 	reqs  []ProxyRequest
 	raw   map[int]*bytes.Buffer
 	conns map[int]net.Conn
-	n     int
-	wg    sync.WaitGroup
+	// out holds the open connections to origins, which close also closes,
+	// so a relay blocked on an origin cannot stall the test's cleanup.
+	out map[net.Conn]bool
+	n   int
+	wg  sync.WaitGroup
 }
 
 // NewRecordingUpstream starts a recording upstream on 127.0.0.1:0 and stops
@@ -146,6 +149,7 @@ func NewRecordingUpstream(t testing.TB, opt UpstreamOptions) *RecordingUpstream 
 		modes: map[string]Mode{},
 		raw:   map[int]*bytes.Buffer{},
 		conns: map[int]net.Conn{},
+		out:   map[net.Conn]bool{},
 	}
 	u.wg.Add(1)
 	go u.accept()
@@ -199,8 +203,28 @@ func (u *RecordingUpstream) close() {
 	for _, c := range u.conns {
 		c.Close()
 	}
+	for c := range u.out {
+		c.Close()
+	}
 	u.mu.Unlock()
 	u.wg.Wait()
+}
+
+// dialOrigin connects to an origin and tracks the connection until done.
+func (u *RecordingUpstream) dialOrigin(host string, port uint16) (net.Conn, func(), error) {
+	c, err := dialNet(u.opt.Net, host, port)
+	if err != nil {
+		return nil, nil, err
+	}
+	u.mu.Lock()
+	u.out[c] = true
+	u.mu.Unlock()
+	return c, func() {
+		c.Close()
+		u.mu.Lock()
+		delete(u.out, c)
+		u.mu.Unlock()
+	}, nil
 }
 
 func (u *RecordingUpstream) accept() {
@@ -304,12 +328,12 @@ func (u *RecordingUpstream) tunnel(c net.Conn, br *bufio.Reader, m Mode, host st
 		io.Copy(c, br) // echo, pipelined bytes first
 		return
 	}
-	origin, err := dialNet(u.opt.Net, host, port)
+	origin, done, err := u.dialOrigin(host, port)
 	if err != nil {
 		writeStatus(c, http.StatusBadGateway, "", "recording upstream: "+err.Error())
 		return
 	}
-	defer origin.Close()
+	defer done()
 	if _, err := io.WriteString(c, fmt.Sprintf("HTTP/1.1 %d %s\r\n%s\r\n", m.status, reason(m.status), m.header)); err != nil {
 		return
 	}
@@ -317,34 +341,46 @@ func (u *RecordingUpstream) tunnel(c net.Conn, br *bufio.Reader, m Mode, host st
 }
 
 // forward passes an absolute-form request to the origin unchanged and
-// relays the origin's response head and body unchanged. After a 101 it
-// splices the connections. It reports whether the client connection can
+// relays the origin's response heads and body unchanged: informational
+// heads first, then the final response. After a 101 it splices the
+// connections. It reports whether the client connection can
 // carry another request.
 func (u *RecordingUpstream) forward(c net.Conn, br *bufio.Reader, req ProxyRequest, host string, port uint16) bool {
-	origin, err := dialNet(u.opt.Net, host, port)
+	origin, done, err := u.dialOrigin(host, port)
 	if err != nil {
 		writeStatus(c, http.StatusBadGateway, "", "recording upstream: "+err.Error())
 		return false
 	}
-	defer origin.Close()
+	defer done()
 	if _, err := origin.Write(append(bytes.Clone(req.Head), req.RawBody...)); err != nil {
 		return false
 	}
 	obr := bufio.NewReader(origin)
-	head, status, fields, err := readHead(obr)
-	if err != nil {
-		writeStatus(c, http.StatusBadGateway, "", "recording upstream: no response from origin")
-		return false
-	}
-	if _, err := c.Write(head); err != nil {
-		return false
+	var status int
+	var fields []Field
+	for {
+		head, st, fs, err := readHead(obr)
+		if err != nil {
+			writeStatus(c, http.StatusBadGateway, "", "recording upstream: no response from origin")
+			return false
+		}
+		if _, err := c.Write(head); err != nil {
+			return false
+		}
+		status, fields = st, fs
+		// Informational heads, such as 100 Continue and 103 Early Hints,
+		// come before the final response; a 101 ends HTTP on the
+		// connection.
+		if status/100 != 1 || status == http.StatusSwitchingProtocols {
+			break
+		}
 	}
 	if status == http.StatusSwitchingProtocols {
 		splice(c, br, origin, obr)
 		return false
 	}
 	resp := ProxyRequest{Fields: fields}
-	if req.Method == http.MethodHead || status/100 == 1 || status == http.StatusNoContent || status == http.StatusNotModified {
+	if req.Method == http.MethodHead || status == http.StatusNoContent || status == http.StatusNotModified {
 		return !closes(req) && !closes(resp)
 	}
 	switch {

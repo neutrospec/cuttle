@@ -162,16 +162,36 @@ func rewriteUpstream(pr *httputil.ProxyRequest) {
 	up := ex.snap.upstreams[ex.d.Upstream]
 	if up.cfg.Disclosure == config.DisclosureNone {
 		removeDisclosure(pr.Out.Header)
+		// ReverseProxy copies the trailer keys before the body is read and
+		// forwards no trailer values (Go 1.27.4); the transport declares the
+		// keys in Trailer. The filter keeps disclosure names out of that
+		// declaration and out of any trailer values.
+		removeDisclosure(pr.Out.Trailer)
 		return
 	}
 	// ReverseProxy drops these client fields before Rewrite; on via routes
-	// they pass as on the CONNECT path.
+	// they pass as on the CONNECT path. A field the client named in
+	// Connection is hop-by-hop there and stays removed (RFC 9110 section
+	// 7.6.1).
 	for _, k := range rewriteDropped {
-		if vs, ok := pr.In.Header[k]; ok {
+		if vs, ok := pr.In.Header[k]; ok && !connectionNames(pr.In.Header, k) {
 			pr.Out.Header[k] = append([]string(nil), vs...)
 		}
 	}
 	pr.Out.Header.Add("Via", viaEntry(ex.snap.cfg.Name))
+}
+
+// connectionNames reports whether the Connection field of h names the
+// field name, as removeHopByHop reads it.
+func connectionNames(h http.Header, name string) bool {
+	for _, v := range h["Connection"] {
+		for _, f := range strings.Split(v, ",") {
+			if f = textproto.TrimString(f); f != "" && http.CanonicalHeaderKey(f) == http.CanonicalHeaderKey(name) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // rewriteDropped are the fields httputil.ReverseProxy removes before calling
@@ -338,7 +358,7 @@ func (p *Proxy) upstreamStatus(w http.ResponseWriter, ex *exchange, u *upstream,
 	own := receivedMember(ex.snap.cfg.Name, res.StatusCode, u.cfg.Name)
 	member := chainProxyStatus(res.Header.Values("Proxy-Status"), own)
 	p.writeGenerated(w, status, member, fmt.Sprintf("upstream %s answered %d (%s)", u.cfg.Name, res.StatusCode, ex.target))
-	ex.status, ex.outcome = status, OutcomeUpstreamStatus
+	ex.status, ex.outcome, ex.upstreamStatus = status, OutcomeUpstreamStatus, res.StatusCode
 	ex.detail = fmt.Sprintf("received-status=%d", res.StatusCode)
 	p.finish(ex)
 }
@@ -379,12 +399,14 @@ copy:
 
 // splitMembers splits a structured-field list on commas outside quoted
 // strings, trims each member, and drops bytes a field value cannot carry.
+// A member that ends inside an unterminated quoted string is dropped, so it
+// cannot swallow the members that cuttle appends after it.
 func splitMembers(v string) []string {
 	var out []string
 	var b strings.Builder
 	quoted, escaped := false, false
 	flush := func() {
-		if m := strings.Trim(b.String(), " \t"); m != "" {
+		if m := strings.Trim(b.String(), " \t"); m != "" && !quoted {
 			out = append(out, m)
 		}
 		b.Reset()

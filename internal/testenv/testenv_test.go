@@ -285,6 +285,28 @@ func TestRecordingUpstream(t *testing.T) {
 	if res := exchange(c, br, post); res.StatusCode != 200 {
 		t.Errorf("POST status %d", res.StatusCode)
 	}
+	// Informational responses are relayed before the final one: 100
+	// Continue for Expect, and 103 Early Hints (OI-0006 U-R5).
+	c4, br4 := dial()
+	if res := exchange(c4, br4, "POST http://a.cuttle.test/expect HTTP/1.1\r\nHost: a.cuttle.test\r\nExpect: 100-continue\r\n"+
+		"Content-Length: 5\r\n\r\nhello"); res.StatusCode != 100 {
+		t.Errorf("Expect: first response %d, want 100", res.StatusCode)
+	}
+	if res, err := http.ReadResponse(br4, nil); err != nil || res.StatusCode != 200 {
+		t.Errorf("Expect: final response %v %v", res, err)
+	} else {
+		io.Copy(io.Discard, res.Body)
+	}
+	if res := exchange(c4, br4, "GET http://a.cuttle.test/hints HTTP/1.1\r\nHost: a.cuttle.test\r\n\r\n"); res.StatusCode != 103 ||
+		res.Header.Get("Link") == "" {
+		t.Errorf("hints: first response %d %v, want 103", res.StatusCode, res.Header)
+	}
+	if res, err := http.ReadResponse(br4, nil); err != nil || res.StatusCode != 200 {
+		t.Errorf("hints: final response %v %v", res, err)
+	} else if b, _ := io.ReadAll(res.Body); string(b) != "hints" {
+		t.Errorf("hints body %q", b)
+	}
+
 	c2, br2 := dial()
 	if res := exchange(c2, br2, "CONNECT outside.example:443 HTTP/1.1\r\nHost: outside.example:443\r\n\r\n"); res.StatusCode != 403 {
 		t.Errorf("name outside cuttle.test: %d", res.StatusCode)
@@ -296,12 +318,15 @@ func TestRecordingUpstream(t *testing.T) {
 	}
 
 	reqs := u.Requests()
-	if len(reqs) != 4 {
+	if len(reqs) != 6 {
 		t.Fatalf("%d requests", len(reqs))
 	}
 	g, p := reqs[0], reqs[1]
-	if g.Conn != 1 || p.Conn != 1 || reqs[2].Conn != 2 || reqs[3].Conn != 3 {
-		t.Errorf("connections %d %d %d %d", g.Conn, p.Conn, reqs[2].Conn, reqs[3].Conn)
+	if g.Conn != 1 || p.Conn != 1 || reqs[2].Conn != 2 || reqs[3].Conn != 2 || reqs[4].Conn != 3 || reqs[5].Conn != 4 {
+		t.Errorf("connections %d %d %d %d %d %d", g.Conn, p.Conn, reqs[2].Conn, reqs[3].Conn, reqs[4].Conn, reqs[5].Conn)
+	}
+	if e := reqs[2]; e.Get("Expect") != "100-continue" || string(e.Body) != "hello" {
+		t.Errorf("Expect request recorded %v %q", e.Fields, e.Body)
 	}
 	if string(g.Head) != get || g.Target != "http://a.cuttle.test/x?q=%zz" || g.Fields[1] != (Field{"x-lower", "One"}) {
 		t.Errorf("GET recorded %q %+v", g.Head, g.Fields)
@@ -313,7 +338,7 @@ func TestRecordingUpstream(t *testing.T) {
 		t.Errorf("raw bytes of connection 1: %q", u.Raw(1))
 	}
 	o := origin.Requests()
-	if len(o) != 2 || o[0].URI != "http://a.cuttle.test/x?q=%zz" || o[0].Header.Get("X-Lower") != "One" || string(o[1].Body) != "abcde" {
+	if len(o) != 4 || o[0].URI != "http://a.cuttle.test/x?q=%zz" || o[0].Header.Get("X-Lower") != "One" || string(o[1].Body) != "abcde" {
 		t.Errorf("origin received %+v", o)
 	}
 }

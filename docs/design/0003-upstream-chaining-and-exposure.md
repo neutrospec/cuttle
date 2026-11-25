@@ -152,20 +152,27 @@ sees what it would see if the client used it directly, apart from the
 limits below. The same rule applies on every
 `direct` route toward origins.
 
-Disclosure fields are `Via`, `Forwarded`, every field whose name starts
-with `X-Forwarded-`, `X-Real-IP`, `Client-IP`, `True-Client-IP`,
-`X-Client-IP`, `X-Cluster-Client-IP`, `X-Originating-IP`,
-`CF-Connecting-IP`, `Fastly-Client-IP`, and `Proxy-Status`. Names match
-without regard to case and with `_` read as `-`, because some servers treat
-`X_Forwarded_For` as `X-Forwarded-For`. One function in
-`internal/proxy`, the disclosure filter, deletes them all from a header
-set. It is called from one place for each path: the plain-HTTP `Rewrite`
-and the `CONNECT` head writer (D3), on `direct` and `disclosure = "none"`
-routes. It removes the client's own copies as well, because any of these
-fields reaching the egress proxy would disclose an intermediary, whoever
-added it. On `disclosure = "via"` routes the filter does not run: the
-client's fields pass and cuttle adds its own `Via` entry, because the last
-hop before the egress proxy filters them anyway.
+Disclosure fields are `Via`, `Forwarded`, `Forwarded-For`, every field
+whose name starts with `X-Forwarded`, with or without a following dash
+(`X-Forwarded` itself included), `X-Original-Forwarded-For`, `X-Real-IP`,
+`Client-IP`, `True-Client-IP`, `X-Client-IP`, `X-Cluster-Client-IP`,
+`X-Originating-IP`, `CF-Connecting-IP`, `Fastly-Client-IP`, and
+`Proxy-Status`. The user asked in TASK-0006 that client-sent trace fields
+such as `X-Forwarded`, `Forwarded-For`, and `X-Original-Forwarded-For` be
+removed as well. Names match without regard to case and with `_` read as
+`-`, because some servers treat `X_Forwarded_For` as `X-Forwarded-For`. One
+function in `internal/proxy`, the disclosure filter, deletes them all from
+a header set. It is called from one place for each path: the plain-HTTP
+`Rewrite` and the `CONNECT` head writer (D3), on `direct` and
+`disclosure = "none"` routes. It removes the client's own copies as well,
+because any of these fields reaching the egress proxy would disclose an
+intermediary, whoever added it. `Rewrite` also applies it to the request's
+trailer keys: Go's `ReverseProxy` declares a request's trailer keys in
+`Trailer` but sends no trailer values ([0002 D5][d2-5]), and the filter
+keeps disclosure names out of that declaration. On `disclosure = "via"`
+routes the filter does not run: the client's fields pass and cuttle adds
+its own `Via` entry, because the last hop before the egress proxy filters
+them anyway.
 
 The list above is the minimum. Each other way a proxy can disclose itself
 is decided:
@@ -211,6 +218,7 @@ Limits:
 | TCP connect timeout | 504 | `error=connection_timeout; next-hop="<upstream>"` |
 | Held as unreachable (D8) | 503 | `error=destination_unavailable; next-hop="<upstream>"` |
 | No response head within `response_timeout` | 504 | `error=http_response_timeout; next-hop="<upstream>"` |
+| Closed or reset after the TCP connect, before the `CONNECT` answer or response head | 502 | `error=connection_refused; next-hop="<upstream>"` |
 | Response unparsable | 502 | `error=http_protocol_error; next-hop="<upstream>"` |
 | Non-2xx `CONNECT` answer other than 504, `407` included | 502 | `received-status=<code>; next-hop="<upstream>"` |
 | `504` answer to `CONNECT` | 504 | `received-status=504; next-hop="<upstream>"` |
@@ -250,7 +258,7 @@ Limits:
 | Keep-alive idle | 120 s | fixed | Between requests on a client connection |
 | Direct connect | 10 s | `proxy.connect_timeout` | Name lookup and TCP connect for a direct route, all addresses |
 | Direct response | 60 s | `proxy.response_timeout` | Plain-HTTP response head from an origin |
-| Upstream connect | 10 s | `connect_timeout` in `[[upstream]]` | TCP connect to the upstream |
+| Upstream connect | 10 s | `connect_timeout` in `[[upstream]]` | Lookup of the upstream's own host name and TCP connect to it, all addresses |
 | Upstream response | 60 s | `response_timeout` in `[[upstream]]` | Response head for `CONNECT` and plain HTTP |
 | Tunnel idle | 1 h | `proxy.idle_timeout` | No bytes in either direction; `0s` disables it |
 | Shutdown drain | 5 s | fixed | [0006 D6][d6-6] |
@@ -280,10 +288,11 @@ by another upstream.
 
 - **Trigger.** Only a failure to reach the upstream itself: TCP connect
   refused, reset, unreachable, or timed out, or failure to resolve the
-  upstream's own host name. A non-2xx answer, a response timeout, and errors
-  after the `200` do not trigger it, because the upstream was reachable and
-  the fault may lie further along the chain. A dial abandoned because the
-  client left is not a failure.
+  upstream's own host name. A non-2xx answer, a response timeout, a close
+  or reset after the TCP connect and before the `CONNECT` answer or
+  response head, and errors after the `200` do not trigger it, because the
+  upstream was reachable and the fault may lie further along the chain. A
+  dial abandoned because the client left is not a failure.
 - **Hold.** The upstream is `down` for `unreachable_hold` in its
   `[[upstream]]` table, default `"5s"`, range 100 ms–5 min; `"0s"` disables
   the hold ([0004 D3][d4-3]). Every request routed to it during the hold
@@ -298,19 +307,26 @@ by another upstream.
   requests; a failed probe starts a new hold. A probe abandoned by its
   client leaves the upstream due for another probe. Any successful connect,
   including one that started before the hold, marks the upstream `up`.
-  cuttle sends no background probes (D5).
+  A plain-HTTP probe that the transport serves on a pooled connection,
+  without a dial, ends as `up` when it relays a response, and otherwise
+  leaves the upstream due for another probe. cuttle sends no background
+  probes (D5).
 - **Reload.** An upstream whose settings are unchanged keeps its state; a
   changed or new upstream starts `up`.
 - **Logs and counters.** The change to `down` logs one warning:
   `msg="upstream unreachable" upstream=gateway address=10.8.0.6:3128
-  error=connection_timeout hold=5s`. Recovery logs one `info` line with the
-  time spent down and the number of requests failed fast. Each held request
-  still gets its own decision line, with outcome `unavailable`.
-  `outcomes_total` and `upstream_outcomes_total` count outcome
-  `unavailable`, and `upstream_state` shows `up`, `down`, or `probing` with
-  its start time ([0002 D7][d2-7]). `cuttle status` and the admin overview
-  list each upstream's state, since when, and the last error. Statistics
-  count held requests as failures ([0005 D1][d5-1]).
+  error=connection_timeout hold=5s`. A failed probe starts a new hold
+  without another warning. Recovery logs one `info` line,
+  `msg="upstream recovered" upstream=gateway address=10.8.0.6:3128
+  down=42.3s failed_fast=17`, where `down` is the time since the first
+  failure of the outage and `failed_fast` the number of requests answered
+  at once during it. Each held request still gets its own decision line,
+  with outcome `unavailable`. `outcomes_total` and
+  `upstream_outcomes_total` count outcome `unavailable`, and the
+  `upstream_state` gauge shows which of `up`, `down`, and `probing` holds
+  ([0002 D7][d2-7]). `cuttle status` and the admin overview list each
+  upstream's state, since when, and the last error. Statistics count held
+  requests as failures ([0005 D1][d5-1]).
 
 In a chain each hop holds only its own upstream. If the gateway cannot
 reach the egress proxy, the gateway answers `503` at once. For `CONNECT`,

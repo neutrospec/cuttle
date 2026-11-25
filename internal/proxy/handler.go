@@ -61,10 +61,13 @@ type exchange struct {
 
 	outcome string
 	status  int
-	errType string
-	detail  string
-	up      atomic.Int64
-	down    atomic.Int64
+	// upstreamStatus is the status an upstream answered a CONNECT with,
+	// when cuttle's status was mapped from it (design 0002 D8).
+	upstreamStatus int
+	errType        string
+	detail         string
+	up             atomic.Int64
+	down           atomic.Int64
 }
 
 type exchangeKey struct{}
@@ -307,10 +310,15 @@ func (p *Proxy) finish(ex *exchange) {
 		slog.String("upstream", ex.d.Upstream),
 		slog.String("outcome", ex.outcome),
 		slog.Int("status", ex.status),
+	}
+	if ex.upstreamStatus != 0 {
+		attrs = append(attrs, slog.Int("upstream_status", ex.upstreamStatus))
+	}
+	attrs = append(attrs,
 		slog.Int64("up", ex.up.Load()),
 		slog.Int64("down", ex.down.Load()),
 		slog.String("dur", logx.Duration(time.Since(ex.start))),
-	}
+	)
 	if ex.errType != "" {
 		attrs = append(attrs, slog.String("error", ex.errType), slog.String("detail", ex.detail))
 	}

@@ -47,8 +47,8 @@ commits and the research notes use older wording; the
   `via` adds one cuttle `Via` entry for loop detection, and `none` sends
   requests that disclose no intermediary ([0003 D1][d3-1]).
 - **Disclosure fields.** Header fields that reveal an intermediary or the
-  original client address, such as `Via`, `Forwarded`, and
-  `X-Forwarded-*`. [0003 D5][d3-5] gives the full list.
+  original client address, such as `Via`, `Forwarded`, `X-Forwarded`,
+  and `X-Forwarded-*`. [0003 D5][d3-5] gives the full list.
 - **Disclosure filter.** The one function that removes every disclosure
   field, the client's own included, on `direct` routes and toward
   `disclosure = "none"` upstreams.

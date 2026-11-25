@@ -95,15 +95,27 @@ func newChain(t *testing.T, edgeTimeout, gatewayTimeout string, edgeOpt envOptio
 	return edge, gw
 }
 
-// checkNoDisclosureHead checks a request head received at the end of a
-// chain: no disclosure field of design 0003 D5, the client's own included,
-// and no value containing an instance name or an address of the chain.
+// checkNoDisclosureHead checks a request head and trailer received at the
+// end of a chain: no disclosure field of design 0003 D5, the client's own
+// included, and no value containing an instance name or an address of the
+// chain.
 func checkNoDisclosureHead(t *testing.T, r testenv.ProxyRequest, secrets ...string) {
 	t.Helper()
-	for _, f := range r.Fields {
-		ck := http.CanonicalHeaderKey(strings.ReplaceAll(f.Name, "_", "-"))
-		if _, bad := clientDisclosure[ck]; bad || strings.HasPrefix(ck, "X-Forwarded-") {
+	disclosure := func(name string) bool {
+		ck := http.CanonicalHeaderKey(strings.ReplaceAll(strings.TrimSpace(name), "_", "-"))
+		_, bad := clientDisclosure[ck]
+		return bad || strings.HasPrefix(ck, "X-Forwarded")
+	}
+	for _, f := range append(append([]testenv.Field(nil), r.Fields...), r.Trailer...) {
+		if disclosure(f.Name) {
 			t.Errorf("%s %s: disclosure field %s: %q", r.Method, r.Target, f.Name, f.Value)
+		}
+		if strings.EqualFold(f.Name, "Trailer") {
+			for _, n := range strings.Split(f.Value, ",") {
+				if disclosure(n) {
+					t.Errorf("%s %s: Trailer declares disclosure field %s", r.Method, r.Target, n)
+				}
+			}
 		}
 		for _, s := range append([]string{"cuttle-edge", "cuttle-gateway"}, secrets...) {
 			if strings.Contains(strings.ToLower(f.Value), s) {
@@ -225,6 +237,7 @@ name = "cuttle-edge"
 
 [proxy]
 default = "direct"
+max_connections = 16 # bounds a loop that detection misses
 
 [proxy.remote]
 sources = ["10.8.0.6/32"]
@@ -247,6 +260,7 @@ name = "cuttle-gateway"
 
 [proxy]
 default = "block"
+max_connections = 16
 
 [proxy.remote]
 sources = ["10.8.0.1/32"]
@@ -269,40 +283,63 @@ action = "upstream:edge"
 	gw := edge.peer(gwCfg, envOptions{remote: []string{"10.8.0.1"}})
 	edge.net.Route("10.8.0.6:3128", gw.listenerAddr("10.8.0.1"))
 	gw.net.Route("10.8.0.1:3128", edge.listenerAddr("10.8.0.6"))
-	upstreamRequests := func() int { return dialsTo(edge.net, "10.8.0.6:3128") + dialsTo(gw.net, "10.8.0.1:3128") }
+	upstreamDials := func() int { return dialsTo(edge.net, "10.8.0.6:3128") + dialsTo(gw.net, "10.8.0.1:3128") }
+	// forwarded counts the requests one instance received from the other:
+	// every gateway decision and the edge's decisions for remote clients.
+	forwarded := func() int {
+		n := len(gw.logs.decisions())
+		for _, d := range edge.logs.decisions() {
+			if d["source"] == "remote" {
+				n++
+			}
+		}
+		return n
+	}
 	loopMember := `cuttle-edge; error=proxy_loop_detected; details="Via names this instance"`
 
-	res, _ := edge.raw("CONNECT loop.cuttle.test:443 HTTP/1.1\r\nHost: loop.cuttle.test:443\r\n\r\n")
-	generatedHeaders(t, res, 502, loopMember+`, cuttle-gateway; received-status=502; next-hop="edge", cuttle-edge; received-status=502; next-hop="gateway"`)
-	if n := upstreamRequests(); n != 2 {
-		t.Errorf("CONNECT: %d upstream requests", n)
-	}
-	ed := edge.waitDecisions(2)
-	checkDecision(t, byTarget(t, gw.waitDecisions(1), "connect", "loop.cuttle.test:443"), map[string]string{"outcome": "upstream_status"})
-	var outcomes []string
-	for _, d := range ed {
-		outcomes = append(outcomes, d["source"]+":"+d["outcome"])
-	}
-	if strings.Join(outcomes, ",") != "remote:loop,local:upstream_status" {
-		t.Errorf("edge outcomes %v", outcomes)
-	}
+	// The second round has the client's own Via first, so the instance's
+	// entry is not the first Via line it receives (OI-0006 U-R2).
+	for round, clientVia := range []string{"", "Via: 1.1 lab-gw\r\n"} {
+		dials, fwd, decisions, gwDecisions := upstreamDials(), forwarded(), len(edge.logs.decisions()), len(gw.logs.decisions())
+		res, _ := edge.raw("CONNECT loop.cuttle.test:443 HTTP/1.1\r\nHost: loop.cuttle.test:443\r\n" + clientVia + "\r\n")
+		generatedHeaders(t, res, 502, loopMember+`, cuttle-gateway; received-status=502; next-hop="edge", cuttle-edge; received-status=502; next-hop="gateway"`)
+		ed := edge.waitDecisions(decisions + 2)[decisions:]
+		gw.waitDecisions(gwDecisions + 1)
+		if n := upstreamDials() - dials; n != 2 {
+			t.Errorf("round %d CONNECT: %d upstream dials", round, n)
+		}
+		if n := forwarded() - fwd; n != 2 {
+			t.Errorf("round %d CONNECT: %d upstream requests", round, n)
+		}
+		var outcomes []string
+		for _, d := range ed {
+			outcomes = append(outcomes, d["kind"]+":"+d["source"]+":"+d["outcome"])
+		}
+		if strings.Join(outcomes, ",") != "connect:remote:loop,connect:local:upstream_status" {
+			t.Errorf("round %d CONNECT: edge outcomes %v", round, outcomes)
+		}
 
-	res, _ = edge.raw("GET http://loop.cuttle.test/x HTTP/1.1\r\nHost: loop.cuttle.test\r\n\r\n")
-	if res.StatusCode != 502 || res.Header.Get("Proxy-Status") != loopMember {
-		t.Errorf("plain HTTP: %d %q", res.StatusCode, res.Header.Get("Proxy-Status"))
+		fwd, decisions, gwDecisions = forwarded(), decisions+2, gwDecisions+1
+		res, _ = edge.raw("GET http://loop.cuttle.test/x HTTP/1.1\r\nHost: loop.cuttle.test\r\n" + clientVia + "\r\n")
+		if res.StatusCode != 502 || res.Header.Get("Proxy-Status") != loopMember {
+			t.Errorf("round %d plain HTTP: %d %q", round, res.StatusCode, res.Header.Get("Proxy-Status"))
+		}
+		ed = edge.waitDecisions(decisions + 2)[decisions:]
+		gw.waitDecisions(gwDecisions + 1)
+		if n := forwarded() - fwd; n != 2 {
+			t.Errorf("round %d plain HTTP: %d upstream requests", round, n)
+		}
+		outcomes = nil
+		for _, d := range ed {
+			outcomes = append(outcomes, d["kind"]+":"+d["source"]+":"+d["outcome"]+":"+d["status"])
+		}
+		if strings.Join(outcomes, ",") != "http:remote:loop:502,http:local:ok:502" {
+			t.Errorf("round %d plain HTTP: edge outcomes %v", round, outcomes)
+		}
 	}
-	if n := upstreamRequests(); n != 4 {
-		t.Errorf("plain HTTP: %d upstream requests", n-2)
+	for _, d := range gw.waitDecisions(4) {
+		checkDecision(t, d, map[string]string{"source": "remote", "action": "upstream", "upstream": "edge"})
 	}
-	ed = edge.waitDecisions(4)[2:]
-	outcomes = nil
-	for _, d := range ed {
-		outcomes = append(outcomes, d["kind"]+":"+d["source"]+":"+d["outcome"]+":"+d["status"])
-	}
-	if strings.Join(outcomes, ",") != "http:remote:loop:502,http:local:ok:502" {
-		t.Errorf("edge outcomes %v", outcomes)
-	}
-	checkDecision(t, gw.waitDecisions(2)[1], map[string]string{"kind": "http", "outcome": "ok", "status": "502"})
 }
 
 // TestChainTimeoutPropagates checks U10: with the gateway's egress
@@ -346,8 +383,9 @@ func TestChainTimeoutPropagates(t *testing.T) {
 type sentRequest struct {
 	method, target string
 	fields         []testenv.Field
-	body           []byte // decoded
-	raw            string // body bytes on the wire
+	body           []byte          // decoded
+	raw            string          // body bytes on the wire, trailer included
+	trailer        []testenv.Field // the trailer fields in raw
 }
 
 func (s sentRequest) wire() string {
@@ -375,7 +413,11 @@ func TestNoDisclosureChain(t *testing.T) {
 	rec.SetMode("h", testenv.Pass())
 	gw.net.Route("10.20.0.80:8080", rec.Addr)
 
-	common := []testenv.Field{{Name: "Via", Value: "1.1 lab-gw"}, {Name: "X-Real-IP", Value: "198.51.100.7"}}
+	common := []testenv.Field{{Name: "Via", Value: "1.1 lab-gw"}, {Name: "X-Real-IP", Value: "198.51.100.7"},
+		// The wider list of the TASK-0006 decision (0003 D5).
+		{Name: "X-Forwarded", Value: "for=198.51.100.7"}, {Name: "Forwarded-For", Value: "198.51.100.7"},
+		{Name: "X-Original-Forwarded-For", Value: "198.51.100.7"}, {Name: "X-Client-IP", Value: "198.51.100.7"},
+		{Name: "X-Cluster-Client-IP", Value: "198.51.100.7"}}
 	f := func(fs ...testenv.Field) []testenv.Field {
 		return append(append([]testenv.Field(nil), fs...), common...)
 	}
@@ -394,6 +436,19 @@ func TestNoDisclosureChain(t *testing.T) {
 			fields: f(testenv.Field{Name: "Host", Value: "plain.cuttle.test"}, ua, testenv.Field{Name: "Max-Forwards", Value: "0"})},
 		{method: "TRACE", target: "http://plain.cuttle.test/x",
 			fields: f(testenv.Field{Name: "Host", Value: "plain.cuttle.test"}, ua, testenv.Field{Name: "Max-Forwards", Value: "0"})},
+		// A trailer that carries disclosure fields (OI-0006 U-R6).
+		{method: "POST", target: "http://plain.cuttle.test/trailer",
+			fields: f(testenv.Field{Name: "Host", Value: "plain.cuttle.test"}, ua, testenv.Field{Name: "Transfer-Encoding", Value: "chunked"},
+				testenv.Field{Name: "Trailer", Value: "X-Checksum, X-Forwarded-For, Via, X-Real-IP"}),
+			body: []byte("traced"),
+			raw:  "6\r\ntraced\r\n0\r\nX-Checksum: abc\r\nX-Forwarded-For: 198.51.100.7\r\nVia: 1.1 lab-gw\r\nX-Real-IP: 198.51.100.7\r\n\r\n",
+			trailer: []testenv.Field{{Name: "X-Checksum", Value: "abc"}, {Name: "X-Forwarded-For", Value: "198.51.100.7"},
+				{Name: "Via", Value: "1.1 lab-gw"}, {Name: "X-Real-IP", Value: "198.51.100.7"}}},
+		// Expect: 100-continue through the chain (OI-0006 U-R5).
+		{method: "POST", target: "http://plain.cuttle.test/expect",
+			fields: f(testenv.Field{Name: "Host", Value: "plain.cuttle.test"}, ua, testenv.Field{Name: "Expect", Value: "100-continue"},
+				testenv.Field{Name: "Content-Length", Value: "5"}),
+			body: []byte("hello"), raw: "hello"},
 	}
 	for _, s := range reqs {
 		if s.method == "CONNECT" {
@@ -409,9 +464,12 @@ func TestNoDisclosureChain(t *testing.T) {
 			c.Close()
 			continue
 		}
-		res, body := edge.raw(s.wire())
+		res, body := edge.raw(s.wire()) // skips 100 Continue
 		if res.StatusCode != 200 || res.Header.Get("Proxy-Status") != "" {
 			t.Errorf("%s %s: %d %v", s.method, s.target, res.StatusCode, res.Header)
+		}
+		if s.method == "POST" && !bytes.Contains(body, []byte(`"method":"POST"`)) {
+			t.Errorf("%s %s not answered by the origin: %s", s.method, s.target, body)
 		}
 		if (s.method == "OPTIONS" || s.method == "TRACE") && !bytes.Contains(body, []byte(`"method":"`+s.method+`"`)) {
 			t.Errorf("%s not answered by the mock: %s", s.method, body)
@@ -443,6 +501,17 @@ func TestNoDisclosureChain(t *testing.T) {
 				t.Errorf("%s %s: field %s: %q was not sent by the client", r.Method, r.Target, rf.Name, rf.Value)
 			}
 		}
+		for _, rf := range r.Trailer {
+			sent := false
+			for _, sf := range s.trailer {
+				if strings.EqualFold(sf.Name, rf.Name) && sf.Value == rf.Value {
+					sent = true
+				}
+			}
+			if !sent {
+				t.Errorf("%s %s: trailer field %s: %q was not sent by the client", r.Method, r.Target, rf.Name, rf.Value)
+			}
+		}
 		if s.method == "OPTIONS" || s.method == "TRACE" {
 			if mf := r.Values("Max-Forwards"); len(mf) != 1 || mf[0] != "0" {
 				t.Errorf("%s: Max-Forwards %q", s.method, mf)
@@ -451,6 +520,14 @@ func TestNoDisclosureChain(t *testing.T) {
 		if !strings.Contains(strings.Join(r.Values("User-Agent"), ""), "nd-client") && i != 3 {
 			t.Errorf("request %d lost its User-Agent", i)
 		}
+	}
+	// Go's ReverseProxy forwards the trailer declaration but no request
+	// trailer values (Go 1.27.4); the filter leaves only X-Checksum in it.
+	if tr := got[6]; tr.Get("Trailer") != "X-Checksum" || len(tr.Trailer) != 0 {
+		t.Errorf("trailer request: Trailer %q, trailer fields %v", tr.Get("Trailer"), tr.Trailer)
+	}
+	if e := got[7]; e.Get("Expect") != "100-continue" {
+		t.Errorf("Expect lost: %v", e.Fields)
 	}
 	if ua := got[3].Values("User-Agent"); len(ua) != 0 {
 		t.Errorf("User-Agent added: %q", ua)

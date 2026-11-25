@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
+	"slices"
 	"strings"
 	"testing"
 
@@ -27,11 +28,31 @@ func TestRemoveDisclosure(t *testing.T) {
 	h["X-FORWARDED_HOST"] = []string{"1"}
 	h["Proxy_Status"] = []string{"1"}
 	h["CF_CONNECTING_IP"] = []string{"1"}
-	h.Set("X-Forwarded", "kept: not a prefix match")
+	// The wider list of the TASK-0006 decision: x-forwarded with or without
+	// a following dash, Forwarded-For, and X-Original-Forwarded-For.
+	h.Set("X-Forwarded", "for=198.51.100.7")
+	h["x-forwardedfor"] = []string{"1"}
+	h["X_FORWARDED"] = []string{"1"}
+	h.Set("Forwarded-For", "198.51.100.7")
+	h["forwarded_for"] = []string{"1"}
+	h.Set("X-Original-Forwarded-For", "198.51.100.7")
+	h["x_original_forwarded_for"] = []string{"1"}
+	h["x_client_ip"] = []string{"1"}
+	h["X-CLUSTER_CLIENT-IP"] = []string{"1"}
+	// Near misses stay.
+	h.Set("X-Forward", "kept")
+	h.Set("Forwarded-Host", "kept")
+	h.Set("X-Original-Url", "kept")
 	h.Set("X-Kept", "yes")
 	h.Set("User-Agent", "ua")
 	removeDisclosure(h)
-	if len(h) != 3 || h.Get("X-Kept") != "yes" || h.Get("User-Agent") != "ua" || h.Get("X-Forwarded") == "" {
+	want := []string{"Forwarded-Host", "User-Agent", "X-Forward", "X-Kept", "X-Original-Url"}
+	var got []string
+	for k := range h {
+		got = append(got, k)
+	}
+	slices.Sort(got)
+	if !slices.Equal(got, want) {
 		t.Fatalf("after filter: %v", h)
 	}
 }

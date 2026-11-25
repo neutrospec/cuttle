@@ -52,6 +52,7 @@ type Request struct {
 //	/ws           WebSocket echo
 //	/ws.html      a page that opens ws://<host>/ws and sends one message
 //	/status?code= answers with that status; 407 only with Allow407
+//	/hints        a 103 Early Hints response, then 200
 //	anything else echoes the request as JSON (/echo included)
 //
 // Every request is recorded, and the raw bytes read on each connection are
@@ -185,6 +186,10 @@ func (o *Origin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			f.Flush()
 		}
 		w.Header().Set("X-Checksum", "done")
+	case "/hints":
+		w.Header().Set("Link", "</style.css>; rel=preload; as=style")
+		w.WriteHeader(http.StatusEarlyHints)
+		io.WriteString(w, "hints")
 	case "/ws.html":
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		fmt.Fprint(w, wsPage)

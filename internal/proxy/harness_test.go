@@ -256,6 +256,11 @@ func (e *env) rawFrom(peer, req string) (*http.Response, []byte) {
 	}
 	br := bufio.NewReader(c)
 	res, err := http.ReadResponse(br, nil)
+	// Informational responses, such as 100 Continue, precede the final
+	// response; 101 is final for this purpose.
+	for err == nil && res.StatusCode/100 == 1 && res.StatusCode != http.StatusSwitchingProtocols {
+		res, err = http.ReadResponse(br, nil)
+	}
 	if err != nil {
 		e.t.Fatalf("reading response to %q: %v", firstLine(req), err)
 	}

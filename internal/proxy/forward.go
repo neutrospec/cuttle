@@ -55,7 +55,8 @@ func (p *Proxy) forward(w http.ResponseWriter, r *http.Request, ex *exchange, rp
 }
 
 // rewriteDirect prepares the outgoing request on a direct route. It keeps
-// the client's Host and raw target, and removes every disclosure field.
+// the client's Host and raw target, and removes every disclosure field from
+// the header and the trailer.
 // Without the raw target, ReverseProxy and the transport would re-escape the
 // path and drop or rewrite the query (design 0002 D5).
 func rewriteDirect(pr *httputil.ProxyRequest) {
@@ -76,6 +77,7 @@ func rewriteDirect(pr *httputil.ProxyRequest) {
 	u.ForceQuery = t.HasQuery && t.RawQuery == ""
 	pr.Out.Host = pr.In.Host
 	removeDisclosure(pr.Out.Header)
+	removeDisclosure(pr.Out.Trailer)
 }
 
 // modifyResponse turns a 407 into cuttle's own 502: a 407 must never reach a

@@ -42,13 +42,17 @@ var clientDisclosure = map[string]string{
 	"Cf-Connecting-Ip":    "198.51.100.7",
 	"Fastly-Client-Ip":    "198.51.100.7",
 	"Proxy-Status":        "lab-gw; error=connection_refused",
+	// The wider list of the TASK-0006 decision (0003 D5).
+	"X-Forwarded":              "for=198.51.100.7",
+	"Forwarded-For":            "198.51.100.7",
+	"X-Original-Forwarded-For": "198.51.100.7",
 }
 
 func checkNoDisclosure(t *testing.T, h http.Header) {
 	t.Helper()
 	for k := range h {
 		ck := http.CanonicalHeaderKey(strings.ReplaceAll(k, "_", "-"))
-		if _, bad := clientDisclosure[ck]; bad || strings.HasPrefix(ck, "X-Forwarded-") {
+		if _, bad := clientDisclosure[ck]; bad || strings.HasPrefix(ck, "X-Forwarded") {
 			t.Errorf("origin received disclosure field %s: %q", k, h[k])
 		}
 	}
@@ -182,6 +186,24 @@ func TestHTTPDirect(t *testing.T) {
 		if _, ok := rec.Header["User-Agent"]; ok {
 			t.Errorf("User-Agent added for a client that sent none")
 		}
+	})
+
+	t.Run("trailer", func(t *testing.T) {
+		// Request trailer keys pass the disclosure filter too: the origin
+		// sees only the client's other declared name. Go's ReverseProxy
+		// forwards no request trailer values (Go 1.27.4).
+		e.http.Reset()
+		res, _ := e.raw("POST http://plain.cuttle.test/echo HTTP/1.1\r\nHost: plain.cuttle.test\r\nTransfer-Encoding: chunked\r\n" +
+			"Trailer: X-Checksum, Via, X-Forwarded-For\r\n\r\n3\r\nabc\r\n0\r\nX-Checksum: 1\r\nVia: 1.1 lab-gw\r\n" +
+			"X-Forwarded-For: 198.51.100.7\r\n\r\n")
+		if res.StatusCode != 200 {
+			t.Fatalf("status %d", res.StatusCode)
+		}
+		rec := e.http.Requests()[0]
+		if _, ok := rec.Trailer["X-Checksum"]; string(rec.Body) != "abc" || len(rec.Trailer) != 1 || !ok {
+			t.Errorf("body %q trailer %v", rec.Body, rec.Trailer)
+		}
+		checkNoDisclosure(t, rec.Trailer)
 	})
 
 	t.Run("HTTP_PROXY in cuttle's environment", func(t *testing.T) {

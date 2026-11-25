@@ -11,10 +11,13 @@ import (
 
 // disclosureFields are the fields that reveal an intermediary or the
 // original client address (design 0003 D5), lowercase. Every field whose
-// name starts with x-forwarded- is also one.
+// name starts with x-forwarded, with or without a following dash, is also
+// one.
 var disclosureFields = []string{
 	"via",
 	"forwarded",
+	"forwarded-for",
+	"x-original-forwarded-for",
 	"x-real-ip",
 	"client-ip",
 	"true-client-ip",
@@ -31,7 +34,7 @@ var disclosureFields = []string{
 // X-Forwarded-For.
 func isDisclosureField(name string) bool {
 	n := strings.ReplaceAll(strings.ToLower(name), "_", "-")
-	return strings.HasPrefix(n, "x-forwarded-") || slices.Contains(disclosureFields, n)
+	return strings.HasPrefix(n, "x-forwarded") || slices.Contains(disclosureFields, n)
 }
 
 // removeDisclosure is the disclosure filter: it deletes every disclosure

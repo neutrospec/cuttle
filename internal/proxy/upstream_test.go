@@ -306,7 +306,18 @@ func TestUpstreamStatusMapping(t *testing.T) {
 	}
 	ds := e.waitDecisions(12)
 	for _, d := range ds {
-		checkDecision(t, d, map[string]string{"action": "upstream", "upstream": "rec", "outcome": "upstream_status"})
+		// The decision line keeps the upstream's status, so an egress 403,
+		// 407, and 502 can be told apart (design 0002 D8).
+		code := strings.TrimSuffix(strings.TrimPrefix(d["target"], "s"), ".cuttle.test:443")
+		want := "502"
+		if code == "504" {
+			want = "504"
+		}
+		checkDecision(t, d, map[string]string{"action": "upstream", "upstream": "rec", "outcome": "upstream_status",
+			"status": want, "upstream_status": code})
+	}
+	if line := e.logs.String(); !strings.Contains(line, "outcome=upstream_status status=502 upstream_status=407 up=0 down=0") {
+		t.Errorf("decision line layout:\n%s", line)
 	}
 	onlyDials(t, e.net, "10.8.0.6:3128")
 	if l := e.net.Lookups(); len(l) != 0 {
@@ -428,6 +439,40 @@ func TestUpstreamHTTP(t *testing.T) {
 			for _, k := range []string{"Accept-Encoding", "Proxy-Status", "X-Real-Ip"} {
 				if v := r.Values(k); len(v) > 0 {
 					t.Errorf("%s: %s added: %q", target, k, v)
+				}
+			}
+		}
+	})
+
+	t.Run("fields named in Connection", func(t *testing.T) {
+		// A Forwarded or X-Forwarded-* field the client names in Connection
+		// is hop-by-hop: it is removed on the plain-HTTP path as in the
+		// CONNECT head (OI-0006 V2, RFC 9110 section 7.6.1).
+		for _, kind := range []string{"plain", "connect"} {
+			rec.Reset()
+			head := "Host: h\r\nConnection: forwarded, X-FORWARDED-FOR , x-forwarded-port\r\n" + forwardedHead()
+			if kind == "plain" {
+				if res, _ := e.raw("GET http://h/conn HTTP/1.1\r\n" + head + "\r\n"); res.StatusCode != 200 {
+					t.Fatalf("status %d", res.StatusCode)
+				}
+			} else {
+				c := e.dial()
+				io.WriteString(c, "CONNECT origin.cuttle.test:443 HTTP/1.1\r\n"+head+"\r\n")
+				got := make([]byte, len(connectEstablished))
+				if _, err := io.ReadFull(c, got); err != nil || string(got) != connectEstablished {
+					t.Fatalf("CONNECT: %q %v", got, err)
+				}
+				c.Close()
+			}
+			r := rec.Requests()[0]
+			for _, k := range []string{"Connection", "Forwarded", "X-Forwarded-For", "X-Forwarded-Port"} {
+				if v := r.Values(k); len(v) > 0 {
+					t.Errorf("%s: %s named in Connection arrived: %q", kind, k, v)
+				}
+			}
+			for _, k := range []string{"X-Forwarded-Host", "X-Forwarded-Proto"} {
+				if v := r.Values(k); len(v) != 1 {
+					t.Errorf("%s: %s not named in Connection: %q", kind, k, v)
 				}
 			}
 		}
@@ -590,10 +635,33 @@ address = "10.8.0.6:8085"
 disclosure = "none"
 unreachable_hold = "1s"
 
+[[upstream]]
+name = "nodns"
+address = "gone.internal.example:8080"
+disclosure = "none"
+unreachable_hold = "1s"
+
+[[upstream]]
+name = "abandon"
+address = "10.8.0.6:8086"
+disclosure = "none"
+connect_timeout = "2s"
+unreachable_hold = "1s"
+
 [[rule]]
 name = "hole"
 hosts = ["hole.cuttle.test"]
 action = "upstream:hole"
+
+[[rule]]
+name = "nodns"
+hosts = ["nodns.cuttle.test"]
+action = "upstream:nodns"
+
+[[rule]]
+name = "abandon"
+hosts = ["abandon.cuttle.test"]
+action = "upstream:abandon"
 
 [[rule]]
 name = "plain"
@@ -622,7 +690,7 @@ action = "upstream:bad"
 func TestUpstreamUnreachableHold(t *testing.T) {
 	clock := newFakeClock()
 	e := newEnvWith(t, holdConfig, envOptions{clock: clock.Now})
-	rec := e.recorder("10.8.0.6:8081", testenv.UpstreamOptions{}, "hole.cuttle.test", "plain-up.cuttle.test")
+	rec := e.recorder("10.8.0.6:8081", testenv.UpstreamOptions{}, "hole.cuttle.test", "plain-up.cuttle.test", "abandon.cuttle.test")
 	rec.SetMode("silent.cuttle.test", testenv.Silent())
 	rec.SetMode("bad.cuttle.test", testenv.Status(502, ""))
 	closed := closedAddr(t)
@@ -838,6 +906,97 @@ func TestUpstreamUnreachableHold(t *testing.T) {
 		}
 	})
 
+	t.Run("upstream name not resolvable", func(t *testing.T) {
+		// A failure to resolve the upstream's own name answers 502
+		// dns_error and starts the hold (design 0003 D6, D8).
+		e.net.MapError("gone.internal.example", &net.DNSError{Err: "server misbehaving", Name: "gone.internal.example", IsTemporary: true})
+		dials := len(e.net.Dials())
+		res, _ := connect("nodns.cuttle.test")
+		generatedHeaders(t, res, 502, `cuttle-test; error=dns_error; next-hop="nodns"; details="upstream lookup failed: server failure"`)
+		if st := state("nodns"); st.State != StateDown || st.LastError != "dns_error" || gauge("nodns", "down") != 1 {
+			t.Fatalf("state %+v", st)
+		}
+		res, el := connect("nodns.cuttle.test")
+		generatedHeaders(t, res, 503, held("nodns", "0s"))
+		res2, el2 := get("nodns.cuttle.test")
+		generatedHeaders(t, res2, 503, held("nodns", "0s"))
+		if el > fast || el2 > fast {
+			t.Errorf("held requests took %v and %v", el, el2)
+		}
+		var lookups []string
+		for _, l := range e.net.Lookups() {
+			if l != "localhost" {
+				lookups = append(lookups, l)
+			}
+		}
+		if strings.Join(lookups, ",") != "gone.internal.example" || len(e.net.Dials()) != dials {
+			t.Errorf("lookups %v, %d new dials", lookups, len(e.net.Dials())-dials)
+		}
+		if n := strings.Count(e.logs.String(), `msg="upstream unreachable" upstream=nodns address=gone.internal.example:8080 error=dns_error hold=1s`); n != 1 {
+			t.Errorf("%d unreachable warnings", n)
+		}
+	})
+
+	t.Run("abandoned dials", func(t *testing.T) {
+		// A dial abandoned because the client left is not a failure: it
+		// starts no hold, and an abandoned probe leaves the upstream due for
+		// another probe at once (design 0003 D8).
+		e.net.Blackhole("10.8.0.6:8086")
+		// closedLines returns the decision lines of abandoned requests.
+		closedLines := func() []map[string]string {
+			var out []map[string]string
+			for _, d := range e.logs.decisions() {
+				if d["target"] == "abandon.cuttle.test:443" && d["outcome"] == OutcomeClientClosed {
+					out = append(out, d)
+				}
+			}
+			return out
+		}
+		abandon := func(wantDials int) {
+			t.Helper()
+			before := len(closedLines())
+			start := time.Now()
+			c := e.dial()
+			io.WriteString(c, "CONNECT abandon.cuttle.test:443 HTTP/1.1\r\nHost: abandon.cuttle.test:443\r\n\r\n")
+			waitFor(t, "dial to the upstream", func() bool { return dialsTo(e.net, "10.8.0.6:8086") == wantDials })
+			c.Close()
+			waitFor(t, "client_closed decision", func() bool { return len(closedLines()) == before+1 })
+			checkDecision(t, closedLines()[before], map[string]string{"status": "0", "upstream": "abandon"})
+			if el := time.Since(start); el > time.Second {
+				t.Errorf("abandoned dial took %v; connect_timeout is 2s", el)
+			}
+		}
+		abandon(1)
+		if st := state("abandon"); st.State != StateUp || st.LastError != "" || gauge("abandon", "up") != 1 {
+			t.Fatalf("an abandoned dial changed the state: %+v", st)
+		}
+		// Not held: the next request dials, and its refused connect starts
+		// the hold.
+		e.net.Unblackhole("10.8.0.6:8086")
+		e.net.Route("10.8.0.6:8086", closed)
+		res, _ := connect("abandon.cuttle.test")
+		generatedHeaders(t, res, 502, `cuttle-test; error=connection_refused; next-hop="abandon"; details="connect failed: connection refused"`)
+		if st := state("abandon"); st.State != StateDown || dialsTo(e.net, "10.8.0.6:8086") != 2 {
+			t.Fatalf("state %+v", st)
+		}
+
+		// The probe after the hold is abandoned; the next request probes at
+		// once, without waiting for another hold.
+		e.net.Blackhole("10.8.0.6:8086")
+		clock.Advance(1100 * time.Millisecond)
+		abandon(3)
+		if st := state("abandon"); st.State != StateDown {
+			t.Fatalf("state after the abandoned probe %+v", st)
+		}
+		e.net.Unblackhole("10.8.0.6:8086")
+		e.net.Route("10.8.0.6:8086", rec.Addr)
+		c := e.connectRaw("abandon.cuttle.test:443")
+		c.Close()
+		if st := state("abandon"); st.State != StateUp || dialsTo(e.net, "10.8.0.6:8086") != 4 {
+			t.Errorf("after the next probe: %+v, dials %d", st, dialsTo(e.net, "10.8.0.6:8086"))
+		}
+	})
+
 	t.Run("hold disabled", func(t *testing.T) {
 		for range 3 {
 			res, _ := connect("nohold.cuttle.test")
@@ -852,7 +1011,7 @@ func TestUpstreamUnreachableHold(t *testing.T) {
 			t.Errorf("state %+v", st)
 		}
 	})
-	onlyDials(t, e.net, "10.8.0.6:8081", "10.8.0.6:8082", "10.8.0.6:8083", "10.8.0.6:8084", "10.8.0.6:8085")
+	onlyDials(t, e.net, "10.8.0.6:8081", "10.8.0.6:8082", "10.8.0.6:8083", "10.8.0.6:8084", "10.8.0.6:8085", "10.8.0.6:8086")
 }
 
 // rawStatus sends one request on a new connection to addr and returns the
@@ -887,6 +1046,13 @@ func TestChainProxyStatus(t *testing.T) {
 	if want := `egress; error=x; details="a, b", cuttle-gateway; received-status=403, ` + own; got != want {
 		t.Errorf("got %s", got)
 	}
+	// A member that ends inside an open quoted string is dropped, whatever
+	// precedes it is kept, and cuttle's member stays a member of its own.
+	for _, v := range []string{`egress; error=x; details="open, more`, `egress; details="esc\`, `egress; details="a\"b`} {
+		if got := chainProxyStatus([]string{`first; error=y`, v}, own); got != `first; error=y, `+own {
+			t.Errorf("unterminated %q: %s", v, got)
+		}
+	}
 	long := strings.Repeat("m", 600)
 	got = chainProxyStatus([]string{long + ", " + long + ", short"}, own)
 	if got != long+", "+own {
@@ -905,6 +1071,7 @@ func TestViaNames(t *testing.T) {
 		{[]string{"1.1 lab-gw, 1.1 CUTTLE-TEST"}, true},
 		{[]string{"1.1 lab-gw (a, cuttle-test b), HTTP/1.1 other"}, false},
 		{[]string{"1.1 lab-gw", "1.0 cuttle-test:3128"}, false},
+		{[]string{"1.1 lab-gw", "1.1 cuttle-test (cuttle)"}, true}, // not the first Via line
 		{[]string{"1.1 cuttle-testing (cuttle)"}, false},
 	} {
 		h := http.Header{"Via": c.via}
