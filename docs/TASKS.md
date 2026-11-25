@@ -41,6 +41,28 @@ A closed task becomes one line under Closed:
 
 ## Active
 
+### TASK-0002 — Generalize terminology for a public project
+
+- Milestone: none (prepares M1)
+- Status: implement
+- Iteration: 1/3
+- Workers: docs role in a T3 isolated worktree
+- Base: `9e9da92` plus this board update
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: docs — add the glossary and apply the general terms across
+  the tracked docs, then return the candidate commit for review
+
+Decisions for TASK-0002 from the user (2026-11-25):
+
+- Use general terms so the project can be published: egress proxy,
+  TLS-inspecting proxy, inspection root CA, strict upstream, edge instance,
+  gateway instance, restricted destinations, private link. The home and
+  office setup remains only as a labelled example deployment.
+- Rename the per-upstream setting `trace` to `disclosure`, keeping the
+  values `"via"` and `"none"`.
+
 ## Closed
 
 - TASK-0001 — Revise goals and design for chaining, admin, packaging, and
