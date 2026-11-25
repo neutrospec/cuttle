@@ -44,11 +44,13 @@ A closed task becomes one line under Closed:
 ### TASK-0015 — M3.1 Homebrew formula and service
 
 - Milestone: M3.1
-- Status: implement
+- Status: review
 - Iteration: 2/3
-- Workers: infra on branch `t3/homebrew-formula-service` (fix round)
+- Workers: infra done on branch `t3/homebrew-formula-service`; fresh
+  reviewer re-checking the fixes
 - Base: `587f645`
-- Candidate: `c4b6c12` (tree `8ece173`), returned for fixes
+- Candidate: `5cb88c6` (tree `82d51e5`); the first candidate `c4b6c12`
+  (tree `8ece173`) was returned for fixes
 - Evidence: infra and the reviewer ran `scripts/gate t0` and `t1` on
   `8ece173`, both pass; with a throwaway local tap, `brew install`, `brew
   test`, `brew audit --strict`, and the service checks P9–P12 and 0003 A5
@@ -59,8 +61,7 @@ A closed task becomes one line under Closed:
   regex engine; F4 and F5 (minor) ride along; P1 (pre-existing): a stats
   test uses the local time zone, which the real scan flags; F6–F9 go to
   OI-0006 at landing
-- Next action: infra — fix F1, F2, F4, F5, F6, and P1 and return the new
-  candidate for a re-check of the fixes
+- Next action: reviewer — re-check the fixes in `c4b6c12..5cb88c6`
 
 Decisions for TASK-0015 (2026-11-26):
 
