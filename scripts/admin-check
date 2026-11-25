@@ -1,0 +1,27 @@
+#!/bin/sh
+# Runs the headless Chrome admin check of design 0005 A10, the T2 check at
+# M2 close (design 0007 D7): it builds cuttle, serves it with temporary
+# XDG directories and test-chosen loopback ports, and drives headless
+# Chrome with a throwaway profile and the mock keychain through sign-in,
+# the overview, the domain table, the live page, and the settings page.
+# Chrome opens no window and no debugging port, and its only proxy is the
+# instance's block-by-default listener.
+#
+#   scripts/admin-check
+#
+# CUTTLE_CHROME overrides the Chrome binary, and CUTTLE_ADMIN_CHROME_OUT
+# names an existing directory for screenshots of each page.
+set -eu
+
+cd "$(dirname "$0")/.."
+set -x
+CUTTLE_ADMIN_CHROME=1 go test -count=1 -v -run '^TestAdminChrome$' ./cmd/cuttle
+{ set +x; } 2>/dev/null
+# Only this check's processes: the binary under cuttle-bin-* and Chrome
+# with the throwaway profile under the test's temporary directory.
+pids=$(/usr/bin/pgrep -f 'cuttle-bin-|TestAdminChrome' || true)
+if [ -n "$pids" ]; then
+	echo "admin-check: processes left: $pids" >&2
+	exit 1
+fi
+echo "admin-check: pass"

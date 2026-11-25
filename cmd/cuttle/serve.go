@@ -57,9 +57,11 @@ type serveState struct {
 
 	// stats is nil when the database is unavailable, with the reason in
 	// statsErr (design 0005 D4); statsOnce guards closeStats.
-	stats     *stats.Stats
-	statsErr  string
-	statsOnce sync.Once
+	// statsInterval overrides the flush interval in tests.
+	stats         *stats.Stats
+	statsErr      string
+	statsOnce     sync.Once
+	statsInterval time.Duration
 
 	// reloadMu serializes reloads; mu guards the fields below.
 	reloadMu        sync.Mutex
@@ -67,6 +69,8 @@ type serveState struct {
 	loadedAt        time.Time
 	restartRequired []string
 	lastReloadError string
+	// admin is the admin listener's state (OI-0006 P-R2).
+	admin control.Admin
 }
 
 func (s *serveState) close() {
@@ -290,6 +294,8 @@ func (s *serveState) run(stderr io.Writer, listen func(network, address string) 
 	var adminSrv *http.Server
 	if cfg.Admin.Listen.IsValid() {
 		adminSrv = s.startAdmin(cfg.Admin.Listen, listen)
+	} else {
+		s.setAdmin(control.Admin{State: control.AdminDisabled, Since: time.Now()})
 	}
 	closeAdmin := func() {
 		if adminSrv != nil {
@@ -407,7 +413,7 @@ func (s *serveState) Reload() (control.ReloadResult, bool) {
 // Status reports the running instance for GET /v1/status (design 0006 D4).
 func (s *serveState) Status() control.Status {
 	s.mu.Lock()
-	cfg, loadedAt, rr, lastErr := s.cfg, s.loadedAt, s.restartRequired, s.lastReloadError
+	cfg, loadedAt, rr, lastErr, adm := s.cfg, s.loadedAt, s.restartRequired, s.lastReloadError, s.admin
 	s.mu.Unlock()
 	now := time.Now()
 	statsState, statsErr := s.statsState()
@@ -421,6 +427,7 @@ func (s *serveState) Status() control.Status {
 		StartedAt:  s.startedAt.UTC(),
 		Paths:      s.paths.WithPresence(),
 		Listeners:  []control.Listener{},
+		Admin:      adm,
 		Upstreams:  []control.Upstream{},
 		Interfaces: []control.Interface{},
 		Config: control.Config{
@@ -432,6 +439,13 @@ func (s *serveState) Status() control.Status {
 		Stats:    statsState,
 		StatsErr: statsErr,
 		Log:      control.Log{Path: s.paths.Log.Path, RotationFailures: s.logw.Failures()},
+	}
+	st.Admin.Since = st.Admin.Since.UTC()
+	if s.stats != nil {
+		if we := s.stats.LastWriteError(); we != nil {
+			at := we.At.UTC()
+			st.StatsWriteError, st.StatsWriteErrorAt = we.Msg, &at
+		}
 	}
 	for _, l := range s.p.Listeners() {
 		st.Listeners = append(st.Listeners, control.Listener{Address: l.Address, State: l.State, Error: l.Error, Since: l.Since.UTC()})

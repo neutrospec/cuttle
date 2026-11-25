@@ -81,10 +81,11 @@ func (v *session) expired(now time.Time) bool {
 	return now.Sub(v.lastSeen) >= IdleTimeout || now.Sub(v.created) >= AbsoluteTimeout
 }
 
-// get returns the live session with this ID and marks it used. A session
-// past its idle or absolute timeout, or whose password file digest differs
-// from the current one, or any session while login is disabled, ends here.
-func (s *sessions) get(id string, now time.Time, pw passwordState) (session, bool) {
+// get returns the live session with this ID and, when touch is set, marks
+// it used, which restarts its idle timeout. A session past its idle or
+// absolute timeout, or whose password file digest differs from the current
+// one, or any session while login is disabled, ends here.
+func (s *sessions) get(id string, now time.Time, pw passwordState, touch bool) (session, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	v, ok := s.m[id]
@@ -95,7 +96,9 @@ func (s *sessions) get(id string, now time.Time, pw passwordState) (session, boo
 		delete(s.m, id)
 		return session{}, false
 	}
-	v.lastSeen = now
+	if touch {
+		v.lastSeen = now
+	}
 	return *v, true
 }
 

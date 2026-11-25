@@ -98,7 +98,9 @@ type Status struct {
 	StartedAt time.Time   `json:"started_at"`
 	Paths     paths.Paths `json:"paths"`
 	Listeners []Listener  `json:"listeners"`
-	Upstreams []Upstream  `json:"upstreams"`
+	// Admin is the admin listener's state (design 0005 D5, OI-0006 P-R2).
+	Admin     Admin      `json:"admin"`
+	Upstreams []Upstream `json:"upstreams"`
 	// Interfaces lists the [[interface]] definitions in configuration
 	// order with their state; it is empty without definitions and never
 	// holds a MAC address (design 0008 D15).
@@ -111,10 +113,32 @@ type Status struct {
 	Tunnels []Tunnel `json:"tunnels"`
 	// Stats is the statistics state: enabled, or unavailable with the
 	// reason in StatsErr (design 0005 D4).
-	Stats        string `json:"stats"`
-	StatsErr     string `json:"stats_error,omitempty"`
-	Log          Log    `json:"log"`
-	RlimitNofile uint64 `json:"rlimit_nofile"`
+	Stats    string `json:"stats"`
+	StatsErr string `json:"stats_error,omitempty"`
+	// StatsWriteError is the last failed statistics flush since start and
+	// StatsWriteErrorAt its time; both are empty while no flush has failed
+	// (design 0005 D4, OI-0006 Q-R5).
+	StatsWriteError   string     `json:"stats_last_write_error,omitempty"`
+	StatsWriteErrorAt *time.Time `json:"stats_last_write_error_at,omitempty"`
+	Log               Log        `json:"log"`
+	RlimitNofile      uint64     `json:"rlimit_nofile"`
+}
+
+// Admin listener states (design 0005 D5).
+const (
+	AdminListening   = "listening"
+	AdminUnavailable = "unavailable"
+	AdminDisabled    = "disabled"
+)
+
+// Admin is the admin listener: listening on Address, unavailable with the
+// bind error, or disabled by admin.listen = "". It reflects the address
+// the instance started with; a changed admin.listen needs a restart.
+type Admin struct {
+	Address string    `json:"address"`
+	State   string    `json:"state"`
+	Error   string    `json:"error,omitempty"`
+	Since   time.Time `json:"since"`
 }
 
 // Listener is one proxy listener (design 0003 D9).

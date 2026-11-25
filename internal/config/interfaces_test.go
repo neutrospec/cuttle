@@ -52,9 +52,11 @@ func macFragments(t *testing.T, paths []string) []string {
 
 // TestConfigInterfaces checks the interface errors and warnings of design
 // 0008 D6 (I1): each error sample fails with its key path and line, each
-// warning sample passes with its warning, and no message carries any part
-// of a sample's MAC in any case or separator form, TOML syntax errors
-// included (TASK-0008 K-R2).
+// warning sample passes with its warning, and no message about an
+// [[interface]] key or an interfaces list carries any part of a sample's
+// MAC in any case or separator form, TOML syntax errors included
+// (TASK-0008 K-R2). Messages about other keys echo what the operator
+// wrote, MAC-shaped text included (OI-0006 O-R1).
 func TestConfigInterfaces(t *testing.T) {
 	invalid, _ := filepath.Glob("testdata/interfaces/invalid/*.toml")
 	warn, _ := filepath.Glob("testdata/interfaces/warn/*.toml")
@@ -66,7 +68,10 @@ func TestConfigInterfaces(t *testing.T) {
 	noMAC := func(path string, list []Issue) {
 		t.Helper()
 		for _, is := range list {
-			text := strings.ToLower(is.Key + ": " + is.Msg)
+			if !interfaceKey(is.Key) && !strings.HasPrefix(is.Key, "interface[") && !strings.Contains(is.Key, "interfaces[") {
+				continue
+			}
+			text := strings.ToLower(is.Msg)
 			for _, f := range fragments {
 				if strings.Contains(text, f) {
 					t.Errorf("%s: message holds MAC fragment %q: %s", path, f, is)
@@ -136,14 +141,15 @@ func TestConfigInterfaces(t *testing.T) {
 		t.Errorf("demotion 0s: %v", r.Err())
 	}
 
-	// Other syntax messages keep their position but lose quoted fragments.
+	// Other syntax messages keep their position and the parser's text.
 	_, r = Parse([]byte("name = \"cuttle-test\"\n[proxy]\ndefault = direct\n"), "plain.toml")
-	if len(r.Errors) != 1 || r.Errors[0].Line != 3 || strings.Contains(r.Errors[0].Msg, "direct") ||
-		!strings.HasPrefix(r.Errors[0].Msg, "TOML syntax: ") {
+	if len(r.Errors) != 1 || r.Errors[0].Line != 3 || r.Errors[0].Key != "proxy.default" ||
+		!strings.HasPrefix(r.Errors[0].Msg, "TOML syntax: ") || r.Errors[0].Msg == interfaceSyntaxHint {
 		t.Errorf("plain syntax error: %v", issues(r.Errors))
 	}
 	// The parser itself quotes the start of an unquoted MAC; the samples
-	// above show that cuttle does not pass it on.
+	// above show that cuttle passes it on only outside the interface keys,
+	// as misspelled-table-unquoted-mac.toml does.
 	var raw map[string]any
 	_, err := toml.Decode("[[interfce]]\nmac = 00:00:5e:00:53:0f\n", &raw)
 	if err == nil || !strings.Contains(err.Error(), "00:00:5") {
@@ -151,32 +157,41 @@ func TestConfigInterfaces(t *testing.T) {
 	}
 }
 
-// TestRedactMACs checks the redaction of validation messages (TASK-0009
-// N-R1): every MAC-shaped token goes, with exact MAC widths, and IPv4
-// addresses, IPv6 addresses, and ordinary names stay.
-func TestRedactMACs(t *testing.T) {
-	for in, want := range map[string]string{
-		"interface[1].00:00:5e:00:53:21":                        "interface[1].<redacted>",
-		"00:00:5E:00:53:23":                                     "<redacted>",
-		"proxy.00-00-5e-00-53-24":                               "proxy.<redacted>",
-		"rule[1].0000.5e00.5325":                                "rule[1].<redacted>",
-		"00005e005326":                                          "<redacted>",
-		`"00:00:5e:00:53:28" is not host:port`:                  `"<redacted>" is not host:port`,
-		`"00:00:5e:00:53:28:3128"`:                              `"<redacted>:3128"`,
-		"a 00:00:5e:00:53:01 b 00:00:5e:00:53:02":               "a <redacted> b <redacted>",
-		"mac-00-00-5e-00-53-2a":                                 "mac-<redacted>",
-		`"10.20.0.5" is an address, not a CIDR`:                 `"10.20.0.5" is an address, not a CIDR`,
-		"192.168.100.200:3128 and 203.0.113.20":                 "192.168.100.200:3128 and 203.0.113.20",
-		"2001:db8::1 fe80::aa:bb:cc 2001:db8:aa:bb:cc:dd:ee:ff": "2001:db8::1 fe80::aa:bb:cc 2001:db8:aa:bb:cc:dd:ee:ff",
-		`"cuttle-a1b2c3" does not match`:                        `"cuttle-a1b2c3" does not match`,
-		"updates.example rule[2].hosts[1]":                      "updates.example rule[2].hosts[1]",
-		"50ms is out of range 100ms-10m0s":                      "50ms is out of range 100ms-10m0s",
-		"00:00:5e:00:53 aa:bb:cc:dd:ee:ff:00":                   "00:00:5e:00:53 <redacted>:00",
-		"x00:00:5e:00:53:21 00:00:5e:00:53:21x":                 "x00:00:5e:00:53:21 00:00:5e:00:53:21x",
-		"deadbeef00005e005326 0000.5e00.53210":                  "deadbeef00005e005326 0000.5e00.53210",
+// TestConfigEchoesOperatorText checks OI-0006 O-R1: since the operator who
+// writes the configuration is trusted, messages about keys other than the
+// interface keys show names, instance names, IPv6 addresses, and even
+// MAC-shaped values as written, where the earlier blanket redaction hid
+// them (design 0008 D6).
+func TestConfigEchoesOperatorText(t *testing.T) {
+	head := "name = \"cuttle-test\"\n[proxy]\ndefault = \"direct\"\n"
+	for _, c := range []struct{ text, key, want string }{
+		{"name = \"Cuttle-0123456789ab\"\n[proxy]\ndefault = \"direct\"\n", "name", `"Cuttle-0123456789ab"`},
+		{head + "[[upstream]]\nname = \"u\"\naddress = \"00:11:22:33:44:55::1\"\ndisclosure = \"none\"\n",
+			"upstream[1].address", `"00:11:22:33:44:55::1"`},
+		{head + "[[upstream]]\nname = \"u\"\naddress = \"00:00:5e:00:53:28\"\ndisclosure = \"none\"\n",
+			"upstream[1].address", `"00:00:5e:00:53:28"`},
+		{head + "[[rule]]\nname = \"x\"\nhosts = [\"00-00-5e-00-53-2a.example\", \"0000.5E00.5326\"]\naction = \"direct\"\n",
+			"rule[1].hosts[2]", `"0000.5E00.5326"`},
+		{head + "[[rule]]\nname = \"0123456789ab\"\nhosts = [\"a.example\"]\naction = \"upstream:00005e005326\"\n",
+			"rule[1].action", "00005e005326"},
+		{head + "\"00:00:5e:00:53:23\" = 1\n", "proxy.00:00:5e:00:53:23", "unknown key"},
+		{head + "[notes]\nadapter = 00-00-5e-00-53-10\n", "notes.adapter", "TOML syntax: "},
 	} {
-		if got := redactMACs(in); got != want {
-			t.Errorf("redactMACs(%q) = %q, want %q", in, got, want)
+		_, r := Parse([]byte(c.text), "echo.toml")
+		found := false
+		for _, is := range r.Errors {
+			if is.Key == c.key && strings.Contains(is.Msg, c.want) {
+				found = true
+			}
 		}
+		if !found {
+			t.Errorf("%q: want %s with %q; got:\n%s", c.text, c.key, c.want, issues(r.Errors))
+		}
+	}
+	// A repeated pattern keeps the rule names and the pattern as written.
+	_, r := Parse([]byte(head+"[[rule]]\nname = \"0123456789ab\"\ndomains = [\"00-00-5e-00-53-29.example\"]\naction = \"direct\"\n"+
+		"[[rule]]\nname = \"b\"\ndomains = [\"00-00-5e-00-53-29.example\"]\naction = \"block\"\n"), "echo.toml")
+	if len(r.Warnings) != 1 || !strings.Contains(r.Warnings[0].Msg, `"00-00-5e-00-53-29.example" repeats rule "0123456789ab"`) {
+		t.Errorf("repeat warning: %s", issues(r.Warnings))
 	}
 }

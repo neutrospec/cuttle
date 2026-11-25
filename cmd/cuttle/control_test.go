@@ -134,7 +134,7 @@ func TestControlSocket(t *testing.T) {
 	}
 
 	r := sb.Run(10*time.Second, "status")
-	for _, want := range []string{"cuttle-test", addr, "bound", "tunnels (0)", "rotation failures 0"} {
+	for _, want := range []string{"cuttle-test", addr, "bound", "tunnels (0)", "rotation failures 0", "\nadmin       disabled\n"} {
 		if r.Code != 0 || !strings.Contains(r.Stdout, want) {
 			t.Errorf("status: exit %d, lacks %q:\n%s%s", r.Code, want, r.Stdout, r.Stderr)
 		}
@@ -143,7 +143,8 @@ func TestControlSocket(t *testing.T) {
 	st := statusJSON(t, sb)
 	if st.Name != "cuttle-test" || st.Version != "0.0.0-test" || st.PID <= 0 || st.Config.Path != sb.ConfigPath() ||
 		st.Config.SHA256 != config.Digest(data) || st.Stats != "enabled" || st.RlimitNofile == 0 ||
-		len(st.Listeners) != 1 || st.Listeners[0].Address != addr || st.Listeners[0].State != "bound" {
+		len(st.Listeners) != 1 || st.Listeners[0].Address != addr || st.Listeners[0].State != "bound" ||
+		st.Admin.State != control.AdminDisabled || st.Admin.Address != "" {
 		t.Errorf("status %+v", st)
 	}
 	if r := sb.Run(10*time.Second, "reload"); r.Code != 0 || !strings.Contains(r.Stdout, "reloaded") {

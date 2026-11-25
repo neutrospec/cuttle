@@ -1,4 +1,4 @@
-# want: 2 <redacted>: unknown key
+# want: 2 : unknown key
 "00:00:5e:00:53:23" = "eth-a"
 name = "cuttle-test"
 [proxy]

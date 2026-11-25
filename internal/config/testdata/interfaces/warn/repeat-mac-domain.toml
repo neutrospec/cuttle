@@ -1,4 +1,4 @@
-# warn: 13 rule[2].domains[2]: "<redacted>.example" repeats rule "a"
+# warn: 13 rule[2].domains[2]: "00-00-5e-00-53-29.example" repeats rule "a"
 name = "cuttle-test"
 [proxy]
 default = "direct"

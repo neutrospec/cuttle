@@ -228,7 +228,24 @@ CUTTLE_REQUIRE_CURL=1 go test -race -count=1 -timeout 10m ./...
   the user's interfaces. This is the milestone acceptance that AGENTS.md
   requires.
 - T2 at M2 close: the headless Chrome admin check
-  ([0005](0005-statistics-and-admin.md#acceptance-criteria) A10).
+  ([0005](0005-statistics-and-admin.md#acceptance-criteria) A10),
+  `scripts/admin-check`. It runs `TestAdminChrome` of `cmd/cuttle`, which
+  T0 and T1 skip unless `CUTTLE_ADMIN_CHROME=1` is set. The test builds
+  cuttle and serves it in the D4 sandbox with an admin listener on a
+  chosen port, sets the password with `cuttle admin passwd --stdin`, and
+  starts Chrome with `--headless=new --use-mock-keychain
+  --user-data-dir=<new directory in the sandbox> --no-first-run
+  --remote-debugging-pipe`, `HOME` and `TMPDIR` inside the sandbox, the
+  instance's own proxy listener as `--proxy-server`, whose `block` default
+  answers background requests before any lookup, and
+  `--host-resolver-rules="MAP * ~NOTFOUND, EXCLUDE 127.0.0.1"`. Over the
+  DevTools pipe, which opens no port, it signs in at
+  `http://127.0.0.1:<port>/`, checks the overview, the `cuttle_session`
+  attributes in Chrome, the domain, live, and settings pages, and the
+  overview at 390 px without sideways scrolling, then closes Chrome and
+  fails if a process with the profile remains or a request left through
+  the proxy. `CUTTLE_CHROME` overrides the Chrome binary, and
+  `CUTTLE_ADMIN_CHROME_OUT` names a directory for screenshots.
 - T2 at M3 close and every later milestone: the D8 M3 matrix, the Homebrew
   checks ([0006](0006-packaging-paths-and-lifecycle.md#acceptance-criteria)
   P8–P12), and the deployment check.

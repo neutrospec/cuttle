@@ -1,4 +1,4 @@
-# want: 9 rule[1].<redacted>: unknown key
+# want: 9 rule[1].0000.5e00.5325: unknown key
 name = "cuttle-test"
 [proxy]
 default = "direct"

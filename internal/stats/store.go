@@ -62,11 +62,16 @@ WHERE (bucket, host, action, upstream, rule, source, interface) IN (
   FROM host_hour WHERE bucket < ? LIMIT %d)`, pruneBatch)
 
 // Store is the SQLite statistics database (design 0005 D2). It holds a
-// single connection, the writer.
+// single writer connection and a pool of read-only connections for the
+// dashboard queries, which WAL lets run while the writer writes.
 type Store struct {
-	db   *sql.DB
-	path string
+	db     *sql.DB
+	reader *sql.DB
+	path   string
 }
+
+// readerConns bounds the read-only connections.
+const readerConns = 2
 
 // OpenStore opens or creates the database at path with mode 0600, sets the
 // per-connection PRAGMAs, and creates or checks the schema. A database with
@@ -78,25 +83,43 @@ func OpenStore(ctx context.Context, path string) (*Store, error) {
 	if err := prepareFile(path); err != nil {
 		return nil, err
 	}
-	q := url.Values{}
-	q.Add("_pragma", "busy_timeout(5000)")
-	q.Add("_pragma", "synchronous(NORMAL)")
-	q.Set("_txlock", "immediate")
-	dsn := (&url.URL{Scheme: "file", Path: path, RawQuery: q.Encode()}).String()
-	db, err := sql.Open("sqlite", dsn)
+	db, err := openDB(path, 1, "_txlock", "immediate")
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-	db.SetConnMaxLifetime(0)
-	db.SetConnMaxIdleTime(0)
 	s := &Store{db: db, path: path}
 	if err := s.migrate(ctx); err != nil {
 		db.Close()
 		return nil, err
 	}
+	// The reader opens after the migration, so it never creates the file
+	// or the schema.
+	s.reader, err = openDB(path, readerConns, "_pragma", "query_only(1)")
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
 	return s, nil
+}
+
+// openDB opens a pool of at most conns connections to the database with
+// the per-connection PRAGMAs of design 0005 D2 and one more query
+// parameter.
+func openDB(path string, conns int, key, value string) (*sql.DB, error) {
+	q := url.Values{}
+	q.Add("_pragma", "busy_timeout(5000)")
+	q.Add("_pragma", "synchronous(NORMAL)")
+	q.Add(key, value)
+	dsn := (&url.URL{Scheme: "file", Path: path, RawQuery: q.Encode()}).String()
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(conns)
+	db.SetMaxIdleConns(conns)
+	db.SetConnMaxLifetime(0)
+	db.SetConnMaxIdleTime(0)
+	return db, nil
 }
 
 // prepareFile creates the database file with mode 0600 before SQLite opens
@@ -243,4 +266,10 @@ FROM host_hour ORDER BY bucket, host, action, upstream, rule, source, interface`
 }
 
 // Close closes the database.
-func (s *Store) Close() error { return s.db.Close() }
+func (s *Store) Close() error {
+	rerr := s.reader.Close()
+	if err := s.db.Close(); err != nil {
+		return err
+	}
+	return rerr
+}

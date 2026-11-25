@@ -44,12 +44,14 @@ func (c *clock) Add(d time.Duration) {
 	c.t = c.t.Add(d)
 }
 
-// fixture is a Server with a password file in a temporary directory.
+// fixture is a Server with a password file in a temporary directory and a
+// fake backend.
 type fixture struct {
 	t      *testing.T
 	s      *Server
 	clock  *clock
 	pwPath string
+	be     *fakeBackend
 }
 
 func newFixture(t *testing.T, withPassword bool) *fixture {
@@ -59,10 +61,12 @@ func newFixture(t *testing.T, withPassword bool) *fixture {
 		clock:  &clock{t: time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC)},
 		pwPath: filepath.Join(t.TempDir(), "share", "cuttle", "admin-password"),
 	}
+	f.be = newFakeBackend(t)
 	if withPassword {
 		f.setPassword(testPassword)
 	}
-	f.s = New(Options{Listen: netip.MustParseAddrPort(testListen), PasswordPath: f.pwPath, Now: f.clock.Now})
+	f.s = New(Options{Listen: netip.MustParseAddrPort(testListen), PasswordPath: f.pwPath, Backend: f.be,
+		Now: f.clock.Now, Location: time.UTC})
 	return f
 }
 
@@ -713,8 +717,8 @@ func TestAdminCSRF(t *testing.T) {
 }
 
 // TestAdminSessionEnd checks A6: a session ends after 30 idle minutes,
-// after 12 hours in all, when the password file changes, and after logout,
-// whose cookie value then no longer works.
+// /live reloads included, after 12 hours in all, when the password file
+// changes, and after logout, whose cookie value then no longer works.
 func TestAdminSessionEnd(t *testing.T) {
 	f := newFixture(t, true)
 
@@ -733,6 +737,26 @@ func TestAdminSessionEnd(t *testing.T) {
 		}
 		if b.signedIn() {
 			t.Fatal("an ended session came back")
+		}
+	})
+
+	// The live page reloads itself every 5 s; those reloads are not
+	// activity, so a forgotten tab does not keep the session alive.
+	t.Run("live refresh", func(t *testing.T) {
+		b := f.browser()
+		b.login()
+		for elapsed := time.Duration(0); elapsed < IdleTimeout-5*time.Second; elapsed += 5 * time.Second {
+			f.clock.Add(5 * time.Second)
+			if res := b.get("/live"); res.StatusCode != http.StatusOK {
+				t.Fatalf("/live after %v: %d", elapsed, res.StatusCode)
+			}
+		}
+		f.clock.Add(5 * time.Second)
+		if res := b.get("/live"); res.StatusCode != http.StatusSeeOther || res.Header.Get("Location") != "/login" {
+			t.Fatalf("/live after 30 minutes of refreshes: %d %q", res.StatusCode, res.Header.Get("Location"))
+		}
+		if b.signedIn() {
+			t.Fatal("alive after 30 minutes of /live refreshes")
 		}
 	})
 
@@ -844,7 +868,7 @@ func TestAdminHeaders(t *testing.T) {
 		}, 403},
 		{"oversized form", func() *http.Response {
 			return b.do(req{method: "POST", path: "/logout", form: url.Values{"x": {strings.Repeat("a", maxFormBytes)}}})
-		}, 400},
+		}, 413},
 		{"unknown path", func() *http.Response { return b.get("/nope") }, 404},
 		{"wrong method", func() *http.Response { return b.do(req{method: "PUT", path: "/login"}) }, 405},
 		{"styles", func() *http.Response { return b.get("/static/admin.css") }, 200},

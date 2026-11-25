@@ -189,7 +189,8 @@ Errors:
   error whose `LastKey` is `interface`, starts with `interface.`, or ends
   with `interfaces` is reported with its position and the fixed text
   `TOML syntax: invalid value; put it in double quotes` instead of the
-  parser's message, which would quote part of an unquoted MAC.
+  parser's message, which would quote part of an unquoted MAC. Every
+  other message shows the operator's text as written ([0008 D6][d8-6]).
 
 Upstream addresses need not be distinct; only upstream names must be
 unique. Two `[[upstream]]` entries with one address and different

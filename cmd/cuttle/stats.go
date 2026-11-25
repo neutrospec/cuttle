@@ -36,6 +36,7 @@ func (s *serveState) openStats(cfg *config.Config, live *stats.Live) {
 		MaxHostsPerHour: cfg.Stats.MaxHostsPerHour,
 		Live:            live,
 		Logger:          s.log,
+		Interval:        s.statsInterval,
 	})
 	if err != nil {
 		s.statsErr = err.Error()

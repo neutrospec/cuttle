@@ -11,11 +11,15 @@ import (
 	"net/netip"
 	"os"
 	"syscall"
+	"time"
 
 	"golang.org/x/term"
 
 	"squid/internal/admin"
+	"squid/internal/config"
+	"squid/internal/control"
 	"squid/internal/paths"
+	"squid/internal/stats"
 )
 
 const adminUsage = "usage: cuttle admin passwd [--stdin]"
@@ -110,22 +114,45 @@ func promptPassword(fd int, stderr io.Writer) ([]byte, error) {
 }
 
 // startAdmin binds the admin listener and serves the admin UI (design 0005
-// D5). A listener that cannot bind is logged, and cuttle runs without the
-// admin UI, since forwarding does not depend on it.
+// D5). A listener that cannot bind is logged and shown in cuttle status as
+// unavailable with the bind error, and cuttle runs without the admin UI,
+// since forwarding does not depend on it (OI-0006 P-R2).
 func (s *serveState) startAdmin(addr netip.AddrPort, listen func(network, address string) (net.Listener, error)) *http.Server {
 	l, err := listen("tcp", addr.String())
 	if err != nil {
 		s.log.Error("admin listener unavailable; running without the admin UI", "address", addr.String(), "error", err.Error())
+		s.setAdmin(control.Admin{Address: addr.String(), State: control.AdminUnavailable, Error: err.Error(), Since: time.Now()})
 		return nil
 	}
 	// The Host allowlist names the port browsers connect to.
 	if ta, ok := l.Addr().(*net.TCPAddr); ok {
 		addr = netip.AddrPortFrom(addr.Addr(), uint16(ta.Port))
 	}
-	srv := admin.New(admin.Options{Listen: addr, PasswordPath: s.paths.Password.Path, Logger: s.log}).Serve(l)
+	srv := admin.New(admin.Options{Listen: addr, PasswordPath: s.paths.Password.Path, Backend: s, Logger: s.log}).Serve(l)
+	s.setAdmin(control.Admin{Address: addr.String(), State: control.AdminListening, Since: time.Now()})
 	s.log.Info("admin UI listening", "address", addr.String())
 	if problem := admin.PasswordProblem(s.paths.Password.Path); problem != "" {
 		s.log.Warn("admin login disabled until cuttle admin passwd runs", "reason", problem, "password", s.paths.Password.Path)
 	}
 	return srv
 }
+
+func (s *serveState) setAdmin(a control.Admin) {
+	s.mu.Lock()
+	s.admin = a
+	s.mu.Unlock()
+}
+
+// Config, ConfigPath, and Stats make serveState the admin UI's backend,
+// with Status and Reload (design 0005 D9, D10).
+func (s *serveState) Config() *config.Config {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cfg
+}
+
+func (s *serveState) ConfigPath() string { return s.cfgPath }
+
+// Stats returns the statistics service, nil while unavailable. It is set
+// before the admin listener starts and never changes.
+func (s *serveState) Stats() *stats.Stats { return s.stats }

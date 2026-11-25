@@ -309,7 +309,9 @@ Move resolved items to Closed with their resolving commit or evidence.
     is called), the 0003 alternative "Forwarding request heads byte for
     byte", OI-0001 step 2, the 0007 D7 `check-disclosure` flags, the 0007
     D8 chain evidence, 0005 A10 "T2-lite", the COMPATIBILITY curl M3
-    WebSocket cell, and ragged wraps in 0003.
+    WebSocket cell, and ragged wraps in 0003. The 0005 A10 wording is
+    settled in TASK-0013, which names `scripts/admin-check` as the T2
+    check.
   - V9 (implementer): C4 sends the direct request before the block request,
     because cuttle's own responses close the connection. Settled in
     `8af7956` (TASK-0004): 0002 C4, `TestHTTPReusedConnRoutesPerRequest`.
@@ -416,9 +418,15 @@ Move resolved items to Closed with their resolving commit or evidence.
     instance names such as `cuttle-0123456789ab`, and IPv6 addresses
     written with six leading two-digit groups. The operator is trusted
     (AGENTS.md), so narrow or drop the redaction and record the rule in
-    0008 D6. Gate (infra): the cgo step's `go list` returns nothing when
-    `CGO_ENABLED=0` is set in the environment; run it as `CGO_ENABLED=1 go
-    list -deps -f '{{if .CgoFiles}}{{.ImportPath}}{{end}}' ./cmd/cuttle` in
+    0008 D6. O-R1 is settled in TASK-0013: the blanket redaction is
+    dropped; messages about `[[interface]]` keys and `interfaces` lists
+    still never repeat their value, and a syntax error under those keys
+    still gets the fixed hint, while every other message, parser messages
+    included, shows the operator's text as written (0008 D6, 0004 D4,
+    `TestConfigInterfaces`, `TestConfigEchoesOperatorText`). Gate (infra):
+    the cgo step's `go list` returns nothing when `CGO_ENABLED=0` is set in
+    the environment; run it as `CGO_ENABLED=1 go list -deps -f
+    '{{if .CgoFiles}}{{.ImportPath}}{{end}}' ./cmd/cuttle` in
     `scripts/gate` and 0007 D7. The gate item is settled in TASK-0010
     (M2.1): `scripts/gate` and 0007 D7 run the step with `CGO_ENABLED=1`.
     In a scratch copy with an `import "C"` file in `internal/paths`,
@@ -434,15 +442,23 @@ Move resolved items to Closed with their resolving commit or evidence.
     second `cuttle serve` runs retention before it finds the running
     instance; move statistics after the control-socket step or defer
     retention. Q-R5 (design, M2.3): show the last statistics write error in
-    status or on the dashboard. Q-R6 (implementer): a host whose key folds
+    status or on the dashboard. Q-R5 is settled in TASK-0013 (M2.3): 0005 D4
+    and 0006 D4 add `stats_last_write_error` and its time to status, and the
+    overview shows it (`TestStatsLastWriteError`, `TestAdminDashboard`,
+    `TestAdminPages`). Q-R6 (implementer): a host whose key folds
     at the 20,000-key cap still uses a `max_hosts_per_hour` slot. Q-R7
     (docs): state that `stats_folded_total` counts folded records. Q-R8
     (docs): rewrap the long line in 0006 D6.
   - P-R2–P-R7 (from the TASK-0011 review; M2.3 and docs): P-R2 (design):
     an admin port that cannot bind is only logged; show the admin listener
     state in `cuttle status` and record the port-squatting risk next to the
-    cookie-scope risk in 0005 D7. P-R3 (implementer): make the uid lookup
-    injectable so the password file's owner check has a test. P-R4
+    cookie-scope risk in 0005 D7. P-R2 is settled in TASK-0013 (M2.3):
+    `cuttle status` shows `admin` as `listening`, `unavailable` with the
+    bind error, or `disabled` (0006 D4, `TestAdminListenerBusy`,
+    `TestControlSocket`, `TestAdminPages`), and 0005 D7 records the
+    port-squatting risk beside the cookie-scope risk. P-R3 (implementer):
+    make the uid lookup injectable so the password file's owner check has
+    a test. P-R4
     (design): responses `net/http` writes before the handler (`400` for a
     missing, duplicate, or malformed Host, `431`, `OPTIONS *`) carry no D5
     headers; record them as the A7 exception. P-R5 (design): one global
@@ -453,9 +469,9 @@ Move resolved items to Closed with their resolving commit or evidence.
     on every page except the styles. P-R7 (docs): note `golang.org/x/sys`
     as a transitive dependency in 0002 D1.
 - Next action: orchestrator — include the open items (V4–V6, V8, V11,
-  V12, P1, W1–W3, Z2, Z4, G1–G2, O-R1, P-R2–P-R7, and Q-R1–Q-R8) in the
-  briefs of the stages they affect; the producer closes each item with the
-  commit that settles it.
+  V12, P1, W1–W3, Z2, Z4, G1–G2, P-R3–P-R7, Q-R1–Q-R4, and Q-R6–Q-R8) in
+  the briefs of the stages they affect; the producer closes each item with
+  the commit that settles it.
   The M1.4 items, R5 with the C13 remainder, the per-request source
   recheck of 0003 D10 with N5, the bind retry of V1, Z3, W-R1, and W-R2,
   are settled in TASK-0007.

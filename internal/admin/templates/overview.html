@@ -1,0 +1,69 @@
+{{define "content"}}{{with .Data}}
+<h1>Overview</h1>
+<p class="muted">{{.Status.Name}} · version {{.Status.Version}} · up {{.Uptime}}</p>
+{{template "stats" .Stats}}
+{{template "window" .Window}}
+
+<h2>Routes</h2>
+{{if .Routes}}<div class="table"><table>
+<thead><tr><th>Route</th><th class="n">Hosts</th><th class="n">Requests</th><th class="n">Failures</th><th class="n">Up</th><th class="n">Down</th><th class="barcol">Bytes</th></tr></thead>
+<tbody>
+{{range .Routes}}<tr><td class="route">{{template "routename" .}}</td><td class="n">{{num .Hosts}}</td><td class="n">{{num .Requests}}</td><td class="n">{{num .Failures}}</td><td class="n">{{bytes .BytesUp}}</td><td class="n">{{bytes .BytesDown}}</td><td class="barcol"><span class="bar"><i class="{{bar .Bytes $.Data.MaxRouteBytes}}"></i></span></td></tr>
+{{end}}</tbody>
+</table></div>
+{{else}}<p class="muted">No traffic in this window.</p>
+{{end}}
+{{range .Routes}}
+<section class="route-hosts">
+<h2>{{if eq .Action "direct"}}Sent direct{{else if eq .Action "block"}}Blocked{{else}}Sent to upstream {{.Upstream}}{{end}}</h2>
+<div class="table"><table>
+<thead><tr><th>Host</th><th class="n">Requests</th><th class="n">Failures</th><th class="n">Up</th><th class="n">Down</th><th class="barcol">{{if .ByRequests}}Requests{{else}}Bytes{{end}}</th></tr></thead>
+<tbody>
+{{$b := .}}{{range .Top}}<tr><td class="host">{{.Host}}</td><td class="n">{{num .Requests}}</td><td class="n">{{num .Failures}}</td><td class="n">{{bytes .BytesUp}}</td><td class="n">{{bytes .BytesDown}}</td><td class="barcol"><span class="bar"><i class="{{if $b.ByRequests}}{{bar .Requests $b.MaxTop}}{{else}}{{bar .Bytes $b.MaxTop}}{{end}}"></i></span></td></tr>
+{{end}}</tbody>
+</table></div>
+<p><a href="{{.AllHref}}">All {{num .Hosts}} hosts on {{template "routename" .}}</a></p>
+</section>
+{{end}}
+{{if .Interfaces}}
+<h2>Interfaces</h2>
+<div class="table"><table>
+<thead><tr><th>Interface</th><th class="n">Hosts</th><th class="n">Requests</th><th class="n">Up</th><th class="n">Down</th><th class="barcol">Bytes</th></tr></thead>
+<tbody>
+{{range .Interfaces}}<tr><td>{{if .Interface}}{{.Interface}}{{else}}<span class="muted">none</span>{{end}}</td><td class="n">{{num .Hosts}}</td><td class="n">{{num .Requests}}</td><td class="n">{{bytes .BytesUp}}</td><td class="n">{{bytes .BytesDown}}</td><td class="barcol"><span class="bar"><i class="{{bar .Bytes $.Data.MaxIfBytes}}"></i></span></td></tr>
+{{end}}</tbody>
+</table></div>
+{{end}}
+<h2>Live</h2>
+<div class="table"><table class="kv">
+{{range .Counters}}<tr><th>{{.Name}}</th><td class="n">{{num .Value}}</td></tr>
+{{end}}</table></div>
+<p><a href="/live">Active tunnels</a></p>
+
+{{if .Status.Upstreams}}<h2>Upstreams</h2>
+<div class="table"><table>
+<thead><tr><th>Name</th><th>Address</th><th>State</th><th>Since</th><th class="n">Failed fast</th><th>Last error</th></tr></thead>
+<tbody>
+{{range .Status.Upstreams}}<tr><td>{{.Name}}</td><td>{{.Address}}</td><td><span class="state state-{{.State}}">{{.State}}</span></td><td>{{time .Since}}</td><td class="n">{{num .FailedFast}}</td><td>{{dash .LastError}}</td></tr>
+{{end}}</tbody>
+</table></div>
+{{end}}
+{{if .Status.Interfaces}}<h2>Interface states</h2>
+<div class="table"><table>
+<thead><tr><th>Name</th><th>Device</th><th>State</th><th>Families</th><th>Since</th><th>Demoted until</th></tr></thead>
+<tbody>
+{{range .Status.Interfaces}}<tr><td>{{.Name}}</td><td>{{dash .Device}}</td><td><span class="state state-{{.State}}">{{.State}}</span>{{if .Reason}} ({{.Reason}}){{end}}</td><td>{{dash (join .Families ", ")}}</td><td>{{time .Since}}</td><td>{{dash .DemotedUntil}}</td></tr>
+{{end}}</tbody>
+</table></div>
+{{end}}
+<h2>Status</h2>
+<div class="table"><table class="kv">
+<tr><th>Configuration</th><td>{{.Status.Config.Path}}<br><span class="muted">loaded {{time .Status.Config.LoadedAt}} · sha256 {{.Status.Config.SHA256}}</span></td></tr>
+{{if .Status.Config.RestartRequired}}<tr><th>Restart required</th><td>{{join .Status.Config.RestartRequired ", "}}</td></tr>
+{{end}}{{if .Status.Config.LastReloadError}}<tr><th>Last reload error</th><td><pre>{{.Status.Config.LastReloadError}}</pre></td></tr>
+{{end}}<tr><th>Statistics</th><td>{{.Status.Stats}}{{if .Status.StatsErr}}: {{.Status.StatsErr}}{{end}}{{if .Stats.WriteError}}<br>last write error at {{time .Stats.WriteErrorAt}}: {{.Stats.WriteError}}{{end}}</td></tr>
+<tr><th>Admin listener</th><td>{{dash .Status.Admin.Address}} {{.Status.Admin.State}}</td></tr>
+<tr><th>Listeners</th><td>{{range .Status.Listeners}}{{.Address}} {{.State}}{{if .Error}}: {{.Error}}{{end}}<br>{{end}}</td></tr>
+<tr><th>Log</th><td>{{.Status.Log.Path}} · rotation failures {{.Status.Log.RotationFailures}}</td></tr>
+</table></div>
+{{end}}{{end}}

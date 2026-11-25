@@ -1,4 +1,4 @@
-# want: 2 <redacted>: unknown key
+# want: 2 00005e005326: unknown key
 "00005e005326" = true
 name = "cuttle-test"
 [proxy]
