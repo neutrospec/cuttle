@@ -41,30 +41,6 @@ A closed task becomes one line under Closed:
 
 ## Active
 
-### TASK-0002 — Generalize terminology for a public project
-
-- Milestone: none (prepares M1)
-- Status: review
-- Iteration: 2/3
-- Workers: docs done on branch `t3/generalize-proxy-docs` (T3 worktree);
-  fresh re-check pending
-- Base: `7159f37`
-- Candidate: `897eaf9` (tree `bb9dc18`); history `d561197`, `88c8110`,
-  `897eaf9`
-- Evidence: docs role acceptance checks 1-7 and docs checks passed on
-  `bb9dc18`
-- Findings: T1-T14 and P1 reported as addressed, pending re-check
-- Next action: reviewer — fresh re-check of `88c8110..897eaf9`
-
-Decisions for TASK-0002 from the user (2026-11-25):
-
-- Use general terms so the project can be published: egress proxy,
-  TLS-inspecting proxy, inspection root CA, strict upstream, edge instance,
-  gateway instance, restricted destinations, private link. The home and
-  office setup remains only as a labelled example deployment.
-- Rename the per-upstream setting `trace` to `disclosure`, keeping the
-  values `"via"` and `"none"`.
-
 ### TASK-0003 — Remove local information from the tree and history
 
 - Milestone: none (prepares publication)
@@ -86,6 +62,9 @@ Decisions for TASK-0003 from the user (2026-11-25):
 
 ## Closed
 
+- TASK-0002 — Generalize terminology for a public project — landed
+  `842c19e`, gates: none @ `04c249a`; reviewed tree `bb9dc18` (iteration 2
+  of 3); follow-ups W1–W3 in OI-0006
 - TASK-0001 — Revise goals and design for chaining, admin, packaging, and
   mocks — landed `ec577ec`, gates: none @ `13b7b99`; reviewed tree `1f62d55`
   (iteration 3 of 3); follow-ups in OI-0006
