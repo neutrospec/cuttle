@@ -41,46 +41,28 @@ A closed task becomes one line under Closed:
 
 ## Active
 
-### TASK-0008 — M1.5 interface selection: research and design
+### TASK-0009 — M1.5 interface selection implementation
 
-- Milestone: M1.5 (new)
-- Status: review
-- Iteration: 3/3
-- Workers: designer done on branch `t3/interface-selection-design`; fresh
-  final re-check pending
-- Base: merge `e0c4979` of `main` at `508f50e`
-- Candidate: `ee09211` (tree `4033ed7`) on top of `328778b`
-- Evidence: designer docs checks passed; orchestrator link check passed on
-  the candidate tree
-- Findings: J-R1-J-R14 reported fixed, pending the final re-check
-- Next action: reviewer — fresh final re-check of `328778b..ee09211`
+- Milestone: M1.5
+- Status: implement
+- Iteration: 1/3
+- Workers: implementer on a T3 worktree branch
+- Base: this board update
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: implementer — build M1.5 from design 0008 with the T0 and
+  T1 gates and return the candidate commit
 
-Decisions for TASK-0008 from the user (2026-11-25):
+Decisions for TASK-0009 (2026-11-25):
 
-- New requirement (translated): because network cost differs, cuttle
-  chooses among several network interfaces. Example: with NICs A, B, and C
-  in priority order, use B only when A is not online, then C. Some
-  destinations, such as large system updates, may be pinned to B even when
-  A is online. This applies to `direct` routes, not only to upstreams.
-- Placement: a new stage M1.5 after M1.4, before M1 close, so that the M2
-  statistics can show traffic per interface.
-- "Online" means the link is up with a usable address; a fast connect
-  failure moves to the next interface. No periodic probe traffic.
-- The user's interfaces are one Wi-Fi interface joined to one fixed
-  network, two Ethernet interfaces, and two USB-tethered phones. Interfaces
-  of the same kind must be distinguishable; no hotspot joins over Wi-Fi.
-- cuttle supports macOS only, so darwin-only mechanisms are acceptable; cgo
-  remains a cost to weigh against pure-Go options.
-- Iteration 2 (user): a 3 s connect timeout fails over to the next
-  interface; after a later interface connects, the failed one goes last
-  in every list for 30 s (global demotion, accepting its cost effect); a
-  primary interface with a live link but a dead uplink fails names at DNS,
-  which stays a documented limitation with per-interface DNS under Later;
-  per-destination interface needs on upstream routes use two `[[upstream]]`
-  entries with the same address.
-- Iteration 3 (user): public destinations are never sent through a VPN,
-  so the VPN bypass of bound `direct` dials is documented only; no rule
-  option for system routing.
+- Scope: design 0008 criteria I1–I19. I20, the device check, runs with the
+  user after the candidate lands (OI-0008).
+- Also in scope: K-R2 (redact MAC-shaped fragments from TOML syntax
+  messages, beyond `LastKey`) and K-R4 (call `Watch` before the first
+  `Read`; stop reading a socket after a persistent error and rely on the
+  30 s re-read) from the TASK-0008 final re-check, and OI-0006 M-R1, M-R3,
+  and M-R4 where the touched code allows.
 
 ## Closed
 
@@ -90,6 +72,10 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0008 — M1.5 interface selection: research and design — landed
+  `fcaebe2`, gates: none @ `9216e50`; reviewed tree `4033ed7` (iteration 3
+  of 3); landing fixes in `c436cfa`; follow-ups K-R2 and K-R4 in the M1.5
+  brief, K-R5 in OI-0008
 - TASK-0007 — M1.4 live operation — landed `106ecd7`, gates: T0 T1 @
   `be7aceb`; reviewed tree `b1febdc` (iteration 2 of 3); follow-ups
   M-R1–M-R4 in OI-0006
