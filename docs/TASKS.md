@@ -41,6 +41,30 @@ A closed task becomes one line under Closed:
 
 ## Active
 
+### TASK-0012 — M1 close: mockenv and the client check tooling
+
+- Milestone: M1 close
+- Status: implement
+- Iteration: 1/3
+- Workers: implementer on a T3 worktree branch, alongside TASK-0010 and
+  TASK-0011
+- Base: this board update
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: implementer — build `tools/mockenv` and `check-disclosure`
+  (0007 E1–E7, D8) with T0 and T1, and return the candidate commit
+
+Decisions for TASK-0012 (2026-11-25):
+
+- Milestone-close checks run alongside M2 (AGENTS.md). This task builds
+  the tooling; a tester then runs the M1 client check with headless Chrome
+  and `/usr/bin/curl`, which the user approved, and the device check I20
+  runs with the user separately (OI-0008).
+- Also in scope: OI-0006 V4 (isolate headless Chrome's background requests
+  in mockenv sessions) and V6 (the Local Network Access observation in the
+  M1 client check).
+
 ### TASK-0010 — M2.1 statistics
 
 - Milestone: M2.1
