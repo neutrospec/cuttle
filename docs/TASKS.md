@@ -75,17 +75,18 @@ Decisions for TASK-0008 from the user (2026-11-25):
 ### TASK-0007 — M1.4 live operation
 
 - Milestone: M1.4
-- Status: review
-- Iteration: 1/3
-- Workers: implementer done on branch `t3/m1-live-operation`; fresh
-  reviewer pending
+- Status: implement
+- Iteration: 2/3
+- Workers: implementer on branch `t3/m1-live-operation`; iteration 1
+  reviewer done
 - Base: `05e6109`
-- Candidate: `dd84277` (tree `816b96f`)
-- Evidence: implementer ran `scripts/gate t0` and `t1` on `816b96f`, both
-  pass; 29 single-point mutations each fail their targeted test
-- Findings: none yet; implementer lists 8 design questions
-- Next action: reviewer — independent review of `05e6109..dd84277` with a
-  gate rerun
+- Candidate: `dd84277` (tree `816b96f`), approved with minor fixes
+- Evidence: reviewer reran T0, T1, and `-race -count=5` (pass); byte
+  counting held in every probed edge case
+- Findings: open L-R1 (shutdown can log `stopped` and close the log before
+  every `shutdown` line, medium), L-R2-L-R6 (low), L-R7 (nit)
+- Next action: implementer — fix L-R1-L-R7, rerun T0 and T1, then a fresh
+  re-check
 
 Decisions for TASK-0007 (2026-11-25):
 
@@ -96,6 +97,11 @@ Decisions for TASK-0007 (2026-11-25):
   state in `cuttle status`, and keeping unchanged upstreams and their hold
   across a reload. G1 and G2 go with any change to `warn.go`; W-R1 and
   W-R2 may go with this task's docs and tests.
+- Iteration 2 (orchestrator): when the control socket path under
+  `XDG_RUNTIME_DIR` exceeds the 104-byte limit, cuttle falls back to the
+  `TMPDIR` location with a source note; if that is also too long, `serve`
+  logs one clear error and runs without the socket, and `cuttle paths` and
+  `cuttle status` report the cause.
 
 ## Closed
 
