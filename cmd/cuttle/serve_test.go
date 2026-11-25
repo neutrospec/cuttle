@@ -20,11 +20,12 @@ import (
 
 // TestServeRemoteListener checks that cuttle serve accepts a non-loopback
 // listener, which M1.1 refused, and serves remote clients on it under the
-// remote policy, and that it still refuses upstream routes. The bind
-// function puts each configured address on a loopback port that the test
-// chose, and the listener for 10.8.0.6 reports its clients as 10.8.0.1, so
-// no real interface is bound (design 0007 D4). Every request is blocked by
-// policy, so no name is resolved.
+// remote policy, and that it serves upstream routes, which it refused
+// before M1.3. The bind function puts each configured address on a
+// loopback port that the test chose, and the listener for 10.8.0.6 reports
+// its clients as 10.8.0.1, so no real interface is bound (design 0007 D4).
+// Requests are blocked by policy or go to a recording upstream at a
+// loopback literal, so no name is resolved (design 0007 D4).
 func TestServeRemoteListener(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test; skipped with -short")
@@ -76,28 +77,37 @@ action = "block"
 		}
 		return ln, nil
 	}
-	signals := make(chan os.Signal, 1)
 	var stderr bytes.Buffer
-	done := make(chan int, 1)
-	go func() { done <- s.run(&stderr, listen, signals) }()
-	deadline := time.Now().Add(10 * time.Second)
-	for {
+	// start runs serve until the test sends SIGTERM on the returned channel.
+	start := func(s *serveState) (chan<- os.Signal, <-chan int) {
+		t.Helper()
 		mu.Lock()
-		n := len(bound)
+		clear(bound)
 		mu.Unlock()
-		if n == 2 {
-			break
+		stderr.Reset()
+		signals := make(chan os.Signal, 1)
+		done := make(chan int, 1)
+		go func() { done <- s.run(&stderr, listen, signals) }()
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			mu.Lock()
+			n := len(bound)
+			mu.Unlock()
+			if n == 2 {
+				return signals, done
+			}
+			select {
+			case code := <-done:
+				t.Fatalf("serve exited with %d: %s", code, stderr.String())
+			default:
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("listeners not bound")
+			}
+			time.Sleep(5 * time.Millisecond)
 		}
-		select {
-		case code := <-done:
-			t.Fatalf("serve exited with %d: %s", code, stderr.String())
-		default:
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("listeners not bound")
-		}
-		time.Sleep(5 * time.Millisecond)
 	}
+	signals, done := start(s)
 
 	connect := func(addr, target string) (int, string) {
 		t.Helper()
@@ -133,7 +143,6 @@ action = "block"
 	if code := <-done; code != exitOK {
 		t.Errorf("exit status %d after SIGTERM: %s", code, stderr.String())
 	}
-	close(signals)
 
 	log, _ := os.ReadFile(s.paths.Log.Path)
 	for _, want := range []string{
@@ -153,28 +162,41 @@ action = "block"
 		t.Errorf("remote client address not logged three times:\n%s", log)
 	}
 
-	// Upstream routes for remote clients stay unsupported until M1.3, and
-	// serve refuses them before binding.
+	// Upstream routes are served from M1.3. The remote default goes to a
+	// recording upstream at a loopback literal with disclosure = "none";
+	// the upstream refuses names outside cuttle.test with 403.
+	rec := testenv.NewRecordingUpstream(t, testenv.UpstreamOptions{})
 	write(head + `[proxy.remote]
 sources = ["10.8.0.1/32"]
 default = "upstream:gw"
 [[upstream]]
 name = "gw"
-address = "10.8.0.6:3128"
-disclosure = "via"
+address = "` + rec.Addr.String() + `"
+disclosure = "none"
 `)
 	s2, err := prepareServe(lookup, "", io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s2.close()
-	stderr.Reset()
-	binds := 0
-	code := s2.run(&stderr, func(string, string) (net.Listener, error) {
-		binds++
-		return nil, os.ErrPermission
-	}, make(chan os.Signal))
-	if code != exitFailure || binds != 0 || !strings.Contains(stderr.String(), "proxy.remote.default: upstream:gw: upstream routes are not supported in this version") {
-		t.Errorf("upstream remote default: exit %d, binds %d, stderr %q", code, binds, stderr.String())
+	signals, done = start(s2)
+	mu.Lock()
+	remote = bound["10.8.0.6:18080"]
+	mu.Unlock()
+	code, ps := connect(remote, "wiki.internal.example:443")
+	if want := `cuttle-gateway; received-status=403; next-hop="gw"`; code != 502 || ps != want {
+		t.Errorf("upstream route: %d %q, want 502 %q", code, ps, want)
+	}
+	reqs := rec.Requests()
+	if len(reqs) != 1 || reqs[0].Method != "CONNECT" || reqs[0].Target != "wiki.internal.example:443" || len(reqs[0].Values("Via")) != 0 {
+		t.Errorf("upstream received %+v", reqs)
+	}
+	signals <- syscall.SIGTERM
+	if code := <-done; code != exitOK {
+		t.Errorf("exit status %d after SIGTERM: %s", code, stderr.String())
+	}
+	log, _ = os.ReadFile(s2.paths.Log.Path)
+	if want := "source=remote kind=connect target=wiki.internal.example:443 rule=remote-default action=upstream upstream=gw outcome=upstream_status status=502"; !strings.Contains(string(log), want) {
+		t.Errorf("log lacks %q:\n%s", want, log)
 	}
 }

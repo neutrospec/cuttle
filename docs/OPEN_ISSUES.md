@@ -207,17 +207,28 @@ Move resolved items to Closed with their resolving commit or evidence.
     on the CONNECT head and the plain-HTTP copy-back (U1, U5). Add an
     `HTTP_PROXY` environment check to C3 or drop the 0002 D5 claim that
     every row has a check. The `HTTP_PROXY` half is settled in `8af7956`
-    (TASK-0004): C3 and `TestHTTPDirect` check it. The `via` half remains
-    for M1.3.
+    (TASK-0004): C3 and `TestHTTPDirect` check it. The `via` half is
+    settled in TASK-0006 (M1.3): `TestUpstreamConnectVia` checks the
+    client's `Forwarded` and `X-Forwarded-*` fields in the `CONNECT` head,
+    and `TestUpstreamHTTP` checks them after the plain-HTTP copy-back.
   - V3 (design, implementer): check the unreachable hold in the handler
     before `ReverseProxy`, as for CONNECT, and close idle pooled connections
-    when an upstream goes down (0003 D4, D8, U11).
+    when an upstream goes down (0003 D4, D8, U11). Settled in TASK-0006
+    (M1.3): 0003 D4 now states both, and the plain-HTTP subtest of
+    `TestUpstreamUnreachableHold` uses its own upstream, so it passes alone
+    and in any order. It checks that a held request never reaches a
+    pooled connection and that the probe after an outage dials instead of
+    reusing one.
   - V4 (implementer, before M1 close): isolate headless Chrome's background
     requests in the M1 client check. mockenv configs use
     `default = "block"` with rules only for `cuttle.test` and loopback,
     recording upstreams answer 403 outside `cuttle.test`,
     `check-disclosure` compares only the case targets and fails on an
     unmatched one, and the Block evidence names `blocked.cuttle.test`.
+    The recording upstream's part is settled in TASK-0006 (M1.3): a name
+    without a chosen mode gets 403 outside `cuttle.test` (0007 D2,
+    `TestRecordingUpstream`). The `tools/mockenv` configurations,
+    `check-disclosure`, and the Block evidence remain for M1 close.
   - V5 (design): Go rejects the bracketless IPv6 CONNECT before any handler,
     so the M3 IPv6 row points the client at the recording mock directly, as
     research 0002 did. Tracked with OI-0002.

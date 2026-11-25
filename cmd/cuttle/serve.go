@@ -146,10 +146,6 @@ func (s *serveState) run(stderr io.Writer, listen func(network, address string) 
 		fmt.Fprintf(stderr, "cuttle: %s: %v\n", msg, err)
 		return exitFailure
 	}
-	if err := proxy.CheckSupported(s.cfg); err != nil {
-		return fail("configuration not supported", err)
-	}
-
 	var listeners []net.Listener
 	closeAll := func() {
 		for _, l := range listeners {

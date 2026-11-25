@@ -18,6 +18,7 @@ type Net struct {
 	names     map[string]nameEntry
 	routes    map[netip.AddrPort]netip.AddrPort
 	blackhole map[netip.Addr]bool
+	holePorts map[netip.AddrPort]bool
 	events    []Event
 }
 
@@ -48,6 +49,7 @@ func NewNet() *Net {
 		names:     map[string]nameEntry{},
 		routes:    map[netip.AddrPort]netip.AddrPort{},
 		blackhole: map[netip.Addr]bool{},
+		holePorts: map[netip.AddrPort]bool{},
 	}
 }
 
@@ -89,11 +91,28 @@ func (n *Net) Route(test string, real netip.AddrPort) {
 	n.routes[netip.MustParseAddrPort(test)] = real
 }
 
-// Blackhole makes dials to addr block until the context ends.
+// Blackhole makes dials to addr block until the context ends. addr is an
+// address, which covers every port, or an address and port.
 func (n *Net) Blackhole(addr string) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	if ap, err := netip.ParseAddrPort(addr); err == nil {
+		n.holePorts[ap] = true
+		return
+	}
 	n.blackhole[netip.MustParseAddr(addr)] = true
+}
+
+// Unblackhole undoes Blackhole for the same addr, so dials follow their
+// routes again.
+func (n *Net) Unblackhole(addr string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if ap, err := netip.ParseAddrPort(addr); err == nil {
+		delete(n.holePorts, ap)
+		return
+	}
+	delete(n.blackhole, netip.MustParseAddr(addr))
 }
 
 // Events returns the recorded lookups and dials in order.
@@ -160,7 +179,7 @@ func (n *Net) LookupNetIP(ctx context.Context, host string) ([]netip.Addr, error
 func (n *Net) DialContext(ctx context.Context, addr netip.AddrPort) (net.Conn, error) {
 	n.mu.Lock()
 	real, ok := n.routes[addr]
-	hole := n.blackhole[addr.Addr()]
+	hole := n.blackhole[addr.Addr()] || n.holePorts[addr]
 	n.events = append(n.events, Event{Op: "dial", Addr: addr})
 	n.mu.Unlock()
 	opErr := func(err error) error {

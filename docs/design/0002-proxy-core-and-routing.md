@@ -237,7 +237,10 @@ settings.
 
 Standard `net/http` handling applies to everything else: header-name
 canonicalization and order, removal of hop-by-hop fields including
-`Proxy-Connection`, and the body framing that Go chooses. These do not
+`Proxy-Connection`, and the body framing that Go chooses. `ReverseProxy`
+copies a request's trailer keys before it reads the body, so the
+transport declares them in `Trailer` but sends no request trailer values
+(observed with Go 1.27.4 in `TestNoDisclosureChain`). These do not
 disclose an intermediary in the sense of [0003 D5][d3-5]. The defaults that
 would disclose one or change the client's content are switched off:
 
@@ -279,7 +282,9 @@ Every response cuttle generates has a reason phrase, `Proxy-Status`
 `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`,
 `Connection: close`, and a one-line body such as
 `cuttle: blocked by rule "ads" (ads.example.net:443)`. Only the normalized
-authority and the rule name are reflected. These responses go to the client
+authority, the rule name, and an upstream's configured name, as in
+`cuttle: upstream gateway answered 403 (wiki.internal.example:443)`, are
+reflected. These responses go to the client
 only. Browsers discard the body of a failed `CONNECT` and show a generic
 error ([research 0002 §6][r2-6]); the decision log and the admin UI explain
 it.
@@ -350,7 +355,7 @@ overview and live pages ([0005 D9][d5-9]).
 | `outcomes_total` | `outcome` (D6, plus `ok`, `client_closed`, `shutdown`) |
 | `bytes_total` | `action`, `direction` = `up`, `down` |
 | `upstream_outcomes_total` | `upstream`, `outcome` |
-| `upstream_state` | `upstream`; value `up`, `down`, or `probing` with its start time ([0003 D8][d3-8]) |
+| `upstream_state` | `upstream`, `state` = `up`, `down`, `probing`; a 0/1 gauge that is 1 for the upstream's current state and 0 for the others. The state's start time and the last error are reported with the status ([0003 D8][d3-8]) |
 | `stats_write_errors_total`, `stats_folded_total` | — (M2, [0005 D4][d5-4]) |
 
 `connections_total` and `connections_active` count only accepted
@@ -376,10 +381,15 @@ upstream=egress outcome=ok status=200 up=5321 down=88410 dur=12.402s
 ```
 
 The line is wrapped here for width; it is one line in the log. Errors add
-`error=<Proxy-Status type>` and `detail`. A request whose target is refused
-(D3) has empty `target`, `rule`, `action`, and `upstream` fields, so nothing
-of the target is logged. The log never contains paths, queries, header
-values, bodies, or TLS contents.
+`error=<Proxy-Status type>` and `detail`. A request whose status cuttle
+mapped from the next hop's answer, which is every decision with outcome
+`upstream_status`, adds `upstream_status=<code>` after `status`: a non-2xx
+`CONNECT` answer from an upstream, and a plain-HTTP `407` from an upstream
+or an origin. So an egress `403`, `407`, and `502`, all sent to the client
+as `502`, can be told apart in the log. A request whose target is refused
+(D3) has empty `target`, `rule`, `action`, and `upstream` fields, so
+nothing of the target is logged. The log never contains paths, queries,
+header values, bodies, or TLS contents.
 
 ## Non-goals
 

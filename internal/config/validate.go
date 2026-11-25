@@ -424,7 +424,7 @@ func (v *validator) config(raw map[string]any) *Config {
 			v.errf(sub(base, "address"), "required")
 		}
 		if d, ok := v.str(um, base, "disclosure"); ok {
-			if d == "via" || d == "none" {
+			if d == DisclosureVia || d == DisclosureNone {
 				u.Disclosure = d
 			} else {
 				v.errf(sub(base, "disclosure"), "%q is not \"via\" or \"none\"", d)

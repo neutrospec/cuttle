@@ -53,11 +53,17 @@ type Remote struct {
 	MaxConnectionsPerSource int
 }
 
+// Disclosure modes of an upstream (design 0003 D1).
+const (
+	DisclosureVia  = "via"
+	DisclosureNone = "none"
+)
+
 // Upstream is one [[upstream]] entry.
 type Upstream struct {
 	Name            string
 	Address         string // host:port
-	Disclosure      string // "via" or "none"
+	Disclosure      string // DisclosureVia or DisclosureNone
 	ConnectTimeout  time.Duration
 	ResponseTimeout time.Duration
 	UnreachableHold time.Duration

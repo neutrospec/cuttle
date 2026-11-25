@@ -25,6 +25,15 @@ func (p *Proxy) connectDirect(w http.ResponseWriter, r *http.Request, ex *exchan
 		p.dialFailure(w, ex, err)
 		return
 	}
+	p.establish(w, ex, server, nil)
+}
+
+// establish takes the client connection, writes the exact 200, and relays
+// bytes between the client and server, the connected next hop. Bytes the
+// client pipelined after its head go to the server first, and early bytes
+// that the server sent after its own answer go to the client first (design
+// 0003 D3).
+func (p *Proxy) establish(w http.ResponseWriter, ex *exchange, server net.Conn, early []byte) {
 	client, brw, err := http.NewResponseController(w).Hijack()
 	if err != nil {
 		server.Close()
@@ -53,7 +62,7 @@ func (p *Proxy) connectDirect(w http.ResponseWriter, r *http.Request, ex *exchan
 		return
 	}
 	p.live.Add(1, stats.TunnelsActive)
-	t.relay(pipelined, ex.snap.cfg.Proxy.IdleTimeout, func(dir string, n int) { p.addBytes(ex, dir, n) })
+	t.relay(pipelined, early, ex.snap.cfg.Proxy.IdleTimeout, func(dir string, n int) { p.addBytes(ex, dir, n) })
 	p.live.Add(-1, stats.TunnelsActive)
 	p.untrack(t)
 	ex.outcome = OutcomeOK
@@ -101,16 +110,26 @@ func (t *tunnel) shutdown() {
 	t.closeBoth()
 }
 
-// relay copies both directions with 32 KiB buffers. On EOF in one direction
-// it half-closes the other side's write half and keeps copying the other
-// direction. Both connections close when both directions finish, on any
-// error, or after idle with no bytes in either direction (0 disables the
-// idle limit). count is called as each write completes.
-func (t *tunnel) relay(pipelined []byte, idle time.Duration, count func(dir string, n int)) {
+// relay copies both directions with 32 KiB buffers, after writing the
+// client's pipelined bytes to the server and the server's early bytes to
+// the client. On EOF in one direction it half-closes the other side's write
+// half and keeps copying the other direction. Both connections close when
+// both directions finish, on any error, or after idle with no bytes in
+// either direction (0 disables the idle limit). count is called as each
+// write completes.
+func (t *tunnel) relay(pipelined, early []byte, idle time.Duration, count func(dir string, n int)) {
 	t.last.Store(time.Now().UnixNano())
 	if len(pipelined) > 0 {
 		n, err := t.server.Write(pipelined)
 		count("up", n)
+		if err != nil {
+			t.closeBoth()
+			return
+		}
+	}
+	if len(early) > 0 {
+		n, err := t.client.Write(early)
+		count("down", n)
 		if err != nil {
 			t.closeBoth()
 			return

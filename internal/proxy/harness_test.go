@@ -54,6 +54,13 @@ type envOptions struct {
 	// loopback listener wrapped by testenv.SourceListener, so the instance
 	// sees its clients at that address (design 0007 D4).
 	remote []string
+	// local, when set, is the address the local listener reports for its
+	// clients, such as a distinctive loopback address.
+	local string
+	// listener, when set, is the local listener, bound by the test.
+	listener net.Listener
+	// clock is the unreachable hold's clock; nil means time.Now.
+	clock func() time.Time
 }
 
 // env is one in-process cuttle instance with mock origins behind the test
@@ -84,14 +91,24 @@ func newEnvWith(t *testing.T, cfgText string, opt envOptions) *env {
 	ca := testenv.NewCA(t, "cuttle test origin root")
 	e := &env{
 		t:     t,
-		net:   testenv.NewNet(),
 		ca:    ca,
 		http:  testenv.NewOrigin(t, testenv.OriginOptions{Allow407: opt.allow407}),
 		https: testenv.NewOrigin(t, testenv.OriginOptions{TLS: ca}),
 		logs:  &logBuffer{},
 	}
-	n := e.net
-	for _, name := range []string{"origin.cuttle.test", "plain.cuttle.test", "ws.cuttle.test", "h"} {
+	e.net = e.originNet()
+	e.start(cfgText, opt)
+	return e
+}
+
+// originNames resolve to the mock origins in every test network of an env.
+var originNames = []string{"origin.cuttle.test", "plain.cuttle.test", "ws.cuttle.test", "h"}
+
+// originNet returns a new test network in which the origin names resolve
+// to the env's mock origins, for an instance or a mock proxy.
+func (e *env) originNet() *testenv.Net {
+	n := testenv.NewNet()
+	for _, name := range originNames {
 		n.Map(name, "203.0.113.10")
 	}
 	n.Map("localhost", "127.0.0.1", "::1")
@@ -101,14 +118,45 @@ func newEnvWith(t *testing.T, cfgText string, opt envOptions) *env {
 	n.Route("203.0.113.10:443", e.https.Addr)
 	n.Route("203.0.113.99:80", e.http.Addr)
 	n.Route("203.0.113.99:443", e.https.Addr)
+	return n
+}
 
+// peer starts another instance with its own test network, sharing the
+// env's CA and origins, such as the gateway of a chain (design 0007 D4).
+func (e *env) peer(cfgText string, opt envOptions) *env {
+	e.t.Helper()
+	f := &env{t: e.t, ca: e.ca, http: e.http, https: e.https, logs: &logBuffer{}}
+	f.net = f.originNet()
+	f.start(cfgText, opt)
+	return f
+}
+
+// listenerAddr returns the real address of the listener that reports
+// peer, for routing a test address to it.
+func (e *env) listenerAddr(peer string) netip.AddrPort {
+	e.t.Helper()
+	return netip.MustParseAddrPort(e.proxyAddr(peer))
+}
+
+// start runs the instance for cfgText on the env's test network.
+func (e *env) start(cfgText string, opt envOptions) {
+	t := e.t
+	t.Helper()
+	n := e.net
 	cfg, r := config.Parse([]byte(cfgText), "test.toml")
 	if cfg == nil {
 		t.Fatalf("config: %v", r.Err())
 	}
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
+	ln := opt.listener
+	if ln == nil {
+		var err error
+		if ln, err = net.Listen("tcp", "127.0.0.1:0"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	addr := ln.Addr().String()
+	if opt.local != "" {
+		ln = testenv.SourceListener(ln, netip.MustParseAddr(opt.local))
 	}
 	listeners := []net.Listener{ln}
 	e.remote = map[string]string{}
@@ -129,6 +177,7 @@ func newEnvWith(t *testing.T, cfgText string, opt envOptions) *env {
 		SelfAddrs: testenv.SelfAddrs,
 		Listeners: listeners,
 		Logger:    logx.NewLogger(w, slog.LevelDebug),
+		Clock:     opt.clock,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -139,8 +188,7 @@ func newEnvWith(t *testing.T, cfgText string, opt envOptions) *env {
 		p.Close()
 		<-done
 	})
-	e.p, e.addr = p, ln.Addr().String()
-	return e
+	e.p, e.addr = p, addr
 }
 
 // goClient returns a Go client that uses the proxy and trusts only the test
@@ -208,6 +256,11 @@ func (e *env) rawFrom(peer, req string) (*http.Response, []byte) {
 	}
 	br := bufio.NewReader(c)
 	res, err := http.ReadResponse(br, nil)
+	// Informational responses, such as 100 Continue, precede the final
+	// response; 101 is final for this purpose.
+	for err == nil && res.StatusCode/100 == 1 && res.StatusCode != http.StatusSwitchingProtocols {
+		res, err = http.ReadResponse(br, nil)
+	}
 	if err != nil {
 		e.t.Fatalf("reading response to %q: %v", firstLine(req), err)
 	}
