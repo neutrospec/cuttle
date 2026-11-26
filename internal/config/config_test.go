@@ -513,6 +513,42 @@ func TestEnsureStarter(t *testing.T) {
 	}
 }
 
+// TestEnsureStarterNotSynced checks OI-0006 Z-R4: when the directory
+// sync after the rename fails, the starter file is in place, so
+// EnsureStarter reports it as written, with an error that wraps
+// ErrNotSynced for the caller's warning. A directory with mode 0300
+// allows the rename but not the open of the directory.
+func TestEnsureStarterNotSynced(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root opens any directory")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.Chmod(dir, 0o300); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(dir, 0o700)
+	wrote, err := EnsureStarter(path)
+	if !wrote || !errors.Is(err, ErrNotSynced) {
+		t.Fatalf("EnsureStarter: %v %v, want true and ErrNotSynced", wrote, err)
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Load(path); err != nil {
+		t.Errorf("the starter file is not in place: %v", err)
+	}
+	// A failure before the rename is not written: a 0500 directory.
+	other := filepath.Join(t.TempDir(), "sub")
+	if err := os.Mkdir(other, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(other, 0o700)
+	if wrote, err := EnsureStarter(filepath.Join(other, "config.toml")); wrote || err == nil || errors.Is(err, ErrNotSynced) {
+		t.Errorf("EnsureStarter in a 0500 directory: %v %v", wrote, err)
+	}
+}
+
 func TestLineIndex(t *testing.T) {
 	src := `# comment
 name = "x" # trailing

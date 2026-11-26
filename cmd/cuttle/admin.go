@@ -18,6 +18,7 @@ import (
 	"github.com/neutrospec/cuttle/internal/admin"
 	"github.com/neutrospec/cuttle/internal/config"
 	"github.com/neutrospec/cuttle/internal/control"
+	"github.com/neutrospec/cuttle/internal/iface"
 	"github.com/neutrospec/cuttle/internal/paths"
 	"github.com/neutrospec/cuttle/internal/stats"
 )
@@ -64,6 +65,11 @@ func cmdAdmin(args []string, lookup env, stdin io.Reader, stdout, stderr io.Writ
 	phc, err := admin.HashPassword(pw)
 	if err == nil {
 		err = admin.WritePasswordFile(p.Password.Path, phc)
+	}
+	if errors.Is(err, config.ErrNotSynced) {
+		// The file holds the new hash (OI-0006 Z-R4).
+		fmt.Fprintln(stderr, "cuttle: warning: the password file was written, but", err)
+		err = nil
 	}
 	if err != nil {
 		fmt.Fprintln(stderr, "cuttle: set the admin password:", err)
@@ -161,3 +167,12 @@ func (s *serveState) ConfigPath() string { return s.cfgPath }
 // Stats returns the statistics service, nil while unavailable. It is set
 // before the admin listener starts and never changes.
 func (s *serveState) Stats() *stats.Stats { return s.stats }
+
+// Interfaces reads the system interface table through the source the
+// proxy uses, for the admin interfaces page (design 0009 D3.6).
+func (s *serveState) Interfaces() ([]iface.Link, error) {
+	if s.interfaces != nil {
+		return s.interfaces.Read()
+	}
+	return iface.System{Logger: s.log}.Read()
+}

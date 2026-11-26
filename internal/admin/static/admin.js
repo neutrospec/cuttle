@@ -647,12 +647,13 @@
 
   // The upstream editor dialog forgets its form when it closes, so that
   // the save bar does not stay for a form that is gone.
-  const dlg = document.getElementById("editor-dialog");
+  const slot = document.getElementById("upstream-editor");
+  const dlg = slot && slot.closest("dialog");
   if (dlg) {
     dlg.addEventListener("close", () => {
       const form = $("form", dlg);
       if (form) form.reset();
-      setTimeout(() => { if (!dlg.open) $("#upstream-editor", dlg).replaceChildren(); }, 50);
+      setTimeout(() => { if (!dlg.open) slot.replaceChildren(); }, 50);
     });
   }
 })();
@@ -964,4 +965,113 @@
   chain.addEventListener("focusout", (e) => {
     if (lifted && !lifted.row.contains(e.relatedTarget)) drop(false, false);
   });
+})();
+
+/* ------------------------------------------- Interface list editor */
+// The editor of design 0009 D3.8 works without the script: each of its
+// buttons submits the form for editing with the change in the query.
+// With the script the buttons and the Add select change the list in
+// place: the hidden inputs that the form posts in order, the positions,
+// and the Move buttons at either end.
+(() => {
+  const { $, $$, el, icon, announce } = window.cuttle;
+
+  function renumber(field) {
+    const items = $$(".iflist > li[data-n]", field);
+    items.forEach((li, i) => {
+      $(".pos", li).textContent = String(i + 1);
+      $('[data-ifl="up"]', li).disabled = i === 0;
+      $('[data-ifl="down"]', li).disabled = i === items.length - 1;
+    });
+    const empty = $(".ifl-empty", field);
+    if (empty) empty.hidden = items.length > 0;
+    const sel = $("select[data-ifl-add]", field);
+    if (sel) sel.closest(".iflist-add").hidden = sel.options.length < 2;
+    // The unsaved-changes guard watches the form's input events.
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  function button(act, label, name, sym) {
+    return el("button", { class: "btn quiet icon-btn sm", type: "button", "data-ifl": act, "aria-label": label + " " + name }, icon(sym));
+  }
+
+  function entry(field, name, state, text) {
+    return el("li", { "data-n": name },
+      el("input", { type: "hidden", name: field.dataset.iflist, value: name }),
+      el("span", { class: "pos" }),
+      el("span", { class: "ifl-name" }, el("span", { class: "name-code" }, name), el("span", { class: "state " + state }, text)),
+      el("span", { class: "moves" }, button("up", "Move", name + " up", "up"), button("down", "Move", name + " down", "down")),
+      button("remove", "Remove", name, "x"));
+  }
+
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-iflist] [data-ifl]");
+    if (!b) return;
+    e.preventDefault();
+    const field = b.closest("[data-iflist]");
+    const li = b.closest("li");
+    const name = li.dataset.n;
+    const act = b.dataset.ifl;
+    if (act === "up" && li.previousElementSibling) li.previousElementSibling.before(li);
+    else if (act === "down" && li.nextElementSibling && li.nextElementSibling.dataset.n) li.nextElementSibling.after(li);
+    else if (act === "remove") {
+      const sel = $("select[data-ifl-add]", field);
+      const st = $(".state", li);
+      if (sel) sel.append(el("option", { value: name, "data-state": st.className.replace("state ", ""), "data-text": st.textContent }, name));
+      li.remove();
+    }
+    renumber(field);
+    if (act === "remove") {
+      announce("Removed " + name);
+      ($('.iflist > li[data-n] [data-ifl="remove"]', field) || $("select[data-ifl-add]", field) || field).focus();
+      return;
+    }
+    li.classList.remove("moved");
+    void li.offsetWidth;
+    li.classList.add("moved");
+    const pos = $(".pos", li).textContent;
+    announce(name + ", position " + pos);
+    // Keep the focus on the button pressed, or its neighbor at an end.
+    const same = $('[data-ifl="' + act + '"]', li);
+    (same.disabled ? $('[data-ifl="' + (act === "up" ? "down" : "up") + '"]', li) : same).focus();
+  });
+
+  document.addEventListener("change", (e) => {
+    const sel = e.target.closest("[data-iflist] select[data-ifl-add]");
+    if (!sel || !sel.value) return;
+    const field = sel.closest("[data-iflist]");
+    const opt = sel.selectedOptions[0];
+    $(".iflist", field).insertBefore(entry(field, opt.value, opt.dataset.state || "", opt.dataset.text || ""), $(".ifl-empty", field));
+    const name = opt.value;
+    opt.remove();
+    sel.value = "";
+    renumber(field);
+    announce("Added " + name);
+  });
+})();
+
+/* ------------------------------------------------- Remote clients page */
+// Direct is the remote default only while Allow direct is on (design 0009
+// D3.7); the server draws the same state without the script.
+(() => {
+  const { $ } = window.cuttle;
+  const allow = $('.settings-form input[name="allow_direct"]');
+  const direct = $('.settings-form input[name="default"][value="direct"]');
+  if (!allow || !direct) return;
+  const note = $(".settings-form .no-direct");
+  const sync = () => {
+    direct.disabled = !allow.checked && !direct.checked;
+    if (note) note.hidden = allow.checked;
+  };
+  allow.addEventListener("change", sync);
+  sync();
+})();
+
+/* --------------------------------------------------- Interfaces page */
+// A row menu closes when its Delete… opens the review.
+(() => {
+  document.addEventListener("submit", (e) => {
+    const menu = e.target.closest && e.target.closest("details.ifmenu");
+    if (menu) menu.open = false;
+  }, true);
 })();

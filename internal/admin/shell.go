@@ -31,11 +31,11 @@ var navPages = []navPage{
 	{group: "Traffic", id: "live", label: "Live", icon: "live", path: "/live"},
 	{group: "Configuration", id: "rules", label: "Rules", icon: "rules", path: "/rules", count: "rules"},
 	{group: "Configuration", id: "upstreams", label: "Upstreams", icon: "upstreams", path: "/upstreams", count: "upstreams"},
-	{group: "Configuration", id: "interfaces", label: "Interfaces", icon: "interfaces", count: "interfaces"},
-	{group: "Configuration", id: "proxy", label: "Proxy", icon: "proxy"},
-	{group: "Configuration", id: "remote", label: "Remote clients", icon: "remote"},
-	{group: "Configuration", id: "general", label: "General", icon: "general"},
-	{group: "Admin", id: "account", label: "Account", icon: "account"},
+	{group: "Configuration", id: "interfaces", label: "Interfaces", icon: "interfaces", count: "interfaces", path: "/interfaces"},
+	{group: "Configuration", id: "proxy", label: "Proxy", icon: "proxy", path: "/proxy"},
+	{group: "Configuration", id: "remote", label: "Remote clients", icon: "remote", path: "/remote"},
+	{group: "Configuration", id: "general", label: "General", icon: "general", path: "/general"},
+	{group: "Admin", id: "account", label: "Account", icon: "account", path: "/account"},
 	{group: "Admin", id: "advanced", label: "Advanced", icon: "advanced", path: "/settings"},
 }
 

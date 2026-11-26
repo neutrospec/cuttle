@@ -560,11 +560,47 @@ Move resolved items to Closed with their resolving commit or evidence.
     after Review again; `addOp` panics on a reserved field name
     (`TestAddOpReservedNames`); and the 409 notice of `/settings` names
     Review changes (`TestAdminSettingsConflictNotice`).
+    Z-R4, AA-R7, U-R2, and T-R1 are settled in TASK-0022:
+    `WritePasswordFile` keeps mode 0600 and reports `ErrNotSynced` when
+    the new hash is in place, `EnsureStarter` reports such a file as
+    written, and the password change, `cuttle admin passwd`, `cuttle
+    init`, and `cuttle serve` treat it as saved with a warning
+    (`TestPasswordWriteNotSynced`, `TestEnsureStarterNotSynced`,
+    `TestWritesNotSynced`); the same-key notice on a settings page starts
+    with the key paths (`TestAdminSettingsCarry`); 0008 D6 and D15 say
+    "validation messages on the admin settings pages", that key names are
+    echoed inside `[[interface]]`, and where MACs appear; and non-lead
+    host cells of a stacked phone row break anywhere
+    (`TestAdminScreensSettings`, overview at 390 px).
+  - AB-R1–AB-R10 (from the TASK-0022 review; M4 tasks): AB-R1 (minor,
+    UI): `.editor-dialog` keeps 16 px side gutters at 390 px because its
+    width outranks the phone `dialog { width: 100% }`; set
+    `.editor-dialog { width: 100% }` in the phone media query. AB-R2
+    (minor, a11y): Account errors appear only under their fields, without
+    the error summary that D3.13 asks of forms. AB-R3 (nit, test gap):
+    `cuttle serve` treating an unsynced starter file as written
+    (`serve.go:106`) is untested. AB-R4 (infra, nit): the leftover-process
+    check at the end of `scripts/admin-check` matches another worktree's
+    concurrent run; scope the `pgrep` pattern to this run's temporary
+    directories. AB-R5 (nit): `GET /interfaces/new` shadows a definition
+    named `new`, which the name pattern allows; task C's editor routes may
+    do the same. AB-R6 (nit): the password change loads `pw` before taking
+    `loginMu`, so two concurrent changes can both succeed; load it under
+    the lock. AB-R7 (nit): the "Ended N sessions" toast also counts expired
+    sessions. AB-R8 (nit): a manual Add with both `mac` and `device` filled
+    is retitled "Define <device>" after a re-render. AB-R9 (nit):
+    `TestFormCoverageSettings` uses a hard-coded schema list; merge it with
+    task C's `TestFormCoverage` at M4 close, and test the interface rename
+    summary wording. AB-R10 (C or E, condition of the TASK-0022 review):
+    the real rule and upstream editors use `form.IfList` and the `iflist`
+    block, and W21 is proven again on them.
 - Next action: orchestrator — include the open items (V5, V8, V11, V12, P1,
-  W1–W3, Z2, Z4, G1–G2, P-R3–P-R7, Q-R1–Q-R4, Q-R6–Q-R8, S-R1–S-R2, U-R2,
-  X-R1–X-R5, the W25 case of Y-R3, Z-R3–Z-R7, Z-R9, T-R1–T-R2, and
-  AA-R1–AA-R8) in the briefs of the stages they affect; the producer
-  closes each item with the commit that settles it.
+  W1–W3, Z2, Z4, G1–G2, P-R3–P-R7, Q-R1–Q-R4, Q-R6–Q-R8, S-R1–S-R2,
+  X-R1–X-R5, the W25 case of Y-R3, Z-R5–Z-R7, Z-R9, T-R2, AA-R1–AA-R6,
+  AA-R8, and AB-R1–AB-R10) in the briefs of the stages they affect; the
+  producer closes each item with the commit that settles it. TASK-0022
+  settles Z-R4, AA-R7, U-R2, and T-R1; TASK-0021 (in review) settles
+  AA-R1–AA-R3, AA-R5, AA-R6, and Z-R3.
   The M1.4 items, R5 with the C13 remainder, the per-request source
   recheck of 0003 D10 with N5, the bind retry of V1, Z3, W-R1, and W-R2,
   are settled in TASK-0007.

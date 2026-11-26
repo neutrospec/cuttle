@@ -95,64 +95,6 @@ func (c confState) warnings(kind string) map[int][]string {
 	return out
 }
 
-// runningDoc builds a model of a validated configuration for the
-// read-only pages: the values in force, which may include defaults that
-// the file leaves unset, and no notes, which the configuration does not
-// hold.
-func runningDoc(cfg *config.Config) *config.Doc {
-	d := &config.Doc{Name: cfg.Name}
-	d.Proxy.Default = cfg.Proxy.Default.String()
-	if len(cfg.Proxy.Interfaces) > 0 {
-		d.Proxy.Interfaces = config.Some(cfg.Proxy.Interfaces)
-	}
-	d.Remote.Default = config.Some(cfg.Proxy.Remote.Default.String())
-	for _, x := range cfg.Interfaces {
-		d.Interfaces = append(d.Interfaces, config.DocInterface{Name: x.Name})
-	}
-	dur := func(t time.Duration) config.Opt[string] { return config.Some(t.String()) }
-	for _, u := range cfg.Upstreams {
-		du := config.DocUpstream{Name: u.Name, Address: u.Address, Disclosure: u.Disclosure,
-			ConnectTimeout: dur(u.ConnectTimeout), ResponseTimeout: dur(u.ResponseTimeout), UnreachableHold: dur(u.UnreachableHold)}
-		if u.Interfaces != nil {
-			du.Interfaces = config.Some(u.Interfaces)
-		}
-		d.Upstreams = append(d.Upstreams, du)
-	}
-	list := func(l []string) config.Opt[[]string] {
-		if len(l) == 0 {
-			return config.Opt[[]string]{}
-		}
-		return config.Some(l)
-	}
-	flag := func(b bool) config.Opt[bool] {
-		if !b {
-			return config.Opt[bool]{}
-		}
-		return config.Some(true)
-	}
-	for _, r := range cfg.Rules {
-		dr := config.DocRule{Name: r.Name, Hosts: list(r.Hosts), Domains: list(r.Domains), Action: r.Route.String(),
-			AllowLoopback: flag(r.AllowLoopback), AllowPrivate: flag(r.AllowPrivate)}
-		var cidrs []string
-		for _, p := range r.CIDRs {
-			cidrs = append(cidrs, p.String())
-		}
-		dr.CIDRs = list(cidrs)
-		if len(r.Ports) > 0 {
-			ports := make([]int64, len(r.Ports))
-			for i, p := range r.Ports {
-				ports[i] = int64(p)
-			}
-			dr.Ports = config.Some(ports)
-		}
-		if r.Interfaces != nil {
-			dr.Interfaces = config.Some(r.Interfaces)
-		}
-		d.Rules = append(d.Rules, dr)
-	}
-	return d
-}
-
 // upState is an upstream's live state as the pages show it (design 0009
 // D3.5): up, down for some time with the requests that failed fast, or
 // probing, and the last error.

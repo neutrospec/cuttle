@@ -129,6 +129,7 @@ func navOf(path string) string {
 			}
 			continue
 		}
+		// An editor path such as /interfaces/eth-a belongs to its list.
 		if p.path == path || (p.path != "/" && strings.HasPrefix(path, p.path+"/")) {
 			return p.id
 		}
@@ -474,7 +475,7 @@ func (s *Server) formNotices(d *draft, rv *reviewView) {
 			}
 		}
 		if len(both) > 0 {
-			n = append(n, reviewNotice{Kind: "warn", Text: append(who, plain(keyList(both)+" "+was(both)+
+			n = append(n, reviewNotice{Kind: "warn", Text: append(fieldSubject(op, who, both), plain(" "+was(both)+
 				" also changed elsewhere. Applying replaces that change with yours; the diff shows what is lost.")...)})
 		}
 		text := plain("The file changed after you opened this page. The changes below are yours; the other change stays.")
@@ -482,7 +483,7 @@ func (s *Server) formNotices(d *draft, rv *reviewView) {
 			// The fields of this form that changed elsewhere and stay
 			// (OI-0006 Y-R5).
 			text = append(plain("The file changed after you opened this page. The changes below are yours; the other change stays: "),
-				append(who, plain(keyList(kept)+" "+was(kept)+" changed elsewhere and keeps that change.")...)...)
+				append(fieldSubject(op, who, kept), plain(" "+was(kept)+" changed elsewhere and keeps that change.")...)...)
 		}
 		if len(both) == 0 || len(kept) > 0 {
 			n = append(n, reviewNotice{Kind: "info", Text: text})
@@ -507,6 +508,30 @@ func entityRef(kind, name string) []seg {
 		return nil
 	}
 	return []seg{{Text: strings.ToUpper(kind[:1]) + kind[1:] + " "}, {Text: name, Code: true}, {Text: ": "}}
+}
+
+// fieldSubject names the fields that a concurrency notice is about, as
+// the start of a sentence: "Rule `x`: domains and ports" for an entity,
+// and the key paths for a settings page, such as "`proxy.remote.ports`",
+// so that the sentence has a subject either way (OI-0006 AA-R7).
+func fieldSubject(op *formOp, who []seg, fields []formField) []seg {
+	if op.Kind != "" {
+		return append(slices.Clone(who), plain(keyList(fields))...)
+	}
+	var out []seg
+	for i, f := range fields {
+		switch {
+		case i == 0:
+		case i == len(fields)-1 && len(fields) == 2:
+			out = append(out, seg{Text: " and "})
+		case i == len(fields)-1:
+			out = append(out, seg{Text: ", and "})
+		default:
+			out = append(out, seg{Text: ", "})
+		}
+		out = append(out, seg{Text: f.Key, Code: true})
+	}
+	return out
 }
 
 // keyList names fields by their keys: "domains and ports".

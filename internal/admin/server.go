@@ -25,6 +25,7 @@ import (
 
 	"github.com/neutrospec/cuttle/internal/config"
 	"github.com/neutrospec/cuttle/internal/control"
+	"github.com/neutrospec/cuttle/internal/iface"
 	"github.com/neutrospec/cuttle/internal/stats"
 )
 
@@ -63,6 +64,10 @@ type Backend interface {
 	// Reload applies the configuration file as SIGHUP does (design 0004
 	// D6); ok is false when the file was refused.
 	Reload() (res control.ReloadResult, ok bool)
+	// Interfaces reads the system interface table through the instance's
+	// iface.Source, as cuttle interfaces does; it never runs another
+	// program (design 0009 D3.6, 0008 D15).
+	Interfaces() ([]iface.Link, error)
 }
 
 // securityHeaders go on every response (design 0005 D5).
@@ -165,7 +170,7 @@ func New(opt Options) *Server {
 		s.hosts = append(s.hosts, own)
 	}
 	s.base = template.Must(template.New("").Funcs(s.funcs()).ParseFS(assets, "templates/layout.html", "templates/icons.html",
-		"templates/pipeline.html"))
+		"templates/pipeline.html", "templates/fields.html"))
 	for _, name := range []string{"login", "overview", "domains", "live", "settings", "review", "backup"} {
 		s.pages[name] = template.Must(template.Must(s.base.Clone()).ParseFS(assets, "templates/"+name+".html"))
 	}
@@ -190,6 +195,9 @@ func New(opt Options) *Server {
 	handle("POST /config/reload", s.authed(maxFormBytes, s.postReload))
 	// The rules and upstreams pages (design 0009 task C).
 	s.addConfigPages(handle)
+	// Task D of design 0009: Interfaces, Proxy, Remote clients, General,
+	// and Account.
+	s.addPagesD(handle)
 	static, _ := fs.Sub(assets, "static")
 	files := http.StripPrefix("/static/", http.FileServerFS(static))
 	handle("GET /static/", func(w http.ResponseWriter, r *http.Request) {

@@ -10,7 +10,7 @@ import (
 
 var (
 	formTagRE   = regexp.MustCompile(`<form\b[^>]*>`)
-	inputTagRE  = regexp.MustCompile(`<input\b([^>]*)>`)
+	inputElemRE = regexp.MustCompile(`<input\b([^>]*)>`)
 	areaTagRE   = regexp.MustCompile(`(?s)<textarea\b([^>]*)>(.*?)</textarea>`)
 	selectTagRE = regexp.MustCompile(`(?s)<select\b([^>]*)>(.*?)</select>`)
 	optionTagRE = regexp.MustCompile(`(?s)<option\b([^>]*)>`)
@@ -25,12 +25,12 @@ func attrs(s string) map[string]string {
 	return m
 }
 
-// pageForm returns what a browser posts for the form with id in body
+// formByID returns what a browser posts for the form with id in body
 // without a submit button: its hidden, text, and number inputs, checked
 // radios and checkboxes, selects, and textareas, also those outside it
 // that name it with form=, and none that is disabled or names another
 // form.
-func pageForm(t *testing.T, body, id string) url.Values {
+func formByID(t *testing.T, body, id string) url.Values {
 	t.Helper()
 	start := -1
 	for _, m := range formTagRE.FindAllStringIndex(body, -1) {
@@ -51,7 +51,7 @@ func pageForm(t *testing.T, body, id string) url.Values {
 		return inside(at)
 	}
 	v := url.Values{}
-	for _, m := range inputTagRE.FindAllStringSubmatchIndex(body, -1) {
+	for _, m := range inputElemRE.FindAllStringSubmatchIndex(body, -1) {
 		a := attrs(body[m[2]:m[3]])
 		if !owned(a, m[0]) || a["name"] == "" {
 			continue
@@ -103,8 +103,8 @@ func pageForm(t *testing.T, body, id string) url.Values {
 	return v
 }
 
-// TestPageForm checks the form serializer of the tests on a sample.
-func TestPageForm(t *testing.T) {
+// TestFormByID checks the form serializer of the tests on a sample.
+func TestFormByID(t *testing.T) {
 	body := `<form id="a" method="post"><input type="hidden" name="h" value="1&amp;2">
 <input class="input" name="t" value="x"><input type="radio" name="r" value="no"><input type="radio" name="r" value="yes" checked>
 <input type="checkbox" name="c" value="true" checked><input type="checkbox" name="d" value="true">
@@ -114,7 +114,7 @@ b</textarea><select name="s"><option value="one">One</option><option value="two"
 <select name="s2"><option value="first">F</option></select><input name="off" value="z" disabled>
 <button type="submit" name="intent" value="review">R</button><input name="o" form="b" value="other"></form>
 <input name="out" form="a" value="outside"><form id="b"><input name="b" value="1"></form>`
-	got := pageForm(t, body, "a")
+	got := formByID(t, body, "a")
 	want := url.Values{"h": {"1&2"}, "t": {"x"}, "r": {"yes"}, "c": {"true"}, "ta": {"a\nb"}, "s": {"two"}, "s2": {"first"}, "out": {"outside"}}
 	if got.Encode() != want.Encode() {
 		t.Errorf("got %v\nwant %v", got, want)

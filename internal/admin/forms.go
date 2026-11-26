@@ -239,6 +239,8 @@ func postedForm(op *formOp, r *http.Request) *form {
 			f.values[k] = vs
 		}
 	}
+	// A button of the interface list editor without the script.
+	f.listAction(r)
 	return f
 }
 
@@ -268,26 +270,12 @@ func (f *form) Bad(name string) string {
 	return strings.Join(out, " ")
 }
 
-// fieldState is a field's issues as a page shows them: under the field,
-// in the element with id <ID>-issues, and in the hidden holders of the
-// form-issues block, from which the script moves them under the fields
-// after a check or a refused review.
-type fieldState struct {
-	Name, ID string
-	Errors   []string
-	Warnings []string
-	Invalid  bool
-	// Bad lists the 1-based entries of a list input with errors.
-	Bad string
-}
-
-// Field returns the issues of one field; Fields those of every field.
-func (f *form) Field(name string) fieldState {
-	return fieldState{Name: name, ID: "f-" + name, Errors: f.errs[name], Warnings: f.warns[name], Invalid: f.Invalid(name), Bad: f.Bad(name)}
-}
-
-func (f *form) Fields() []fieldState {
-	out := make([]fieldState, len(f.op.Fields))
+// Fields returns the view of every field of the form, for the hidden
+// holders of the form-issues block, from which the script copies each
+// field's issues under it after a check or a refused review: into the
+// element with id <ID>-issues where the page draws one.
+func (f *form) Fields() []fieldView {
+	out := make([]fieldView, len(f.op.Fields))
 	for i, fd := range f.op.Fields {
 		out[i] = f.Field(fd.Name)
 	}

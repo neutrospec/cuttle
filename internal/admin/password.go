@@ -103,17 +103,25 @@ func (h passwordHash) verify(password []byte) bool {
 
 // WritePasswordFile writes the PHC string to path with the atomic write of
 // design 0004 D7 and mode 0600, creating missing directories with mode
-// 0700 (design 0005 D6, 0006 D1).
+// 0700 (design 0005 D6, 0006 D1). An error that wraps config.ErrNotSynced
+// means that the file holds the new hash with mode 0600, but the
+// directory sync after the rename failed, so a power loss soon after could
+// undo it (OI-0006 Z-R4); any other error means that the password is
+// unchanged.
 func WritePasswordFile(path, phc string) error {
 	if err := paths.MkdirAll(filepath.Dir(path)); err != nil {
 		return err
 	}
-	if err := config.WriteAtomic(path, []byte(phc+"\n"), config.WriteOptions{}); err != nil {
-		return err
+	werr := config.WriteAtomic(path, []byte(phc+"\n"), config.WriteOptions{})
+	if werr != nil && !errors.Is(werr, config.ErrNotSynced) {
+		return werr
 	}
 	// The temporary file is created with mode 0600 less the umask; make the
 	// mode exact whatever the umask was.
-	return os.Chmod(path, 0o600)
+	if err := os.Chmod(path, 0o600); err != nil {
+		return err
+	}
+	return werr
 }
 
 // passwordState is what one read of the password file found.

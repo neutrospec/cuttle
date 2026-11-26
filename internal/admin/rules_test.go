@@ -110,7 +110,7 @@ func TestAdminRulesList(t *testing.T) {
 	}
 	def := body[strings.Index(body, `<li class="rule default`):]
 	def = def[:strings.Index(def, "</li>")]
-	if got := textOf(def); !strings.Contains(got, "No rule matched The default route applies. Local direct Remote block") || !strings.Contains(got, "10,784 req") {
+	if got := textOf(def); !strings.Contains(got, "No rule matched The default route applies: local default, remote default. Local direct Remote block") || !strings.Contains(got, "10,784 req") {
 		t.Errorf("default row: %q", got)
 	}
 	for _, s := range []string{"5 rules", "Traffic: last 24 hours", `<form id="order-form"`, `name="op" value="rules.order"`,
@@ -192,7 +192,7 @@ func TestAdminRulesList(t *testing.T) {
 // browser would post it.
 func (p *pipeline) ruleForm(path string) url.Values {
 	p.t.Helper()
-	return pageForm(p.t, p.get(path), "rule-form")
+	return formByID(p.t, p.get(path), "rule-form")
 }
 
 // docEdit returns the canonical form of the file with edit applied.
@@ -315,7 +315,7 @@ func TestAdminRuleEdits(t *testing.T) {
 	// Delete from the list: the review names the rule's traffic and where
 	// its first pattern goes next; it returns to /rules.
 	list := p.get("/rules")
-	del := pageForm(t, list, "del-3")
+	del := formByID(t, list, "del-3")
 	if del.Get("op") != opRuleDelete || del.Get("target") != "ads" || del.Get("r:domains") == "" {
 		t.Fatalf("delete form: %v", del)
 	}
@@ -339,7 +339,7 @@ func TestAdminRuleEdits(t *testing.T) {
 	}
 	// Delete and rename started at the editor return to the list.
 	edit := p.get("/rules/lab-net")
-	body = p.review(pageForm(t, edit, "rule-delete"), http.StatusOK)
+	body = p.review(formByID(t, edit, "rule-delete"), http.StatusOK)
 	if applyForm(t, body).Get("return") != "/rules/lab-net" {
 		t.Errorf("delete from the editor returns to %q", applyForm(t, body).Get("return"))
 	}
@@ -356,7 +356,7 @@ func TestAdminRuleEdits(t *testing.T) {
 
 	// Reorder with the script: the order of the rows, positions 1 to n.
 	p.write(exampleConfig)
-	order := pageForm(t, p.get("/rules"), "order-form")
+	order := formByID(t, p.get("/rules"), "order-form")
 	if !slices.Equal(order["order"], []string{"loopback", "restricted", "ads", "lab-net"}) || !slices.Equal(order["position"], []string{"1", "2", "3", "4"}) {
 		t.Fatalf("order form: %v", order)
 	}
@@ -390,7 +390,7 @@ func TestAdminRuleEdits(t *testing.T) {
 	// A position that is not a number: 422 before the validator; a list
 	// that does not name every rule once: 409.
 	p.write(exampleConfig)
-	order = pageForm(t, p.get("/rules"), "order-form")
+	order = formByID(t, p.get("/rules"), "order-form")
 	bad := with(order)
 	bad["position"] = []string{"1", "x", "3", "4"}
 	if body := p.review(bad, http.StatusUnprocessableEntity); !strings.Contains(body, "the position of rule &#34;restricted&#34; must be a whole number from 1") {
@@ -687,7 +687,7 @@ func TestAdminTestURL(t *testing.T) {
 		t.Errorf("test fragment:\n%s", mainText(body))
 	}
 	// A test of an unsaved order runs against that order.
-	order := pageForm(t, p.get("/rules"), "order-form")
+	order := formByID(t, p.get("/rules"), "order-form")
 	order["order"] = []string{"video", "restricted", "local-net"}
 	res2, body := p.fragment("/config/draft", with(order, "intent", "test", "test", "127.0.0.1:80"))
 	if res2.StatusCode != http.StatusOK || !strings.Contains(body, `data-match="local-net"`) || !strings.Contains(textOf(body), "Rule 3, local-net") {

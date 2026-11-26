@@ -1,0 +1,32 @@
+{{/* proxy is the Proxy page of design 0009 D3.7: the listeners, the
+   default route for local clients, the timeouts and the connection
+   limit, and the default interface list with its timing. Its Data is a
+   formPage whose View is a settingsView. */}}
+{{define "content"}}{{with .Data}}
+<header class="page-head"><div><h1>Proxy</h1>
+<p class="lead">How clients reach cuttle and what happens to requests that no rule matches.</p></div></header>
+<div id="form-issues">{{template "form-issues" $}}</div>
+{{with .View}}{{if .ReadOnly}}{{template "readonly"}}{{end}}
+<form method="post" action="/config/draft" class="settings-form"{{if not .ReadOnly}} data-guard="Unsaved changes to the proxy settings" data-guard-discard="/proxy"{{if $.Data.Form.Dirty}} data-guard-dirty{{end}}{{end}}>
+{{template "default-button"}}<input type="hidden" name="csrf" value="{{$.Token}}">
+{{range $.Data.Form.Hidden}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">
+{{end}}<fieldset class="fsec"{{if .ReadOnly}} disabled{{end}}><header><h2>Listeners</h2><p>Addresses that clients connect to.</p></header><div class="fields">
+{{template "list-field" ($.Data.Form.Field "listen")}}</div></fieldset>
+<fieldset class="fsec"{{if .ReadOnly}} disabled{{end}}><header><h2>Default route</h2><p>For local clients when no rule matches. <a href="/remote">Remote clients</a> have their own.</p></header><div class="fields">
+{{template "action-field" ($.Data.Form.Action "default" .Upstreams false)}}</div></fieldset>
+<fieldset class="fsec"{{if .ReadOnly}} disabled{{end}}><header><h2>Timeouts and limits</h2><p>Go durations such as <code>10s</code> or <code>1m30s</code>. Clear a field to use the default.</p></header><div class="fields"><div class="row2">
+{{template "text-field" ($.Data.Form.Field "connect_timeout")}}{{template "text-field" ($.Data.Form.Field "response_timeout")}}{{template "text-field" ($.Data.Form.Field "idle_timeout")}}{{template "text-field" ($.Data.Form.Field "max_connections")}}</div></div></fieldset>
+<fieldset class="fsec"{{if .ReadOnly}} disabled{{end}}><header><h2>Interfaces</h2><p>The default list for direct routes. A rule's own list replaces it.</p></header><div class="fields">
+{{/* Without definitions the fields change nothing yet, so they are
+   collapsed under a one-line summary (design 0009 D3.7). */}}{{if not .Defined}}<details class="disclosure if-group"{{if $.Data.Form.HasErrors}} open{{end}}><summary>{{.Summary}}: no interface is defined</summary>
+<div class="fields">{{end}}
+{{template "iflist" .Interfaces}}<div class="row2">{{template "text-field" ($.Data.Form.Field "interface_attempt_timeout")}}{{template "text-field" ($.Data.Form.Field "interface_demotion")}}</div>
+{{if not .Defined}}</div></details>{{end}}</div></fieldset>
+{{if not .ReadOnly}}<div class="form-foot">
+<button type="submit" class="btn primary" name="intent" value="review" data-primary data-fragment="review" data-alt="form-issues">Review changes</button>
+<button type="submit" class="btn" name="intent" value="check" data-fragment="form-issues">Check</button>
+<span class="spacer"></span>
+<span class="hint">Nothing is written until you apply the review. Command-Enter reviews.</span>
+</div>
+{{end}}</form>
+{{end}}{{template "review-dialog"}}{{end}}{{end}}

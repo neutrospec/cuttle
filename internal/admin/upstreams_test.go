@@ -12,7 +12,7 @@ import (
 // upstreamForm loads the upstream editor at path and returns its form.
 func (p *pipeline) upstreamForm(path string) url.Values {
 	p.t.Helper()
-	return pageForm(p.t, p.get(path), "upstream-form")
+	return formByID(p.t, p.get(path), "upstream-form")
 }
 
 // TestAdminUpstreams checks the upstreams page of design 0009 D3.5
@@ -34,7 +34,7 @@ func TestAdminUpstreams(t *testing.T) {
 		`<a class="e-name" href="/upstreams/gateway" data-fragment="upstream-editor">gateway</a>`,
 		`<span class="state up">Up since 11:11</span>`, `<span class="badge">disclosure via</span>`, "Another cuttle instance; adds one Via entry",
 		`<span class="state down">Down for 42 s, 17 failed fast</span><span class="hint">Last error: connection_timeout</span>`,
-		`<a href="/rules/restricted">rule <code>restricted</code></a>`, `<a href="/rules/lab-net">rule <code>lab-net</code></a>, <code>proxy.default</code>`,
+		`<a href="/rules/restricted">rule <code>restricted</code></a>`, `<a href="/rules/lab-net">rule <code>lab-net</code></a>, <a href="/proxy"><code>proxy.default</code></a>`,
 		"<b>3,471</b> req", "407.1 MiB", "Used by rule restricted. Change those first.", "Used by rule lab-net and proxy.default. Change those first.",
 		`<span class="e-note">Lab &lt;box&gt; &amp; co</span>`, `href="/domains?route=upstream%3Agateway&amp;window=24h"`, "2 upstreams",
 	} {
@@ -49,7 +49,7 @@ func TestAdminUpstreams(t *testing.T) {
 	// Add: no disclosure chosen; a review without one names the field.
 	editor := p.get("/upstreams/new")
 	checkMarkup(t, "new upstream", editor, true, "/upstreams")
-	form := pageForm(t, editor, "upstream-form")
+	form := formByID(t, editor, "upstream-form")
 	if _, chosen := form["disclosure"]; chosen || strings.Contains(editor, `value="via" checked`) || strings.Contains(editor, `value="none" checked`) {
 		t.Errorf("a disclosure is preselected: %v", form)
 	}
@@ -81,7 +81,7 @@ func TestAdminUpstreams(t *testing.T) {
 	if !strings.Contains(body, `form="updel-2"`) || strings.Count(body, `form="updel-`) != 1 {
 		t.Fatalf("delete offers:\n%s", mainText(body))
 	}
-	body = p.review(pageForm(t, body, "updel-2"), http.StatusOK)
+	body = p.review(formByID(t, body, "updel-2"), http.StatusOK)
 	if !strings.Contains(summaryOf(body), "Upstream spare removed") || strings.Contains(body, "Back to editing") {
 		t.Errorf("delete review: %s", mainText(body))
 	}

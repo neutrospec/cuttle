@@ -182,8 +182,8 @@ func upstreamUsers(d *config.Doc, name string) []userRef {
 	return out
 }
 
-// usersText names the users in a sentence, for the menu's note.
-func usersText(users []userRef) string {
+// userRefsText names the users in a sentence, for the menu's note.
+func userRefsText(users []userRef) string {
 	parts := make([]string, len(users))
 	for i, u := range users {
 		var b strings.Builder
@@ -226,7 +226,7 @@ func (s *Server) upstreamsView(ctx context.Context, st confState) *upstreamsView
 		row := upstreamRow{Name: u.Name, Note: u.Note.V, Address: u.Address, Disclosure: u.Disclosure,
 			Users: upstreamUsers(st.doc, u.Name), Warnings: warn[i+1], TrafficHref: domainsHref("route", "upstream:"+u.Name)}
 		row.State, row.Known = states[u.Name]
-		row.UsersText = usersText(row.Users)
+		row.UsersText = userRefsText(row.Users)
 		if tot, ok := t.routes["upstream:"+u.Name]; ok {
 			row.Requests, row.Bytes = tot.Requests, tot.Bytes()
 		}
@@ -282,7 +282,7 @@ func (s *Server) upstreamEditView(_ *config.Doc, f *form) *upstreamEditView {
 	if !f.New {
 		if u, i := st.doc.Upstream(f.Target); i >= 0 {
 			v.Users = upstreamUsers(st.doc, u.Name)
-			v.UsersText = usersText(v.Users)
+			v.UsersText = userRefsText(v.Users)
 			if !st.readOnly && len(v.Users) == 0 {
 				v.Delete = newFormFrom(s.ops[opUpstreamDelete], upstreamValues(u), u.Name, st.file.Digest, "/upstreams")
 			}
