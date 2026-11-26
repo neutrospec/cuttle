@@ -16,7 +16,7 @@
 <h2 id="routes-h" class="sr">Routes</h2>
 <p class="hero-sentence">{{range .Sentence}}{{if .Class}}<span class="rt c-{{.Class}}{{with .Shade}} {{.}}{{end}}">{{.Text}}</span>{{else}}{{.Text}}{{end}}{{end}}</p>
 {{if .Bar}}<div class="routebar" role="img" aria-label="{{.BarLabel}}">{{range .Bar}}<i class="c-{{.Class}} {{.Grow}}{{with .Shade}} {{.}}{{end}}"></i>{{end}}</div>
-{{end}}<ul class="legend">{{range .Bar}}<li><span class="lg c-{{.Class}}{{with .Shade}} {{.}}{{end}}">{{.Name}}</span><span class="num">{{bytes .Bytes}}</span><span class="muted num">{{.Share}}</span></li>{{end}}{{if .Blocked}}<li><span class="lg c-block">block</span><span class="num">{{num .Blocked}} {{if eq .Blocked 1}}request{{else}}requests{{end}}</span></li>{{end}}</ul>
+{{end}}<ul class="legend">{{range .Bar}}<li><span class="lg c-{{.Class}}{{with .Shade}} {{.}}{{end}}">{{.Name}}</span><span class="num">{{bytes .Bytes}}</span><span class="muted num">{{.Share}}</span></li>{{end}}{{range .NoBytes}}<li><span class="lg c-{{.Class}}{{with .Shade}} {{.}}{{end}}">{{.Name}}</span><span class="num">{{num .Requests}} {{if eq .Requests 1}}request{{else}}requests{{end}}</span><span class="muted">no bytes</span></li>{{end}}{{if .Blocked}}<li><span class="lg c-block">block</span><span class="num">{{num .Blocked}} {{if eq .Blocked 1}}request{{else}}requests{{end}}</span></li>{{end}}</ul>
 </section>
 {{else}}<div class="empty"><h3>No traffic in this window</h3><p>No request was recorded from {{.Window.Range}}.</p>{{range .Window.Presets}}{{if and (eq .Label "7d") (not .Current)}}<a class="btn" href="{{.Href}}">Show the last 7 days</a>{{end}}{{end}}</div>
 {{end}}{{end}}

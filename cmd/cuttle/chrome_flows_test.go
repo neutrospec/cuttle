@@ -180,7 +180,16 @@ func formFlows(t *testing.T, chrome *testenv.Chrome, p *testenv.ChromePage, base
 	var define string
 	eval(`(document.querySelector('a[data-fragment="editor-slot"][href^="/interfaces/new?device="]') || {}).textContent || ""`, &define)
 	if define == "" {
-		t.Error("the detected table offers no Define…")
+		// The table lists only interfaces that are not loopback and have
+		// a six-byte hardware address (design 0008 D15), and the flow
+		// needs one of them; the table's content is not logged.
+		cause := "this Mac has no interface that is not loopback and has a six-byte hardware address"
+		var readErr bool
+		eval(`!!document.querySelector('#detected .banner.error')`, &readErr)
+		if readErr {
+			cause = "the page could not read the interface table"
+		}
+		t.Errorf("the detected table offers no Define…: %s, which the interface flow needs", cause)
 	} else {
 		click(`a[data-fragment="editor-slot"][href^="/interfaces/new?device="]`)
 		wait("the define dialog", `document.getElementById("editor-dialog").open && document.querySelector("#editor-slot [data-block=editor]")`)

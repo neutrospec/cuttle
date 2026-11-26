@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"html"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -235,6 +236,76 @@ action = "block"
 	}
 }
 
+// TestAdminRouteHostReturn checks that Route a host keeps only a return
+// path that cleanReturn accepts (OI-0006 AD-R3): another origin, a
+// scheme-relative path, a script URL, or a page that is not a form's
+// return falls back to /rules, for Cancel and for the page apply returns
+// to, on the page and in the dialog's block.
+func TestAdminRouteHostReturn(t *testing.T) {
+	p := newPipeline(t)
+	const cancel = `<a class="btn" href="/rules" data-close>Cancel</a>`
+	for _, ret := range []string{"https://evil.example/", "//evil.example/", `/\evil.example`, "javascript:alert(1)", "/login", "/domains#x"} {
+		path := "/rules/new?" + url.Values{"host": {"tracker.example"}, "return": {ret}}.Encode()
+		body := p.get(path)
+		if form := formByID(t, body, "route-form"); !strings.Contains(body, cancel) || form.Get("return") != "/rules" || strings.Contains(body, "evil.example") {
+			t.Errorf("return=%q: Cancel or the form's return is not /rules (return %q)", ret, form.Get("return"))
+		}
+		frag := bodyOf(t, p.b.doWith(p.h, req{method: http.MethodGet, path: path, header: http.Header{"Cuttle-Fragment": {"1"}}}))
+		if !strings.Contains(frag, cancel) || strings.Contains(frag, "evil.example") {
+			t.Errorf("return=%q as a fragment: Cancel is not /rules", ret)
+		}
+	}
+	// A page a form may return to is kept.
+	body := p.get("/rules/new?" + url.Values{"host": {"tracker.example"}, "return": {"/domains?window=7d"}}.Encode())
+	if !strings.Contains(body, `<a class="btn" href="/domains?window=7d" data-close>Cancel</a>`) {
+		t.Error("return=/domains?window=7d is not kept")
+	}
+}
+
+// TestAdminOverviewNoBytes checks the overview of a window whose
+// requests all failed and moved no bytes (OI-0006 AD-R1): the sentence
+// and the legend name each route with its requests, and the top-host
+// panels list the hosts, while the empty state appears only for a window
+// without any route.
+func TestAdminOverviewNoBytes(t *testing.T) {
+	f := newFixture(t, true)
+	f.withExample()
+	st := f.withStats()
+	b := f.browser()
+	b.login()
+	body := bodyOf(t, b.get("/"))
+	if !strings.Contains(body, "<h3>No traffic in this window</h3>") || !strings.Contains(body, "Show the last 7 days") || strings.Contains(body, "hero-sentence") {
+		t.Errorf("a window without routes lacks the empty state:\n%s", body)
+	}
+	key := func(host, action, upstream, rule string) stats.RowKey {
+		return stats.RowKey{Host: host, Action: action, Upstream: upstream, Rule: rule, Source: "local"}
+	}
+	record(st, key("video.example", "direct", "", "default"), 4, true, true, 0, 0)
+	record(st, key("www.example.com", "direct", "", "default"), 1, true, true, 0, 0)
+	record(st, key("wiki.internal.example", "upstream", "gateway", "restricted"), 3, true, true, 0, 0)
+	flush(t, st)
+	body = bodyOf(t, b.get("/"))
+	sentence := regexp.MustCompile(`(?s)<p class="hero-sentence">(.*?)</p>`).FindStringSubmatch(body)
+	if sentence == nil || html.UnescapeString(tagRE.ReplaceAllString(sentence[1], "")) != "In the last 24 hours, no traffic went out. 5 requests went direct and 3 through gateway but moved no bytes." {
+		t.Errorf("sentence: %q", sentence)
+	}
+	for _, want := range []string{
+		`<li><span class="lg c-direct">direct</span><span class="num">5 requests</span><span class="muted">no bytes</span></li>`,
+		`<li><span class="lg c-upstream">gateway</span><span class="num">3 requests</span><span class="muted">no bytes</span></li>`,
+		`<p class="route-totals"><span>2 hosts</span><span>5 requests</span><span>5 failed</span></p>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("overview lacks %q", want)
+		}
+	}
+	if strings.Contains(body, "No traffic in this window") || strings.Contains(body, `class="routebar"`) {
+		t.Error("the overview shows the empty state or a bar for requests without bytes")
+	}
+	if got := strings.Join(listedHosts(body), ","); got != "video.example,www.example.com,wiki.internal.example" {
+		t.Errorf("top hosts: %s", got)
+	}
+}
+
 // TestRouteHero checks the route sentence of design 0009 D3.1 for each
 // shape of the window's traffic.
 func TestRouteHero(t *testing.T) {
@@ -259,10 +330,23 @@ func TestRouteHero(t *testing.T) {
 		{[]stats.Total{tot("direct", "", 3, 6), tot("upstream", "gw", 1, 3), tot("upstream", "lab", 1, 1), tot("block", "", 2310, 0)},
 			"In the last 7 days, 60% of traffic went direct, 30% through gw, 10% through lab, and 2,310 requests were blocked.", "g60 g30 g10"},
 		{[]stats.Total{tot("block", "", 1, 0)}, "In the last 7 days, no traffic went out and 1 request was blocked.", ""},
-		{[]stats.Total{tot("direct", "", 3, 1000), tot("upstream", "gw", 1, 1)}, "In the last 7 days, 100% of traffic went direct and <1% through gw.", "g100 g1"},
+		// A share is capped at 99% next to "<1%" (OI-0006 AD-R2).
+		{[]stats.Total{tot("direct", "", 3, 1000), tot("upstream", "gw", 1, 1)}, "In the last 7 days, 99% of traffic went direct and <1% through gw.", "g99 g1"},
+		{[]stats.Total{tot("direct", "", 3, 998), tot("upstream", "gw", 1, 1), tot("upstream", "lab", 1, 1)}, "In the last 7 days, 99% of traffic went direct, <1% through gw, and <1% through lab.", "g99 g1 g1"},
+		// Routes whose requests moved no bytes get a sentence of their own
+		// (OI-0006 AD-R1), and every request failing still gives a sentence.
+		{[]stats.Total{tot("direct", "", 1, 0)}, "In the last 7 days, no traffic went out. 1 request went direct but moved no bytes.", ""},
+		{[]stats.Total{tot("direct", "", 5, 0), tot("upstream", "gw", 3, 0)}, "In the last 7 days, no traffic went out. 5 requests went direct and 3 through gw but moved no bytes.", ""},
+		{[]stats.Total{tot("direct", "", 1200, 0), tot("upstream", "gw", 1, 0), tot("upstream", "lab", 2, 0), tot("block", "", 4, 0)},
+			"In the last 7 days, no traffic went out and 4 requests were blocked. 1,200 requests went direct, 1 through gw, and 2 through lab but moved no bytes.", ""},
+		{[]stats.Total{tot("direct", "", 3, 100), tot("upstream", "gw", 2, 0)}, "In the last 7 days, all traffic went direct. 2 requests went through gw but moved no bytes.", "g100"},
 		{[]stats.Total{tot("direct", "", 1, 1), tot("upstream", "a", 1, 1), tot("upstream", "b", 1, 1)}, "In the last 7 days, 34% of traffic went direct, 33% through a, and 33% through b.", "g34 g33 g33"},
 	} {
 		h := newRouteHero(w, c.routes)
+		if h == nil {
+			t.Errorf("%v: no sentence, want %q", c.routes, c.want)
+			continue
+		}
 		var grow []string
 		for _, b := range h.Bar {
 			grow = append(grow, b.Grow)
@@ -271,12 +355,20 @@ func TestRouteHero(t *testing.T) {
 			t.Errorf("%v: %q %v, want %q %s", c.routes, got, grow, c.want, c.bar)
 		}
 	}
-	if h := newRouteHero(w, []stats.Total{tot("direct", "", 1, 0)}); h != nil {
-		t.Errorf("no bytes and no block: %+v", h)
+	// The empty state only without any route.
+	for _, routes := range [][]stats.Total{nil, {tot("direct", "", 0, 0)}} {
+		if h := newRouteHero(w, routes); h != nil {
+			t.Errorf("%v: %+v", routes, h)
+		}
 	}
 	h := newRouteHero(w, []stats.Total{tot("upstream", "a", 1, 1), tot("upstream", "b", 1, 1), tot("upstream", "c", 1, 1)})
 	if h.Bar[0].Shade != "" || h.Bar[1].Shade != "shade2" || h.Bar[2].Shade != "shade3" {
 		t.Errorf("upstream shades: %+v", h.Bar)
+	}
+	// Upstreams without bytes continue the shades in the legend.
+	h = newRouteHero(w, []stats.Total{tot("upstream", "a", 1, 1), tot("upstream", "b", 1, 0), tot("block", "", 2, 0)})
+	if len(h.NoBytes) != 1 || h.NoBytes[0] != (heroReqs{Name: "b", Class: "upstream", Shade: "shade2", Requests: 1}) || h.Blocked != 2 {
+		t.Errorf("legend without bytes: %+v", h.NoBytes)
 	}
 }
 

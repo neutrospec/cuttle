@@ -38,11 +38,21 @@ type heroBar struct {
 type routeHero struct {
 	Sentence []heroSeg
 	Bar      []heroBar
+	// NoBytes are the routes other than block whose requests moved no
+	// bytes, such as requests that all failed: the legend counts their
+	// requests, and a sentence of their own names them (OI-0006 AD-R1).
+	NoBytes []heroReqs
 	// BarLabel reads the bar for a screen reader.
 	BarLabel string
 	// Blocked counts the requests of the block route, which moves no
 	// bytes and so has no part of the bar.
 	Blocked int64
+}
+
+// heroReqs is a legend entry counted in requests.
+type heroReqs struct {
+	Name, Class, Shade string
+	Requests           int64
 }
 
 // windowPhrase starts the sentence with the window: "In the last 24
@@ -101,21 +111,43 @@ func shares(values []int64) []int {
 	return out
 }
 
+// joinItems joins the parts of a sentence: "a", "a and b", or "a, b,
+// and c".
+func joinItems(items [][]heroSeg) []heroSeg {
+	var out []heroSeg
+	for i, it := range items {
+		switch {
+		case i == 0:
+		case len(items) == 2:
+			out = append(out, heroSeg{Text: " and "})
+		case i == len(items)-1:
+			out = append(out, heroSeg{Text: ", and "})
+		default:
+			out = append(out, heroSeg{Text: ", "})
+		}
+		out = append(out, it...)
+	}
+	return out
+}
+
 // newRouteHero builds the sentence, bar, and legend from the route
 // totals, which come as direct, the upstreams by name, and block (design
-// 0005 D9); nil when the window has no traffic.
+// 0005 D9); nil only when the window has no route at all, which the page
+// shows as the empty state.
 func newRouteHero(w windowView, routes []stats.Total) *routeHero {
 	h := &routeHero{}
-	var moved []stats.Total
+	var moved, noBytes []stats.Total
 	for _, t := range routes {
 		switch {
 		case t.Action == "block":
 			h.Blocked += t.Requests
 		case t.Bytes() > 0:
 			moved = append(moved, t)
+		case t.Requests > 0:
+			noBytes = append(noBytes, t)
 		}
 	}
-	if len(moved) == 0 && h.Blocked == 0 {
+	if len(moved) == 0 && len(noBytes) == 0 && h.Blocked == 0 {
 		return nil
 	}
 	values := make([]int64, len(moved))
@@ -123,21 +155,35 @@ func newRouteHero(w windowView, routes []stats.Total) *routeHero {
 		values[i] = t.Bytes()
 	}
 	pct := shares(values)
+	// Rounding gives 100 % to the largest route when the others are
+	// below half a percent; they show "<1%", so it shows 99 % (OI-0006
+	// AD-R2).
+	if len(moved) > 1 {
+		for i := range pct {
+			pct[i] = min(pct[i], 99)
+		}
+	}
 	ups := 0
+	// name returns a route's name and the shade that tells the second
+	// and later upstreams apart.
+	name := func(t stats.Total) (string, string) {
+		if t.Action != "upstream" {
+			return t.Action, ""
+		}
+		ups++
+		if ups > 1 {
+			return t.Upstream, "shade" + strconv.Itoa(min(ups, 3))
+		}
+		return t.Upstream, ""
+	}
 	var items [][]heroSeg
 	var labels []string
 	for i, t := range moved {
-		bar := heroBar{Name: t.Action, Class: t.Action, Bytes: t.Bytes(), Grow: "g" + strconv.Itoa(max(pct[i], 1))}
+		bar := heroBar{Class: t.Action, Bytes: t.Bytes(), Grow: "g" + strconv.Itoa(max(pct[i], 1))}
+		bar.Name, bar.Shade = name(t)
 		bar.Share = strconv.Itoa(pct[i]) + "%"
 		if pct[i] == 0 {
 			bar.Share = "<1%"
-		}
-		if t.Action == "upstream" {
-			ups++
-			bar.Name = t.Upstream
-			if ups > 1 {
-				bar.Shade = "shade" + strconv.Itoa(min(ups, 3))
-			}
 		}
 		h.Bar = append(h.Bar, bar)
 		labels = append(labels, bar.Name+" "+bar.Share)
@@ -163,20 +209,32 @@ func newRouteHero(w windowView, routes []stats.Total) *routeHero {
 		}
 		items = append(items, []heroSeg{{Text: formatNum(h.Blocked) + verb}, {Text: "blocked", Class: "block"}})
 	}
-	h.Sentence = []heroSeg{{Text: windowPhrase(w) + ", "}}
-	for i, it := range items {
-		switch {
-		case i == 0:
-		case len(items) == 2:
-			h.Sentence = append(h.Sentence, heroSeg{Text: " and "})
-		case i == len(items)-1:
-			h.Sentence = append(h.Sentence, heroSeg{Text: ", and "})
-		default:
-			h.Sentence = append(h.Sentence, heroSeg{Text: ", "})
-		}
-		h.Sentence = append(h.Sentence, it...)
-	}
+	h.Sentence = append([]heroSeg{{Text: windowPhrase(w) + ", "}}, joinItems(items)...)
 	h.Sentence = append(h.Sentence, heroSeg{Text: "."})
+	// The routes whose requests moved no bytes get a sentence of their
+	// own: "5 requests went direct and 3 through gw but moved no bytes."
+	items = nil
+	for i, t := range noBytes {
+		r := heroReqs{Class: t.Action, Requests: t.Requests}
+		r.Name, r.Shade = name(t)
+		h.NoBytes = append(h.NoBytes, r)
+		lead := formatNum(t.Requests) + " "
+		if i == 0 {
+			lead += "requests went "
+			if t.Requests == 1 {
+				lead = "1 request went "
+			}
+		}
+		if t.Action == "upstream" {
+			lead += "through "
+		}
+		items = append(items, []heroSeg{{Text: lead}, {Text: r.Name, Class: r.Class, Shade: r.Shade}})
+	}
+	if len(items) > 0 {
+		h.Sentence = append(h.Sentence, heroSeg{Text: " "})
+		h.Sentence = append(h.Sentence, joinItems(items)...)
+		h.Sentence = append(h.Sentence, heroSeg{Text: " but moved no bytes."})
+	}
 	if len(labels) > 0 {
 		h.BarLabel = "Bytes by route: " + strings.Join(labels, ", ")
 	}

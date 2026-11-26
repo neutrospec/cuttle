@@ -17,3 +17,5 @@ homebrew/core already ships a `squid` formula.
 7. [Compatibility matrix](COMPATIBILITY.md) tracks outcomes on actual clients.
 8. [Tasks](TASKS.md) holds the current status and next action of each change.
 9. [Open issues](OPEN_ISSUES.md) tracks significant carry-over work.
+10. [Changelog](../CHANGELOG.md) lists the changes and upgrade steps of each
+    release.
