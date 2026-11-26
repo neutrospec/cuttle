@@ -60,15 +60,18 @@ A closed task becomes one line under Closed:
 ### TASK-0021 — M4.2 C: rules and upstreams
 
 - Milestone: M4.2
-- Status: implement
+- Status: review
 - Iteration: 1/3
-- Workers: implementer on a T3 worktree branch, alongside TASK-0022
-- Base: this board update
-- Candidate: none
-- Evidence: none
-- Findings: none
-- Next action: implementer — build task C of design 0009 (W15–W19) with
-  AA-R1–AA-R3, AA-R5, AA-R6, and Z-R3 and return the candidate
+- Workers: implementer done on branch `t3/rules-upstreams-pages`; fresh
+  reviewer running
+- Base: `e5ff391`
+- Candidate: `ecf1585` (tree `ba2d923`)
+- Evidence: implementer ran `scripts/gate t0`, `t1`, and
+  `scripts/admin-check` on `ba2d923`, all pass; W15–W19 tests, AA-R1–AA-R3,
+  AA-R5, AA-R6, and Z-R3 settled, 16 mutation proofs, and screenshots at
+  1280 and 390 px in light and dark
+- Findings: none yet
+- Next action: reviewer — risk-based review of `e5ff391..ecf1585`
 
 ## Closed
 
