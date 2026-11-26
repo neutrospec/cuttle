@@ -57,15 +57,17 @@ A closed task becomes one line under Closed:
 ### TASK-0018 — M4.1 A: configuration model and canonical writer
 
 - Milestone: M4.1
-- Status: implement
+- Status: review
 - Iteration: 1/3
-- Workers: implementer on a T3 worktree branch, alongside TASK-0019
-- Base: this board update
-- Candidate: none
-- Evidence: none
-- Findings: none
-- Next action: implementer — build task A of design 0009 (W1–W4, W14,
-  OI-0006 U-R1) and return the candidate
+- Workers: implementer done on branch `t3/config-doc-canonical-writer`;
+  fresh reviewer running
+- Base: `dccee4c`
+- Candidate: `72ce3f4` (tree `5f0459f`)
+- Evidence: implementer ran `scripts/gate t0` and `t1` on `5f0459f`, both
+  pass; W1–W4 and W14 tests, a 2-minute fuzz run of `FuzzCanonical`, and 8
+  mutation proofs
+- Findings: none yet
+- Next action: reviewer — risk-based review of `dccee4c..72ce3f4`
 
 ## Closed
 
