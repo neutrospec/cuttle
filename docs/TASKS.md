@@ -44,15 +44,19 @@ A closed task becomes one line under Closed:
 ### TASK-0019 — M4.1 B2: admin shell, visual system, and script core
 
 - Milestone: M4.1
-- Status: implement
+- Status: review
 - Iteration: 1/3
-- Workers: implementer on a T3 worktree branch, alongside TASK-0018
-- Base: this board update
-- Candidate: none
-- Evidence: none
-- Findings: none
-- Next action: implementer — build task B2 of design 0009 (W13) to the
-  approved prototype and return the candidate
+- Workers: implementer done on branch `t3/admin-shell-visual-system`;
+  fresh reviewer running
+- Base: `dccee4c`
+- Candidate: `7430ead` (tree `1bc90af`)
+- Evidence: implementer ran `scripts/gate t0`, `t1`, and
+  `scripts/admin-check` on `1bc90af`, all pass; W13 tests, 8 mutation
+  proofs, and 46 headless Chrome screenshots at 1280 and 390 px in light
+  and dark with no horizontal overflow
+- Findings: none yet
+- Next action: reviewer — risk-based review of `dccee4c..7430ead`,
+  including the screenshots against the prototype
 
 ## Closed
 
