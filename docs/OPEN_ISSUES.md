@@ -675,9 +675,18 @@ Move resolved items to Closed with their resolving commit or evidence.
     W26 interface flow says that the Mac needs an interface that is not
     loopback and has a six-byte hardware address, or that the table could
     not be read.
+  - AE-R1 (from the first bottle publication in TASK-0026, nit): the
+    header comment of the tap's `.github/workflows/publish.yml` says that
+    deleting the pull request branch leaves the pull request closed. It
+    does not: GitHub acts on neither the deleted branch nor the `Closes
+    #N.` of a push made with `github.token`, so pull request 1 was closed
+    by hand. 0006 D8 is corrected and its release procedure closes the
+    pull request by hand. The next change to the tap's workflows corrects
+    the comment, or lets `publish.yml` close the pull request itself with
+    `pull-requests: write`.
 - Next action: orchestrator — include the open items (V5, V8, V11, V12, P1,
   W1–W3, Z2, Z4, G1–G2, P-R3–P-R7, Q-R1–Q-R4, Q-R6–Q-R8, S-R1–S-R2,
-  X-R1–X-R5, Z-R6, Z-R7, and Z-R9) in the briefs of the stages they
+  X-R1–X-R5, Z-R6, Z-R7, Z-R9, and AE-R1) in the briefs of the stages they
   affect; the producer closes each item with the commit that settles it.
   TASK-0024 settled Z-R5, AC-R3, AD-R1–AD-R3, and AD-R5; TASK-0023
   settled the W25 case of Y-R3, T-R2, AA-R4, AA-R8, AB-R2–AB-R4,
