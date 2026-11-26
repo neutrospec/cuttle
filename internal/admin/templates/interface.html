@@ -15,11 +15,11 @@
 {{define "editor"}}{{with .Data}}{{$v := .View}}{{$f := .Form}}<div class="editor-box{{if $v}}{{if not $v.InPage}} in-dialog{{end}}{{end}}" data-block="editor">
 <form method="post" action="/config/draft" class="if-form"{{if $v}}{{if and $v.InPage (not $v.ReadOnly)}} data-guard="Unsaved changes to the interface" data-guard-discard="/interfaces"{{if $f.Dirty}} data-guard-dirty{{end}}{{end}}{{end}}>
 {{if $v}}{{if not $v.InPage}}<div class="dlg-head"><div><h2 id="editor-h">{{$v.Title}}</h2>{{if $v.Sub}}<p>{{$v.Sub}}</p>{{end}}</div><button class="btn quiet icon-btn" type="button" data-close aria-label="Close">{{template "icon" "x"}}</button></div>
-{{end}}{{end}}<div class="dlg-body">
-<div id="form-issues">{{template "form-issues" $}}</div>
-{{template "default-button"}}<input type="hidden" name="csrf" value="{{$.Token}}">
+{{end}}{{end}}{{template "default-button"}}<input type="hidden" name="csrf" value="{{$.Token}}">
 {{range $f.Hidden}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">
-{{end}}{{if $v}}<fieldset class="fields"{{if $v.ReadOnly}} disabled{{end}}>
+{{end}}<div class="dlg-body">
+<div id="form-issues">{{template "form-issues" $}}</div>
+{{if $v}}<fieldset class="fields"{{if $v.ReadOnly}} disabled{{end}}>
 <div class="row2">{{template "text-field" ($f.Field "name")}}{{template "text-field" ($f.Field "note")}}</div>
 {{with $f.Field "ident"}}<div class="field choice ident{{if .Invalid}} invalid{{end}}" id="field-ident"><span class="label" id="f-ident-l">{{.Label}}</span>
 <div class="rcards" role="radiogroup" id="f-ident" aria-labelledby="f-ident-l"{{with .Described}} aria-describedby="{{.}}"{{end}}>

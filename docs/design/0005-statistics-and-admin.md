@@ -196,9 +196,13 @@ rate.
 
 ### D6. Password
 
-- `cuttle admin passwd` is the only way to set the password. On a terminal
-  it prompts twice without echo (`golang.org/x/term`); with `--stdin` it
-  reads one line. Passwords are 12–128 bytes.
+- `cuttle admin passwd` is the only way to set the first password. On a
+  terminal it prompts twice without echo (`golang.org/x/term`); with
+  `--stdin` it reads one line. Passwords are 12–128 bytes. A signed-in
+  operator can change the password on the Account page with the current
+  one; the change shares the login backoff and failure count of D8 and
+  ends the other sessions
+  ([0009 D12](0009-web-configuration.md#d12-security-and-privacy)).
 - It writes `$XDG_DATA_HOME/cuttle/admin-password` with the atomic write of
   [0004 D7][d4-7] and mode 0600. The file holds one PHC string:
   `$argon2id$v=19$m=19456,t=2,p=1$<salt>$<key>`, with a 16-byte random
@@ -286,6 +290,11 @@ exact range.
 | `POST` | `/config/draft` | Session, CSRF | Check, review, or return to editing a draft; never writes ([0009 D7](0009-web-configuration.md#d7-edit-and-save-pipeline)) |
 | `POST` | `/config/apply` | Session, CSRF | Write a reviewed candidate and reload |
 | `POST` | `/config/reload` | Session, CSRF | Reload the file as it is |
+| `GET` | `/interfaces`, `/interfaces/new`, `/interfaces/{name}` | Session | Interface definitions and the detected table; the definition editor, with the `?device=` prefill of Define… ([0009 D3.6](0009-web-configuration.md#d36-interfaces)) |
+| `GET` | `/proxy`, `/remote`, `/general` | Session | Settings forms ([0009 D3.7](0009-web-configuration.md#d37-proxy-remote-clients-general)) |
+| `GET` | `/account` | Session | Password change and sessions ([0009 D3.9](0009-web-configuration.md#d39-account)) |
+| `POST` | `/account/password` | Session, CSRF | Change the password with the current one ([0009 D12](0009-web-configuration.md#d12-security-and-privacy)) |
+| `POST` | `/account/sessions` | Session, CSRF | End every other session |
 | `GET` | `/static/*` | Host check | Embedded styles |
 
 `route` is `direct`, `upstream` (all upstreams), `upstream:<name>`,

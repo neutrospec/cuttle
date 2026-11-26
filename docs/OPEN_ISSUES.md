@@ -550,6 +550,18 @@ Move resolved items to Closed with their resolving commit or evidence.
     (nit, UI): the info banner is an untinted card unlike the others, and
     applying a restore from Advanced leaves without the unsaved-changes
     prompt, losing unsaved editor text.
+    Z-R4, AA-R7, U-R2, and T-R1 are settled in TASK-0022:
+    `WritePasswordFile` keeps mode 0600 and reports `ErrNotSynced` when
+    the new hash is in place, `EnsureStarter` reports such a file as
+    written, and the password change, `cuttle admin passwd`, `cuttle
+    init`, and `cuttle serve` treat it as saved with a warning
+    (`TestPasswordWriteNotSynced`, `TestEnsureStarterNotSynced`,
+    `TestWritesNotSynced`); the same-key notice on a settings page starts
+    with the key paths (`TestAdminSettingsCarry`); 0008 D6 and D15 say
+    "validation messages on the admin settings pages", that key names are
+    echoed inside `[[interface]]`, and where MACs appear; and non-lead
+    host cells of a stacked phone row break anywhere
+    (`TestAdminScreensSettings`, overview at 390 px).
 - Next action: orchestrator — include the open items (V5, V8, V11, V12, P1,
   W1–W3, Z2, Z4, G1–G2, P-R3–P-R7, Q-R1–Q-R4, Q-R6–Q-R8, S-R1–S-R2, U-R2,
   X-R1–X-R5, the W25 case of Y-R3, Z-R3–Z-R7, Z-R9, T-R1–T-R2, and

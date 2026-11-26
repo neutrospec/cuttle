@@ -433,6 +433,11 @@ table.data td.n { color: var(--ink-2); }
    other columns wrap first, and a host breaks only where it would
    overflow its cell. */
 table.data td.host { min-width: 11em; overflow-wrap: break-word; }
+/* A host that is not the lead of its row, such as an upstream's address,
+   breaks anywhere, so that a long name without hyphens makes its panel
+   neither wider nor scroll sideways, on a desktop or as a stacked phone
+   row (OI-0006 T-R1). */
+table.data td.host:not(.lead-cell) { overflow-wrap: anywhere; }
 table.data td.when { min-width: 6.5em; color: var(--ink-2); }
 table.data.dense th, table.data.dense td { padding-left: 8px; padding-right: 8px; }
 table.data.dense td:not(.host) { overflow-wrap: normal; }
@@ -740,10 +745,6 @@ body:has(dialog[open]) .savebar { display: none; }
      desktop rules pad the first or last cell. */
   table.resp td, table.data.resp td, table.data.resp td:first-child, table.data.resp td:last-child { padding: 2px 14px 2px 0; }
   table.resp td.lead-cell { display: block; }
-  /* A host that is not the lead of a stacked row, such as an upstream's
-     address, shares its line with other cells, so a long name breaks
-     anywhere rather than widening the page (OI-0006 T-R1). */
-  table.resp td.host:not(.lead-cell) { overflow-wrap: anywhere; }
   table.resp td.n { text-align: left; }
   table.resp td[data-label]::before { content: attr(data-label) " "; color: var(--muted); font-family: var(--sans); }
   table.resp td.opt, table.resp td.barcol { display: none; }
@@ -766,6 +767,10 @@ body:has(dialog[open]) .savebar { display: none; }
    Interfaces, the interface editor, Proxy, Remote clients, General, and
    Account (design 0009 D3.6–D3.9). */
 .settings-form { display: grid; }
+/* The form's first child is its hidden default button. */
+.settings-form > .fsec:first-of-type { border-top: 0; padding-top: 4px; }
+.field.choice .rcard { align-content: start; }
+#field-ports .rcards, #field-admin_listen .rcards { grid-template-columns: minmax(0, 1fr); }
 .settings-form .fsec[disabled] { opacity: .75; }
 .ro-note { margin-bottom: 16px; }
 .default-btn { pointer-events: none; }
