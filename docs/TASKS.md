@@ -44,19 +44,20 @@ A closed task becomes one line under Closed:
 ### TASK-0017 — M4 design: full configuration in the web admin
 
 - Milestone: M4
-- Status: design
+- Status: review
 - Iteration: 2/3
-- Workers: designer on branch `t3/web-config-admin-design` (fix round)
+- Workers: designer done on branch `t3/web-config-admin-design`; fresh
+  reviewer re-checking the fixes
 - Base: `829a072`
-- Candidate: `6421b01` (tree `faf6387`), returned to design
+- Candidate: `e168d7b` (tree `373c157`); the first candidate `6421b01`
+  (tree `faf6387`) was returned to design
 - Evidence: the designer checked the prototype in light and dark and at
   390 px with no horizontal overflow; its canonical TOML example round-trips
 - Findings: F1 (major): an invalid file on disk blocks the Advanced and
   restore recovery paths; F2 (major, security): clearing
   `proxy.remote.ports = []` or `admin.listen = ""` would revert to the
   defaults; the medium and minor items are folded into the same round
-- Next action: designer — fix F1 and F2 with the folded items and return
-  the candidate for a re-check of the fixes
+- Next action: reviewer — re-check the fixes in `6421b01..e168d7b`
 
 Decisions for TASK-0017 (2026-11-26):
 
