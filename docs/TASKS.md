@@ -44,15 +44,18 @@ A closed task becomes one line under Closed:
 ### TASK-0022 — M4.3 D: interfaces, proxy, remote clients, general, account
 
 - Milestone: M4.3
-- Status: implement
+- Status: review
 - Iteration: 1/3
-- Workers: implementer on a T3 worktree branch, alongside TASK-0021
-- Base: this board update
-- Candidate: none
-- Evidence: none
-- Findings: none
-- Next action: implementer — build task D of design 0009 (W20–W23) with
-  Z-R4, AA-R7, U-R2, and T-R1 and return the candidate
+- Workers: implementer done on branch `t3/admin-settings-pages`; fresh
+  reviewer running
+- Base: `e5ff391`
+- Candidate: `1b08d67` (tree `412f9d0`)
+- Evidence: implementer ran `scripts/gate t0`, `t1`, and
+  `scripts/admin-check` on `412f9d0`, all pass; W20–W23 tests, Z-R4,
+  AA-R7, U-R2, and T-R1 settled, 26 mutation proofs, and screenshots at
+  1280 and 390 px in light and dark
+- Findings: none yet
+- Next action: reviewer — risk-based review of `e5ff391..1b08d67`
 
 ### TASK-0021 — M4.2 C: rules and upstreams
 
