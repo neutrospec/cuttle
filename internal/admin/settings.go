@@ -174,6 +174,14 @@ func (s *Server) postSettings(w http.ResponseWriter, r *http.Request, _ string, 
 	s.settingsMu.Lock()
 	defer s.settingsMu.Unlock()
 	err := config.WriteAtomic(d.Path, []byte(d.Text), config.WriteOptions{ExpectSHA256: d.Base, Backup: true})
+	// The file holds the new text even when the directory sync after the
+	// rename failed, so that counts as saved and the reload runs (OI-0006
+	// U-R1).
+	unsynced := errors.Is(err, config.ErrNotSynced)
+	if unsynced {
+		s.log.Warn("admin settings saved, but the directory could not be synced", "config", d.Path, "error", err.Error())
+		err = nil
+	}
 	if errors.Is(err, config.ErrConflict) {
 		s.log.Warn("admin settings conflict; the file changed since the page loaded", "config", d.Path)
 		d.Conflict = true
@@ -203,6 +211,9 @@ func (s *Server) postSettings(w http.ResponseWriter, r *http.Request, _ string, 
 		return
 	}
 	d.Notice, d.NoticeOK = "Saved and reloaded.", true
+	if unsynced {
+		d.Notice = "Saved and reloaded; the directory could not be synced."
+	}
 	d.RestartRequired, d.ReloadWarnings = res.RestartRequired, res.Warnings
 	s.renderSettings(w, http.StatusOK, v, d)
 }
