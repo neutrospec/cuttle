@@ -392,3 +392,20 @@ removes entries. Append new entries at the end, oldest first.
   check that the planted PID is alive before reading the result; put
   cleanup in a `trap … EXIT`, or use `|| true` on `kill`.
 
+
+### 2026-11-27 — orchestrator — early "completed" notices for a background poller
+
+- Task: TASK-0026, waiting for a tap workflow run with a background
+  `gh run view` poller.
+- Attempts: 3.
+- What failed: right after `t3_background_wait` on a background Bash
+  poller, a "Background command … completed (exit code 0)" notice
+  arrived while the poller was still running. Its output file was empty
+  and had no `[exited with code N]` footer, and `gh run view` still
+  showed `in_progress`. Starting a new poller on each false notice left
+  three pollers running, which were killed later (exit 144).
+- What to do instead: before acting on such a notice, read the output
+  file and require the `[exited with code N]` footer and the poller's
+  own final line, or query the state directly; check `ps` for leftover
+  pollers before starting another. For pull request checks, use
+  `watch_pull_request` instead of a poller.
