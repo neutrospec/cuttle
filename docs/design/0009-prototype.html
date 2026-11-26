@@ -918,8 +918,8 @@ const ORDER = {
 const HEADER = [
   "# cuttle configuration. The admin UI writes this file in this form and",
   "# replaces comments with these generated ones; the previous version is",
-  "# kept as config.toml.bak. Check hand edits with `cuttle check` and apply",
-  "# them with `cuttle reload`.",
+  "# kept beside it with a .bak suffix. Check hand edits with `cuttle check`",
+  "# and apply them with `cuttle reload`.",
 ];
 const tq = (s) => '"' + String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
 const tv = (v) => (typeof v === "string" ? tq(v) : String(v));
@@ -2048,7 +2048,7 @@ function routeHost(host) {
   const choices = [[host, "hosts", "This host only"]];
   for (let i = 1; i <= labels.length - 2; i++) { const d = labels.slice(i).join("."); choices.push([d, "domains", `${d} and its subdomains`]); }
   choices[0] = [host, "hosts", `${host} only`];
-  const def = labels.length >= 3 ? 1 : 0;
+  const def = 0; // the exact host; no public-suffix list, so parents are offered, never preselected
   const cur = explain(model, { host, port: 443, kind: "tunnel" }, "local");
   $("#editor-title").textContent = `Route ${host}`;
   $("#editor-sub").innerHTML = "";

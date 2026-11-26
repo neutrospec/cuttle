@@ -1,6 +1,6 @@
 # 0009 — Full configuration in the web admin
 
-**Status** — Proposed (TASK-0017, 2026-11-26).
+**Status** — Proposed (TASK-0017, 2026-11-26; revised in iteration 2).
 
 ## Context
 
@@ -25,6 +25,15 @@ decided on 2026-11-26:
   The first password is still set with `cuttle admin passwd`, so another
   local user cannot claim it first.
 
+After the first review of this record, the user decided, also on
+2026-11-26:
+
+- The prototype at commit `6421b01` is approved as the visual reference.
+- The optional `note` key is added to rules, upstreams, and interfaces
+  (D6).
+- The password change shares the login backoff and its failure count
+  (D12).
+
 What exists: the M2 dashboard (`/`, `/domains`, `/live`) and the text
 settings page (`/settings`) of [0005 D9 and D10][d5-9], server-rendered
 with `html/template`, styled by one embedded stylesheet, under a
@@ -38,7 +47,10 @@ that replaces it and lists the amendments under
 
 The clickable prototype is [0009-prototype.html](0009-prototype.html). It
 is the visual reference: where this text and the prototype disagree on
-appearance, the prototype wins; on behavior, this text wins. Open it in a
+appearance, the prototype wins; on behavior, this text wins. The user
+approved it at commit `6421b01`; iteration 2 changed it only where this
+revision changed behavior, the default match of Route a host (D3.12) and
+the generated header comment (D6). Open it in a
 browser from the repository; it needs no server and loads nothing
 remote. It shows the shell and navigation, the overview, the rules chain
 with Test a URL, filtering, and drag, keyboard, and menu reordering, the
@@ -68,7 +80,8 @@ hand-written example file.
   copy of the configuration on the server. Each page saves its own edit
   in one step: edit, review, apply.
 - **The validator decides.** The form layer parses only what TOML needs
-  to type a value (integers, D6) and reports everything else through the
+  to type a value (integers) and the two explicit choices of D4, and
+  reports everything else through the
   [0004 D4][d4-4] validator run on the candidate file. The UI never
   re-implements a validation rule; it maps the validator's key paths to
   fields (D7).
@@ -310,9 +323,13 @@ says so with the error and the defined interfaces still show.
 Settings pages of the same pattern: groups of fields, each field with a
 label, a one-line hint written from the 0004 D3 meaning, and, for an
 unset optional key, an empty input whose placeholder shows the default
-("10s, the default"). Clearing a field removes the key, so the default
-applies. Restart-only keys carry a "Restart" badge with the hint "Applies
-at the next start".
+("10s, the default"). The field-state rule of D4 decides what a save
+writes: an untouched field leaves its key as the file has it, and
+clearing a text field removes the key, so the default applies. Two keys
+have an empty value that differs from unset, `proxy.remote.ports` and
+`admin.listen`, so they get explicit choices instead of an empty field.
+Restart-only keys carry a "Restart" badge with the hint "Applies at the
+next start".
 
 - **Proxy**: Listeners (list input, Restart); Default route for local
   clients (action control as in D3.4); Timeouts: connect, response, idle
@@ -320,7 +337,9 @@ at the next start".
   default list editor, attempt timeout, and demotion. The interface
   fields are collapsed, with a one-line summary, when no interface is
   defined.
-- **Remote clients**: Sources (CIDR list input), Ports, Default route for
+- **Remote clients**: Sources (CIDR list input); Ports as three choices,
+  "Default (80 and 443)", "These ports" with a list input, and "No ports
+  (remote clients refused)", which writes `ports = []`; Default route for
   remote clients (Direct is disabled unless "Allow direct" is on, with
   the reason), Allow direct with the [0003 D10][d3-10] consequence in one
   sentence, and the per-source limit. When every listener is loopback
@@ -328,9 +347,11 @@ at the next start".
   every listener is a loopback address. Add a listener on a private link
   address on the Proxy page, then allow its sources here."
 - **General**: Instance name, with the note that it appears in `Via` and
-  that the other instances of a chain see it; Admin listener (Restart),
-  where an empty value disables the admin UI and the review then warns
-  "After the next start this page is no longer served"; Statistics
+  that the other instances of a chain see it; Admin listener (Restart)
+  as three choices, "Default (127.0.0.1:3129)", "On at" with an `IP:port`
+  field, and "Disabled", which writes `admin.listen = ""` and whose
+  review warns "After the next start this page is no longer served";
+  Statistics
   retention and hosts per hour; Log level as a segmented control.
 
 #### D3.8 The interface list editor
@@ -364,6 +385,10 @@ The M2 settings page, restyled, with two additions:
   and "Restore", which opens
   the review with the `.bak` content as the candidate. Applying it writes
   the current file to `.bak`, so a restore can itself be undone.
+
+Both stay usable when the file on disk has errors (D3.13), as the M2 page
+does ([0005 D10][d5-10]); they are how the operator fixes such a file
+from the UI (D7).
 
 #### D3.11 Review
 
@@ -401,9 +426,10 @@ shows:
 - **Match**: a choice between the exact host and each parent domain down
   to two labels, for example `cdn.video.example.com` (this host only),
   `video.example.com` and its subdomains, `example.com` and its
-  subdomains. The default is the parent domain one label up when the host
-  has three or more labels, else the host. An IP literal offers its `/32`
-  or `/128`.
+  subdomains. The default is the exact host. cuttle has no list of
+  public suffixes, so it cannot tell a parent such as `co.uk` or
+  `github.io` from a registrable domain; the operator picks a parent
+  knowingly. An IP literal offers its `/32` or `/128`.
 - **Route**: Direct, an upstream, or Block. None is preselected, and the
   host's current route is disabled.
 - **Where**: "New rule, first in the chain" (default) or "Add to rule
@@ -425,7 +451,7 @@ changes, and Apply changes. The match and the place have defaults.
 | Conflict | Review and apply | D7 |
 | Restart required | Shell banner, review, toast | The keys, and the command `brew services restart cuttle` |
 | Reload failed | Toast and shell banner | The validator's messages; the running configuration stays |
-| File has errors | Every configuration page | A banner with the errors and links to Advanced and, when valid, to restoring the previous version. Forms are read-only and show the running configuration; review and apply are refused with `409` |
+| File has errors | Every configuration page | A banner with the errors and links to Advanced and, when the previous version is valid, to restoring it. Form pages are read-only and show the running configuration, and every draft intent of a form op answers `409` (D7). Advanced and restore stay usable, so the operator can fix the file from the UI |
 | File differs from running | Shell banner | "The file changed since cuttle loaded it" with "Reload now", which runs the [0004 D6][d4-6] reload |
 | Statistics unavailable | Traffic pages, traffic columns | Traffic pages show the reason once; configuration pages hide traffic columns and show "Statistics unavailable" in one muted line |
 | Admin listener disabled next start | Review, General | A warning in the review before applying |
@@ -435,33 +461,52 @@ changes, and Apply changes. The match and the place have defaults.
 Every key of [0004 D3][d4-3] has exactly one form field. The T0 test
 `TestFormCoverage` (W17, W22) compares this table with the schema.
 
-| Key | Page | Control |
-| --- | --- | --- |
-| `name` | General | Text |
-| `proxy.listen` | Proxy | List input of `IP:port`, Restart |
-| `proxy.default` | Proxy | Action control |
-| `proxy.connect_timeout`, `response_timeout`, `idle_timeout` | Proxy | Duration text |
-| `proxy.max_connections` | Proxy | Integer |
-| `proxy.interfaces` | Proxy | Interface list editor |
-| `proxy.interface_attempt_timeout`, `interface_demotion` | Proxy | Duration text |
-| `proxy.remote.sources` | Remote clients | List input of CIDRs |
-| `proxy.remote.ports` | Remote clients | List input of integers |
-| `proxy.remote.default` | Remote clients | Action control |
-| `proxy.remote.allow_direct` | Remote clients | Checkbox |
-| `proxy.remote.max_connections_per_source` | Remote clients | Integer |
-| `[[interface]]` `name`, `note`, `mac`, `device`, `kind` | Interfaces | Text, text, text, text, select |
-| `[[upstream]]` `name`, `note`, `address` | Upstreams | Text |
-| `[[upstream]]` `disclosure` | Upstreams | Radio cards, no default |
-| `[[upstream]]` timeouts | Upstreams | Duration text |
-| `[[upstream]]` `interfaces` | Upstreams | Interface list editor |
-| `[[rule]]` `name`, `note` | Rules | Text |
-| `[[rule]]` `hosts`, `domains`, `cidrs`, `ports` | Rules | List inputs |
-| `[[rule]]` `action` | Rules | Action control |
-| `[[rule]]` `allow_loopback`, `allow_private` | Rules | Checkboxes |
-| `[[rule]]` `interfaces` | Rules | Interface list editor |
-| `admin.listen` | General | Text, Restart |
-| `stats.retention_days`, `max_hosts_per_hour` | General | Integer |
-| `log.level` | General | Segmented control |
+**Field-state rule.** Each field carries, in a hidden input, the value
+it was rendered with. A set key renders its value; an unset key renders
+its default, as an empty text field with the default as placeholder, or
+as the default choice of a checkbox, segmented control, or explicit
+choice. On a save:
+
+- a field posted with its rendered value leaves its key as the current
+  file has it, set or unset, so untouched checkboxes and segmented
+  controls never turn an unset key into an explicit default, and a key
+  that another writer changed meanwhile keeps that change (D7);
+- a changed field sets its key to the posted value;
+- a text field or list input that the operator emptied removes its key,
+  and so does a checkbox cleared to `false`, since every boolean key
+  defaults to `false`;
+- the explicit choices of `proxy.remote.ports` and `admin.listen` map as
+  the table says.
+
+The last column says what an empty, cleared, or unset field means.
+
+| Key | Page | Control | Empty, cleared, unset |
+| --- | --- | --- | --- |
+| `name` | General | Text | Required; empty gets the validator's "required" |
+| `proxy.listen` | Proxy | List input of `IP:port`, Restart | Unset is `["127.0.0.1:3128"]`; `[]` is an error, so an emptied list unsets |
+| `proxy.default` | Proxy | Action control | Required; the control always has a value |
+| `proxy.connect_timeout`, `response_timeout`, `idle_timeout` | Proxy | Duration text | Cleared unsets (10s, 60s, 1h); a typed `"0s"` keeps idle tunnels open |
+| `proxy.max_connections` | Proxy | Integer | Cleared unsets (1024) |
+| `proxy.interfaces` | Proxy | Interface list editor | `[]` and unset both mean system routing; an emptied list unsets |
+| `proxy.interface_attempt_timeout`, `interface_demotion` | Proxy | Duration text | Cleared unsets (3s, 30s); a typed `"0s"` disables demotion |
+| `proxy.remote.sources` | Remote clients | List input of CIDRs | `[]` and unset both mean no remote source; an emptied list unsets |
+| `proxy.remote.ports` | Remote clients | Three choices: Default, These ports (list input), No ports | Default unsets (80 and 443); No ports writes `[]`, which refuses remote clients on every port; These ports with an empty list is a form error, "List at least one port, or choose No ports" |
+| `proxy.remote.default` | Remote clients | Action control | Unset is `block`; untouched stays unset |
+| `proxy.remote.allow_direct` | Remote clients | Checkbox | Unset is `false`; cleared unsets |
+| `proxy.remote.max_connections_per_source` | Remote clients | Integer | Cleared unsets (128) |
+| `[[interface]]` `name`, `note`, `mac`, `device`, `kind` | Interfaces | Text, text, identity choice with two text fields, select | `name` required; the identity choice decides which of `mac` and `device` are set; `kind` "No guard" unsets; a cleared note unsets |
+| `[[upstream]]` `name`, `note`, `address` | Upstreams | Text | `name` and `address` required; a cleared note unsets |
+| `[[upstream]]` `disclosure` | Upstreams | Radio cards, no default | Required; no choice gets the validator's "required" |
+| `[[upstream]]` timeouts | Upstreams | Duration text | Cleared unsets (10s, 60s, 5s); a typed `"0s"` disables the hold |
+| `[[upstream]]` `interfaces` | Upstreams | Interface list editor | "System routing" unsets; "Only these" with an empty list gets the validator's empty-list error |
+| `[[rule]]` `name`, `note` | Rules | Text | `name` required and always written (D6); a cleared note unsets |
+| `[[rule]]` `hosts`, `domains`, `cidrs`, `ports` | Rules | List inputs | An emptied list unsets, because the validator refuses `[]`, which would widen the rule |
+| `[[rule]]` `action` | Rules | Action control | Required |
+| `[[rule]]` `allow_loopback`, `allow_private` | Rules | Checkboxes | Unset is `false`; cleared unsets |
+| `[[rule]]` `interfaces` | Rules | Interface list editor | "Use the default list" unsets; "Only these" with an empty list gets the validator's empty-list error |
+| `admin.listen` | General | Three choices: Default, On at (text), Disabled; Restart | Default unsets (127.0.0.1:3129); Disabled writes `""`, which disables the admin UI; On at with an empty field is a form error, "Enter an IP:port, or choose Default or Disabled" |
+| `stats.retention_days`, `max_hosts_per_hour` | General | Integer | Cleared unsets (30, 1000) |
+| `log.level` | General | Segmented control | Unset is `info`; untouched stays unset |
 
 Durations stay text, because the schema's Go duration syntax (`"1m30s"`)
 is what the hint shows and what the validator reads.
@@ -529,8 +574,8 @@ explicitly, so that a later reorder does not rename it.
   right after `name`. Only keys that the model sets are written; a table
   with no set key is left out.
 - Strings as TOML basic strings: `"` and `\` escaped, control characters
-  as `\b`, `\t`, `\n`, `\f`, `\r`, or `\uXXXX`, other characters as
-  UTF-8. No literal or multi-line strings, no inline tables, no dotted
+  (U+0000–U+001F and U+007F, which TOML forbids raw in basic strings) as
+  `\b`, `\t`, `\n`, `\f`, `\r`, or `\uXXXX`, other characters as UTF-8. No literal or multi-line strings, no inline tables, no dotted
   keys.
 - Integers in decimal without separators; booleans as `true` and
   `false`.
@@ -550,8 +595,8 @@ or group is present:
 ```toml
 # cuttle configuration. The admin UI writes this file in this form and
 # replaces comments with these generated ones; the previous version is
-# kept as config.toml.bak. Check hand edits with `cuttle check` and apply
-# them with `cuttle reload`.
+# kept beside it with a .bak suffix. Check hand edits with `cuttle check`
+# and apply them with `cuttle reload`.
 
 # Listeners and the route for requests that no rule matches.
 [proxy]
@@ -574,17 +619,21 @@ or group is present:
 [[rule]]
 ```
 
-The header names `.bak` with the configuration file's base name. No
-comment holds a time, a host name, or anything else that changes from
+The header names no path or file name, so it reads the same for every
+configuration path. No comment holds a time, a host name, or anything else that changes from
 save to save, so writing the same model twice gives the same bytes.
 
 **`note`**, a new optional key of `[[rule]]`, `[[upstream]]`, and
-`[[interface]]`: a string of at most 120 characters with no control
-characters, shown in lists and editors and never in logs, status, or
-statistics. The validator rejects a longer note or one with a control
+`[[interface]]`, added by the user's decision of 2026-11-26: a string of
+at most 120 characters, counted as Unicode code points (so at most 480
+bytes of UTF-8), with no control characters (U+0000–U+001F and U+007F),
+shown in lists and editors and never in logs, status, or statistics. The validator rejects a longer note or one with a control
 character, and its message does not repeat the value. It applies on
 reload and changes no behavior; a changed note alone keeps an upstream's
-transport (the comparison of [0004 D6][d4-6] step 3 ignores it).
+transport (the comparison of [0004 D6][d4-6] step 3 ignores it). A
+binary older than the one that adds `note`, such as v0.1.0, refuses a
+file with a note as an unknown key, so the release notes of the version
+that adds it say so for operators who downgrade.
 
 **Unknown and deprecated keys.** The validator refuses unknown keys, so a
 `Doc` never meets one, and a file with one cannot be edited in a form
@@ -628,8 +677,8 @@ and passes `http.CrossOriginProtection` ([0005 D8][d5-8]).
 A path name in `{name}` must match its schema pattern; another value gets
 `404`.
 
-**Edits.** Each form posts the whole state of what it edits, the `op`
-that names the edit, the file's `base` (SHA-256 of the file the page was
+**Edits.** Each form posts the whole state of what it edits, with the
+rendered value of each field (D4), the `op` that names the edit, the file's `base` (SHA-256 of the file the page was
 rendered from), and for an existing entity `orig`, the SHA-256 of that
 entity's canonical text at render time. The ops:
 
@@ -653,21 +702,36 @@ entity's canonical text at render time. The ops:
 - `test` runs Test a URL against the candidate (D8);
 - `review` validates and, when there is no error, renders the review.
 
-Every intent runs the same steps:
+Every intent runs the same steps. The `text` and `restore` ops skip the
+steps marked *form ops*: their candidate is text, so no `Doc` is built,
+and their review shows the plain-text diff.
 
-1. Read the file. If it is unreadable or invalid, answer `409` with the
-   D3.13 "file has errors" state.
-2. Build the `Doc` and apply the op. An op whose target no longer exists
-   (`rule.save` of a rule deleted elsewhere, `rules.order` whose names no
-   longer match the rules) answers `409` with the form kept and "Rule
-   `x` no longer exists; it was changed outside this page", and a link
-   that reloads the page.
-3. Parse integer fields. A value that is not an integer becomes an issue
-   with the validator's key path and wording ("must be an integer"),
-   without a write or a call to the validator.
-4. Encode the candidate and run `config.Parse` on it. That report is the
-   only judgment.
-5. Map each issue to the form (below) and render.
+1. Read the file. If it cannot be read, answer `409` with the read error
+   for every op, as the Advanced page shows it. If it is invalid, a form
+   op answers `409` with the D3.13 "file has errors" state, because a form
+   edit needs a `Doc` of the current file; `text` and `restore` go on,
+   since they are how the operator replaces an invalid file.
+2. *Form ops:* build the `Doc` and apply the op. An op whose target no
+   longer exists (`rule.save` of a rule deleted elsewhere, `rules.order`
+   whose names no longer match the rules) answers `409` with the form
+   kept and "Rule `x` no longer exists; it was changed outside this
+   page", and a link that reloads the page.
+3. *Form ops:* apply the D4 field-state rule, and parse integer fields
+   and the two explicit choices of D4. A value that is not an integer, or
+   an explicit choice without its value, becomes an issue with the
+   validator's key path and wording ("must be an integer"), without a
+   write or a call to the validator.
+4. Build the candidate, `Encode` of the edited `Doc` for a form op, the
+   posted text with CRLF turned into LF for `text`, or the `.bak` content
+   for `restore`, and run `config.Parse` on it. That report is the only
+   judgment.
+5. Map each issue to the form (below), or, for `text` and `restore`, list
+   the issues with their lines as the Advanced page does, and render.
+
+Nothing on the draft or apply path refuses a candidate because the
+current file is invalid: `POST /config/apply` and `POST /settings` check
+only the size limit, the candidate's validity, and `base`
+([0005 D10][d5-10]).
 
 **Key paths to fields.** The candidate is canonical, so `rule[n]` is the
 `n`-th rule of the `Doc`, which the page knows by name. An issue key is
@@ -686,8 +750,9 @@ stale copy, and the review always compares against the current file.
 | Situation | Behavior |
 | --- | --- |
 | `base` equals the current file | Normal review |
-| `base` differs, and the edited entity's canonical text still has the digest `orig` (or the op edits a page of settings whose keys did not change) | The review shows the notice "The file changed after you opened this page. The changes below are yours; the other change stays." |
-| `base` differs, and the edited entity changed too | The review shows the warning "`restricted` was also changed elsewhere. Applying replaces that change with yours; the diff shows what is lost." |
+| `base` differs, and the edited entity's canonical text still has the digest `orig`, or, on a settings page, every changed field's key still has the value the field was rendered with | The review shows the notice "The file changed after you opened this page. The changes below are yours; the other change stays." Untouched fields keep the other change (D4) |
+| `base` differs, and the edited entity, or the key of a changed field, changed too | The review shows the warning "`restricted` was also changed elsewhere. Applying replaces that change with yours; the diff shows what is lost." |
+| `text` or `restore`, and `base` differs | The review shows the warning "The file changed after you opened this page. Applying replaces that change with this text; the diff shows what is lost." |
 | The edited entity no longer exists | `409` at the draft step (step 2) |
 | The file changes between review and apply | `POST /config/apply` answers `409` as `/settings` does, and shows a "Review again" button that rebuilds the review from the posted fields |
 
@@ -697,7 +762,9 @@ reviewed), `base` (the digest of the file the review compared against),
 `POST /settings` share one function that runs the [0005 D10][d5-10]
 steps: size limit, validation, `WriteAtomic` with `ExpectSHA256` and the
 backup, and reload, under the settings mutex, one save at a time. It
-logs `admin settings saved` with the digest and the `op`. On success it
+first turns CRLF line ends into LF, as `submitted()` does for
+`/settings` today, because the review's hidden `text` field arrives with
+CRLF. It logs `admin settings saved` with the digest and the `op`. On success it
 answers `303` to `return`, and the next page shows a toast:
 
 - "Saved and reloaded." with the change summary's first line;
@@ -711,15 +778,23 @@ The toast's text is a one-time flash stored in the session, consumed by
 the next page that renders it. Success toasts close after 8 s with the
 script; failure toasts stay until closed. `return` must be one of the
 configuration or traffic page paths with an optional query that
-re-encodes cleanly; anything else gets `400`.
+re-encodes cleanly; anything else gets `400`. An edit that renamed or
+deleted the entity of an editor path, such as a rename started at
+`/rules/{old}`, returns to that entity's list (`/rules`, `/upstreams`,
+or `/interfaces`) instead.
 
 This stage also settles [OI-0006][oi-6] U-R1: a directory sync that fails
 after the rename counts as saved; the write logs a warning, the reload
 runs, and the toast says "Saved; the directory could not be synced".
 
-**Restart required at review.** The review compares the candidate with
-the running configuration through `config.RestartRequired` and lists the
-keys that would need a restart, before the operator applies.
+**Restart required at review.** The review compares the candidate,
+through `config.RestartRequired`, with the configuration the instance
+started with, as the reload already does for `restart_required`
+([0004 D6][d4-6] step 5; `startCfg` in `cmd/cuttle/serve.go`), and lists
+the keys that would need a restart before the operator applies.
+`Backend` gains `StartConfig() *config.Config` for it. A comparison with
+the running configuration would miss a key that an earlier save already
+changed and would list a key changed back to its start value.
 
 **Change summary.** `config.Summarize(old, new *Doc, hint)` compares two
 models: rules, upstreams, and interfaces by name (added, removed, keys
@@ -731,6 +806,11 @@ address changed". When the current file is not canonical
 (`Encode(DocOf(file))` differs from the file), the review adds the
 notice "This save rewrites the file in canonical form: N comment lines
 and M end-of-line comments written by hand are removed."
+For `text` and `restore`, which build no `Doc`, the summary is one line,
+"Edited as text: N lines added, M removed" or "Restores the previous
+version saved at <time>", and when the current file is invalid the
+review adds the notice "The current file has errors; applying replaces
+it."
 
 **Diff.** `internal/textdiff` computes a Myers line diff of the current
 file and the candidate and returns hunks with three lines of context.
@@ -741,12 +821,13 @@ Both inputs are at most 256 KiB, so the cost is bounded.
 - The target parsing and the decision of `cuttle explain` move from
   `cmd/cuttle` into `config.Explain(cfg *Config, target string, source
   policy.SourceClass) (Explanation, error)`. `cuttle explain` prints the
-  explanation as it does now, and the admin renders the same fields: the
-  normalized target, kind, and source; the rule with its position, or
-  `default`, `remote-default`, `port`, or `remote-direct` with its
-  reason; the route with the upstream's address and disclosure mode or
-  the direct flags; and the interface list in force with its source
-  ([0008 D15][d8-15]).
+  explanation as it does now, plus the `address` line below, and the
+  admin renders the same fields: the normalized target, kind, and
+  source; the rule with its position, or `default`, `remote-default`,
+  `port`, or `remote-direct` with its reason; the route with the
+  upstream's address and disclosure mode or the direct flags; the
+  interface list in force with its source ([0008 D15][d8-15]); and the
+  address verdict for literals.
 - Inputs: `http://…` is a plain-HTTP request; `https://…` a tunnel to its
   port, 443 by default; `host:port` a tunnel; a bare host is read as
   `https://host`, and the result says so. Anything `cuttle explain`
@@ -754,6 +835,19 @@ Both inputs are at most 256 KiB, so the cost is bounded.
 - On the rules page the test uses the file's configuration; in an editor
   it uses the candidate. A candidate with errors gives "Fix the errors to
   test this draft" instead of a result.
+- **Literal addresses.** When the route is `direct` and the target is an
+  IP literal, `config.Explain` classifies the address with the
+  [0003 D11][d3-11] table, as the dial would, and adds an `address` line:
+  `unusable` addresses (link-local, multicast, and the rest) are refused
+  for every client; `loopback` needs the matched rule's `allow_loopback`;
+  a remote client with `allow_direct` reaches only `public` addresses. A
+  refused literal reads "refused: <class> address, 502
+  destination_ip_prohibited" ([0002 D6][d2-6]), so
+  `http://169.254.169.254/` no longer looks like an allowed direct
+  route. The check needs no DNS. It does not know this Mac's own
+  addresses (`self`), because `cuttle explain` reads only the file, and
+  for a name on a direct route the line says that the addresses are
+  checked after resolution. `cuttle explain` prints the same line.
 - The result also adds the upstream's live state, so "upstream gateway,
   down for 42 s" warns that a matching request fails now. It never
   resolves the name and never connects, as `cuttle explain` does not.
@@ -931,14 +1025,15 @@ image file is fetched. The prototype shows each one.
   statistics and live tunnels, which web content can choose), from the
   interface table, and from validator messages (which repeat the
   operator's text) reaches the page through `html/template`'s contextual
-  escaping, in pages and fragments alike. Prefilled hosts from a query
-  string are re-validated as hosts before they fill a field; another
-  value fills nothing. The script inserts only parsed fragments (D10).
+  escaping, in pages and fragments alike. Prefills from a query string
+  are re-validated before they fill a field: `?host=` as a host name or
+  IP literal, and `?device=` as a BSD name (`^[a-z]+[0-9]+$`, at most 15
+  bytes) that the detected table holds; another value fills nothing. The script inserts only parsed fragments (D10).
   Long values wrap and never widen the page.
 - **Password change** (`POST /account/password`): fields `current`,
   `new`, and `confirm`.
   - It shares `loginMu`, the backoff, and the failure count of
-    [0005 D8][d5-8] with the login: during a backoff wait it answers `429`
+    [0005 D8][d5-8] with the login, as the user decided on 2026-11-26: during a backoff wait it answers `429`
     with `Retry-After` and runs no Argon2id; a wrong current password
     answers `401` with "Invalid password." and counts as a failed login.
     So the form is no faster a guessing oracle than the login.
@@ -948,7 +1043,8 @@ image file is fetched. The prototype shows each one.
     with `WritePasswordFile` (atomic, mode 0600). The digest change ends
     every session ([0005 D7][d5-7]); the server then starts a new session
     for this browser, with a new ID and CSRF token, and shows "Password
-    changed. Other sessions were signed out." It logs
+    changed. Other sessions were signed out." A success resets the
+    shared failure count, as a successful login does. It logs
     `admin password changed` without either password.
   - Without a usable password file, login is disabled and the page cannot
     be reached, so the first password still comes only from
@@ -957,9 +1053,11 @@ image file is fetched. The prototype shows each one.
   one.
 - **The previous version.** `/settings/backup` and `restore` read
   `<config>.bak` beside the resolved target, the path that
-  [0004 D7][d4-7] writes. They offer it only when `Lstat` shows a regular
-  file (not a link), owned by this user, not writable by group or others,
-  and at most 256 KiB; otherwise the page says why. The restored content
+  [0004 D7][d4-7] writes. They open it with `O_NOFOLLOW`, so a link is
+  refused, check the open descriptor with `Fstat` (a regular file, owned
+  by this user, not writable by group or others, at most 256 KiB), and
+  read from that same descriptor, so nothing can be swapped in between
+  the check and the read; otherwise the page says why. The restored content
   goes through the same validation, review, and apply. The diff and the
   `.bak` view show only text that the `/settings` editor of the same
   session already shows: the current file and the file that the previous
@@ -983,10 +1081,10 @@ image file is fetched. The prototype shows each one.
 
 | Package or file | Change |
 | --- | --- |
-| `internal/config` | `doc.go` (`Doc`, `DocOf`), `encode.go` (writer and comments), `edit.go` (ops), `summary.go` (change summary), `explain.go` (moved from `cmd/cuttle`), `note` in the validator, the U-R1 fix in `atomic.go` |
+| `internal/config` | `doc.go` (`Doc`, `DocOf`), `encode.go` (writer and comments), `edit.go` (ops), `summary.go` (change summary), `explain.go` (moved from `cmd/cuttle`, with the literal-address check through `netx.Classify`), `note` in the validator, the U-R1 fix in `atomic.go` |
 | `internal/textdiff` | Myers line diff and hunks |
 | `internal/stats` | `RuleTotals`, `Filter.Rule` |
-| `internal/admin` | `config.go` (draft and apply), `forms.go` (form ↔ `Doc` and issue mapping), one file per page group, flash in the session, `Backend.Interfaces() ([]iface.Link, error)` read through the instance's `iface.Source` |
+| `internal/admin` | `config.go` (draft and apply), `forms.go` (form ↔ `Doc` and issue mapping), one file per page group, flash in the session, `Backend.Interfaces() ([]iface.Link, error)` read through the instance's `iface.Source`, `Backend.StartConfig() *config.Config` for restart-required keys |
 | `internal/admin/templates` | New layout and pages; fragments as named blocks |
 | `internal/admin/static` | `admin.css` rewritten on the D11 tokens; `admin.js` |
 | `cmd/cuttle` | `explain` uses `config.Explain`; `TestAdminChrome` extended |
@@ -1007,16 +1105,16 @@ unless marked otherwise. "Review" means `POST /config/draft` with
 | --- | --- | --- |
 | W1 | Same configuration: for every valid file in `internal/config/testdata`, the starter file, and a fuzz corpus seeded with them, `Parse(Encode(DocOf(f)))` equals `Parse(f)` apart from `SHA256`. | T0 `TestCanonicalRoundTrip`, `FuzzCanonical` |
 | W2 | Canonical fixed point and model fidelity hold for the same inputs; a golden test fixes the order, the formatting, the 80-column array rule, and the generated comments of D6. | T0 `TestCanonicalFixedPoint`, `TestCanonicalGolden` |
-| W3 | Strings with `"`, `\`, tab, and non-ASCII characters survive the round trip; a `note` over 120 characters or with a control character is an error whose message does not contain the value; a note change keeps an upstream's transport on reload. | T0 `TestCanonicalEscaping`, `TestNoteValidation`; T1 `TestReloadNoteOnly` |
+| W3 | Strings with `"`, `\`, tab, U+007F, and non-ASCII characters survive the round trip, and U+007F is written escaped; a `note` of 120 non-ASCII characters is accepted, and one of 121 characters or with a control character is an error whose message does not contain the value; a note change keeps an upstream's transport on reload. | T0 `TestCanonicalEscaping`, `TestNoteValidation`; T1 `TestReloadNoteOnly` |
 | W4 | Each op of D7 gives the expected `Doc`: insert at first, before, and last; replace; delete; reorder; upstream and interface renames rewrite every reference; deleting a used upstream or interface is refused with its users; `rules.order` with a missing or repeated name is refused. | T0 `TestDocEdits` |
-| W5 | Every key-path form the validator emits maps to its form, field, and entry, and issues of other entities go to the summary list. | T0 `TestIssueFieldMap` |
-| W6 | Review of a valid edit answers `200` with the change summary and a diff whose hunks rebuild the candidate from the file; the file and `.bak` are unchanged afterwards. An invalid edit answers `422` with each error inside its field's element, and the file is unchanged. A non-integer port answers `422` without running the validator. | T1 `TestAdminDraftReview`; T0 `TestTextDiff` |
-| W7 | Apply writes the reviewed text (mode 0600, `.bak` holding the previous content), reloads, and answers `303` to `return`; the next page shows the toast with the reload result; an open tunnel survives; a `proxy.listen` change shows restart required in the review, the toast, and the banner. A `return` outside the page list gets `400`. | T1 `TestAdminApply` |
+| W5 | Every key-path form the validator emits maps to its form, field, and entry, and issues of other entities go to the summary list. The D4 field-state rule holds for each control kind: a field posted with its rendered value keeps its key set or unset, also when another writer changed that key; a changed field sets it; an emptied text field, list, or cleared checkbox unsets it. | T0 `TestIssueFieldMap`, `TestFieldState` |
+| W6 | Review of a valid edit answers `200` with the change summary and a diff whose hunks rebuild the candidate from the file; the file and `.bak` are unchanged afterwards. An invalid edit answers `422` with each error inside its field's element, and the file is unchanged. A non-integer port answers `422` without running the validator. A `text` review shows the plain-text diff and the one-line summary. | T1 `TestAdminDraftReview`; T0 `TestTextDiff` |
+| W7 | Apply writes the reviewed text (mode 0600, `.bak` holding the previous content), reloads, and answers `303` to `return`; the next page shows the toast with the reload result; an open tunnel survives; a `proxy.listen` change shows restart required in the review, the toast, and the banner, and after that save a review that changes `proxy.listen` back to its start value lists no restart key. A reviewed `text` posted with CRLF line ends is written with LF. A `return` outside the page list gets `400`. | T1 `TestAdminApply` |
 | W8 | Concurrency: each row of the D7 table, including `409` at apply after the file changed between review and apply, which leaves the file unchanged. | T1 `TestAdminDraftConflict` |
 | W9 | A file with hand comments gives a review whose summary counts the removed comment lines; after apply the file equals `Encode(DocOf(file))` with the edit. | T1 `TestAdminDraftReview` |
-| W10 | With an invalid file on disk, configuration pages are read-only with the errors banner, and draft and apply answer `409`; a file that differs from the running configuration shows the banner, and `POST /config/reload` reloads it. | T1 `TestAdminInvalidFile`, `TestAdminReloadButton` |
+| W10 | With an invalid file on disk, form pages are read-only with the errors banner, and every draft intent of a form op answers `409` and leaves the file unchanged. The same invalid file is fixed from the UI in three ways, each leaving the file valid, reloaded, and the banner gone: Advanced → review → apply with valid text; restore of a valid `.bak` → review → apply; and `POST /settings` with valid text, as A9. A file that differs from the running configuration shows its banner, and `POST /config/reload` reloads it. | T1 `TestAdminInvalidFile`, `TestAdminReloadButton` |
 | W11 | Every new `POST` without a session, without the CSRF token, or with `Sec-Fetch-Site: cross-site` gets `403`. The test enumerates the routes registered on the mux, so a new `POST` without the checks fails it. | T1 `TestAdminPostProtection` |
-| W12 | Advanced: the A9 behavior still holds; "Review changes" gives the review; `/settings/backup` shows the diff with the current file; restore goes through review and apply and leaves the replaced file in `.bak`; a `.bak` that is a link, group-writable, owned by another user, or over 256 KiB is not offered. | T1 `TestAdminSettings`, `TestAdminBackup` |
+| W12 | Advanced: the A9 behavior still holds; "Review changes" gives the review; `/settings/backup` shows the diff with the current file; restore goes through review and apply and leaves the replaced file in `.bak`; a `.bak` that is a link (refused by `O_NOFOLLOW`), group-writable, owned by another user, or over 256 KiB, as `Fstat` of the open descriptor reports, is not offered; a `text` or `restore` review after the file changed shows the replace warning. | T1 `TestAdminSettings`, `TestAdminBackup` |
 | W13 | Shell and markup: every session page has one `h1`, a skip link, `aria-current` on its navigation entry, and a label for every input, select, and textarea; the script is the only `<script>`, has a `src`, and the A7 headers are unchanged; text and UI tokens in `admin.css` meet the D11 contrast ratios in both appearances. | T1 `TestAdminMarkup`, `TestAdminHeaders`; T0 `TestContrastTokens` |
 | W14 | A directory sync that fails after the rename is reported as saved with the warning, and the reload runs (OI-0006 U-R1). | T0 `TestAtomicWriteDirSync`; T1 `TestAdminApply` |
 
@@ -1025,10 +1123,10 @@ unless marked otherwise. "Review" means `POST /config/draft` with
 | ID | Criterion | Check |
 | --- | --- | --- |
 | W15 | The rules page lists every rule in order with its action badge, patterns, ports, flags, warning badges, and 24-hour requests and bytes from `RuleTotals`, followed by the default row; `?q=` filters by name, note, pattern, and action; the empty state appears with no rules. | T1 `TestAdminRulesList`; T0 `TestStatsRuleTotals` |
-| W16 | Adding (at each position), editing, duplicating, deleting, and reordering rules through the forms, with and without the position-field fallback, produce the expected candidate text. | T1 `TestAdminRuleEdits` |
+| W16 | Adding (at each position), editing, duplicating, deleting, and reordering rules through the forms, with and without the position-field fallback, produce the expected candidate text; a rename or delete started at `/rules/{old}` returns to `/rules` after apply. | T1 `TestAdminRuleEdits` |
 | W17 | Every `[[rule]]` and `[[upstream]]` key, `note` included, has exactly one form field on the page D4 names. | T0 `TestFormCoverage` |
-| W18 | Test a URL: for a table of targets (`host:port`, `http://`, `https://` with and without a port, a bare host, IPv4 and IPv6 literals, a remote client on a closed port, remote `direct` without `allow_direct`, a rule interface list), `config.Explain` gives the fields that `cuttle explain` prints, and the rules page and the editor's test (against a draft that an earlier rule shadows) render them. | T0 `TestExplain`; T1 `TestAdminTestURL`; the existing `cuttle explain` tests pass unchanged |
-| W19 | Upstreams: the list shows the live state, usage, and traffic; add, edit, and delete work; a rename rewrites the actions and defaults that use it; a used upstream has no delete, and its delete op is refused; a new upstream has no disclosure preselected, and a review without one shows the validator's message under the field. | T1 `TestAdminUpstreams` |
+| W18 | Test a URL: for a table of targets (`host:port`, `http://`, `https://` with and without a port, a bare host, IPv4 and IPv6 literals, a remote client on a closed port, remote `direct` without `allow_direct`, a rule interface list, and the literal-address cases `http://169.254.169.254/`, `127.0.0.1:8080` under a direct rule without `allow_loopback`, and a remote client with `allow_direct` to `10.0.0.1:443`), `config.Explain` gives the fields that `cuttle explain` prints, the three literal cases read "refused" with their class, and the rules page and the editor's test (against a draft that an earlier rule shadows) render them. | T0 `TestExplain`; T1 `TestAdminTestURL`; the existing `cuttle explain` tests pass with the added `address` line |
+| W19 | Upstreams: the list shows the live state, usage, and traffic; add, edit, and delete work; a rename rewrites the actions and defaults that use it and returns to `/upstreams`; a used upstream has no delete, and its delete op is refused; a new upstream has no disclosure preselected, and a review without one shows the validator's message under the field. | T1 `TestAdminUpstreams` |
 
 ### M4.3 — Interfaces, proxy, remote clients, general settings, account
 
@@ -1036,15 +1134,15 @@ unless marked otherwise. "Review" means `POST /config/draft` with
 | --- | --- | --- |
 | W20 | With an injected interface table, the interfaces page lists the detected rows with their matches and the definitions with their states and users; "Define…" prefills the D3.6 identity (device and kind for Wi-Fi, the hardware address otherwise); a rename updates every list; a used definition has no delete; no log line written by these flows contains a MAC. | T1 `TestAdminInterfaces` |
 | W21 | The interface list editor adds, removes, and reorders entries for `proxy.interfaces`, a rule, and an upstream, with and without the script's controls, and "default list" and "system routing" unset the key. | T1 `TestAdminInterfaceLists` |
-| W22 | Proxy, remote-client, and general forms save each of their keys; clearing a field removes the key and the default applies; restart-only keys carry the badge; an empty `admin.listen` gives the review warning. `TestFormCoverage` now covers every key of the 0004 D3 schema. | T1 `TestAdminSettingsForms`; T0 `TestFormCoverage` |
-| W23 | Password change: a wrong current password gets `401` and counts toward the shared backoff; during a wait `429` with `Retry-After` and no Argon2id run; a short or unconfirmed new password gets `422` without hashing; success writes a 0600 Argon2id file, ends every other session, keeps this browser signed in with a new session ID and CSRF token, and logs no password. "Sign out other sessions" ends the others only. | T1 `TestAdminPasswordChange` |
+| W22 | Proxy, remote-client, and general forms save each of their keys; clearing a text field removes the key and the default applies; restart-only keys carry the badge. A file with `proxy.remote.ports = []` renders "No ports", and one with `admin.listen = ""` renders "Disabled"; saving their pages with another field changed keeps `ports = []` and `admin.listen = ""`. Choosing "Default" removes either key, "No ports" writes `ports = []`, "Disabled" writes `admin.listen = ""` and gives the review warning, and "These ports" or "On at" without a value gets the D4 form error. An unset `proxy.remote.default`, `allow_direct`, and `log.level` stay unset after a save of their pages that changes another field. `TestFormCoverage` now covers every key of the 0004 D3 schema. | T1 `TestAdminSettingsForms`; T0 `TestFormCoverage` |
+| W23 | Password change: a wrong current password gets `401` and counts toward the shared backoff; during a wait `429` with `Retry-After` and no Argon2id run; a short or unconfirmed new password gets `422` without hashing; success writes a 0600 Argon2id file, resets the shared failure count, ends every other session, keeps this browser signed in with a new session ID and CSRF token, and logs no password. "Sign out other sessions" ends the others only. | T1 `TestAdminPasswordChange` |
 
 ### M4.4 — Dashboard integration and browser check
 
 | ID | Criterion | Check |
 | --- | --- | --- |
 | W24 | The overview shows the route sentence and stacked bar from the route totals, and the configuration summary; with statistics unavailable it shows the reason instead. | T1 `TestAdminPages` |
-| W25 | "Route…" on the overview, domains, and live pages opens the prefilled rule form with the D3.12 match choices (host, each parent down to two labels, `/32` or `/128` for literals) and the current decision; a host that is not a valid name fills nothing; "Add to rule" lists only rules with the same action and no ports; `/domains?rule=` filters by rule. | T1 `TestAdminRouteHost` |
+| W25 | "Route…" on the overview, domains, and live pages opens the prefilled rule form with the D3.12 match choices (host, each parent down to two labels, `/32` or `/128` for literals), the exact host preselected for `cdn.video.example.com` and for `user.github.io`, and the current decision; a host that is not a valid name fills nothing; "Add to rule" lists only rules with the same action and no ports; `/domains?rule=` filters by rule. | T1 `TestAdminRouteHost` |
 | W26 | Headless Chrome, as in A10, with the script: log in; add a rule by pasting three domains into the list input; see the live check flag an invalid entry; see the live test shadowed by an earlier rule; reorder two rules by keyboard and review once; apply and see the toast; add an upstream; define an interface from the detected table; change the password and stay signed in; route a host from the domains page in four activations. Every page renders at 390 px wide without horizontal scrolling, in light and dark appearance, with no console error and no CSP violation report. No window opens. | T2 `scripts/admin-check` runs `TestAdminChrome` |
 
 M4 closes with W1–W26 on one candidate tree, the T0 and T1 gates, the T2
@@ -1057,29 +1155,33 @@ One producer per task; each task opens its own `TASK-NNNN`.
 | Task | Stage | Scope | Criteria | Gates |
 | --- | --- | --- | --- | --- |
 | A | M4.1 | `config.Doc`, writer, ops, summary, `note`, U-R1 | W1–W4, W14 | T0 |
-| B | M4.1 | Shell and visual system (`admin.css`, layout, icons), `admin.js` core (fragments, dialogs, toasts, unsaved guard, list input), draft and apply, `internal/textdiff`, review, flash, banners, Advanced with backup restore, issue mapping | W5–W13 | T0, T1 |
+| B1 | M4.1 | Save pipeline: draft and apply, the field-state rule and issue mapping, `internal/textdiff`, review, flash, banners, `Backend.StartConfig()`, Advanced with backup restore | W5–W12 | T0, T1 |
+| B2 | M4.1 | Shell and visual system (`admin.css`, layout, icons), `admin.js` core (fragments, dialogs, toasts, unsaved guard, list input) | W13 | T0, T1 |
 | C | M4.2 | Rules and upstreams pages, `config.Explain`, Test a URL, reordering, `RuleTotals`, `Filter.Rule` | W15–W19 | T0, T1 |
 | D | M4.3 | Interfaces with the detected table, the interface list editor, Proxy, Remote clients, General, Account | W20–W23 | T0, T1 |
 | E | M4.4 | Overview changes, Route a host, domains rule filter, the extended `TestAdminChrome` | W24–W26 | T0, T1, T2 |
 
-A comes first. B depends on A. C and D depend on B and touch disjoint
-pages; they can run in parallel in separate worktrees, with
-`templates/layout.html`, `admin.css`, and `admin.js` owned by B and
-changed in C or D only by adding page-specific blocks. E depends on C.
-The tester runs W26 at milestone close.
+A and B2 can start at once: B2 needs no part of A. B1 depends on A, for
+the `Doc`, and on B2, whose components its review and banners use. C and
+D depend on B1 and B2 and touch disjoint pages; they can run in parallel
+in separate worktrees, with `templates/layout.html`, `admin.css`, and
+`admin.js` owned by B2 and changed in C or D only by adding
+page-specific blocks. E depends on C and D, because W26 also defines an
+interface and changes the password. The tester runs W26 at milestone
+close.
 
 ## Changes to other records
 
 | Record | Change |
 | --- | --- |
 | [0004 D1][d4-1] | "cuttle never encodes TOML" becomes: the admin forms write the canonical form of this record's D6; the text editor still writes the operator's text as written. |
-| [0004 D3][d4-3] | Adds the optional `note` key to `[[rule]]`, `[[upstream]]`, and `[[interface]]` (D6). |
+| [0004 D3][d4-3] | Adds the optional `note` key to `[[rule]]`, `[[upstream]]`, and `[[interface]]` (D6); binaries before it refuse a file with notes. |
 | [0004 alternatives][d4-alt], [0005 alternatives][d5-alt] | The rejected "forms that rewrite the file" is now chosen by the user (2026-11-26); comments are replaced by generated ones and notes. |
 | [0005 D5][d5-5] | "need no JavaScript" becomes: one same-origin script enhances the pages, which work without it (D10). |
 | [0005 D6][d5-6] | `cuttle admin passwd` remains the only way to set the first password; a signed-in operator can change it with the current password (D12). |
 | [0005 D9][d5-9] | The page table gains the D7 routes; "there is no JSON API" still holds, since fragments are HTML; `/domains` gains the `rule` filter. |
 | [0005 D10][d5-10] | `/settings` gains Review changes and the previous version; `POST /settings` shares its save function with `POST /config/apply`. |
-| [0006 D3][d6-3] | `cuttle explain` uses `config.Explain`; its output does not change. |
+| [0006 D3][d6-3] | `cuttle explain` uses `config.Explain` and gains the `address` line of D8 for IP-literal targets of direct routes; its other lines do not change. |
 | [0007 D7][d7-7] | `scripts/admin-check` covers W26. |
 | [0008 D6][d8-6], [D15][d8-15] | MACs and interface-table addresses also appear on the admin interfaces page and in the configuration views (editor, review, `.bak` diff), which settles the wording of [OI-0006][oi-6] U-R2; validator messages, summaries, status, logs, counters, and statistics still never show a MAC. |
 
@@ -1113,16 +1215,8 @@ producer of that stage, so each record matches the code it describes.
   the editor show the file with the full address anyway, so masking one
   view would protect nothing.
 
-## Questions for the user
-
-- The `note` key (D6) adds one optional key to three tables so that rule
-  descriptions survive form saves. Without it, form saves leave no place
-  for annotations.
-- A failed current password on the Account page counts toward the login
-  backoff (D12), so repeated mistakes there can delay the next login by
-  up to 300 s.
-
 [rm-m4]: ../ROADMAP.md#m4--full-configuration-in-the-web-admin
+[d2-6]: 0002-proxy-core-and-routing.md#d6-responses-generated-by-cuttle
 [d3-1]: 0003-upstream-chaining-and-exposure.md#d1-upstreams-and-disclosure-modes
 [d3-10]: 0003-upstream-chaining-and-exposure.md#d10-source-classes-and-remote-policy
 [d3-11]: 0003-upstream-chaining-and-exposure.md#d11-destination-address-policy-for-direct-routes
