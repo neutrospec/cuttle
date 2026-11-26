@@ -44,21 +44,21 @@ A closed task becomes one line under Closed:
 ### TASK-0019 — M4.1 B2: admin shell, visual system, and script core
 
 - Milestone: M4.1
-- Status: implement
+- Status: review
 - Iteration: 2/3
-- Workers: implementer on branch `t3/admin-shell-visual-system` (fix
-  round and merge of `main`)
+- Workers: implementer done on branch `t3/admin-shell-visual-system`;
+  fresh reviewer re-checking the fixes
 - Base: `dccee4c`
-- Candidate: `7430ead` (tree `1bc90af`), returned for R-1
+- Candidate: `3eaef5a` (tree `afc5a18`), with `main` at `d730633` merged
+  in `9139ec4`; `7430ead` (tree `1bc90af`) was returned for R-1
 - Evidence: implementer ran `scripts/gate t0`, `t1`, and
   `scripts/admin-check` on `1bc90af`, all pass; W13 tests, 8 mutation
   proofs, and 46 headless Chrome screenshots at 1280 and 390 px in light
   and dark with no horizontal overflow
 - Findings: R-1 (major, UI): host names break mid-label on Domains at
   1280 px; R-2–R-4 and R-6–R-8 (minor and nits) folded in; R-5 goes to B1
-- Next action: implementer — fix R-1 with the folded items, merge `main`
-  at `d730633`, rerun the gates and `scripts/admin-check`, and return the
-  candidate for a re-check
+- Next action: reviewer — re-check the fixes in `7430ead..3eaef5a` and
+  the merge resolution
 
 ## Closed
 
