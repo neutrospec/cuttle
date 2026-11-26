@@ -489,9 +489,12 @@ flow, from the workflows that `brew tap-new` generates (Homebrew 7.0.16,
   It then runs `brew pr-pull --no-upload`, attests the bottles with
   `actions/attest`, uploads them with `brew pr-upload`, pushes the pull
   request's commits and the bottle commit to `main`, and deletes the pull
-  request branch if it still points at the published commit, which leaves
-  the pull request closed. Attesting before the upload is what
-  homebrew-core's own publish workflow does.
+  request branch if it still points at the published commit. The pull
+  request stays open: GitHub neither closes it for the deleted branch nor
+  acts on the `Closes #N.` that `brew pr-pull` adds, because the push is
+  made with `github.token`, so the release procedure closes it by hand.
+  Attesting before the upload is what homebrew-core's own publish
+  workflow does.
 - `install-check.yml` is dispatched by hand with the release version and
   reproduces an install on another computer (release procedure, step 5).
 
@@ -657,10 +660,14 @@ echo "tap push check: pass"
 4. Dispatch `publish.yml` with the pull request number and the full head
    commit SHA, both required. Check that the release `cuttle-X.Y.Z` holds
    `cuttle-X.Y.Z.arm64_sequoia.bottle.tar.gz` and
-   `cuttle-X.Y.Z.arm64_tahoe.bottle.tar.gz`; that `main` ends with the pull
-   request's commit and `cuttle: add X.Y.Z bottle.`, whose `bottle do`
-   block names both tags and the release URL; that the branch is gone and
-   the pull request closed; and that the tap lists the attestations. If a
+   `cuttle-X.Y.Z.arm64_tahoe.bottle.tar.gz` (with `.bottle.N.` and a
+   `rebuild N` line when the version was bottled again, as the first 0.2.0
+   bottles were with `rebuild 1`, since 0.2.0 was already in the tap); that
+   `main` ends with the pull request's commit and `cuttle: add X.Y.Z
+   bottle.`, whose `bottle do` block names both tags and the release URL;
+   that the branch is gone; and that the tap lists the attestations. Then
+   close the pull request with a comment that names the published commits.
+   If a
    run fails after publishing the release but before pushing `main`,
    delete the release and its tag `cuttle-X.Y.Z` in the tap and dispatch
    again, because `brew pr-upload` replaces assets only in a draft
@@ -720,8 +727,8 @@ The tap never receives `vX.Y.Z` tags; they belong to `neutrospec/cuttle`.
 | C2 | `brew test` can use loopback TCP, possibly with `allow_network_access! :test`. | Settled in TASK-0015: loopback TCP needs network access in the test phase, which the default and `allow_network_access! :test` give and `deny_network_access! :test` takes away (D8). |
 | C3 | launchd sends `SIGTERM` and waits `ExitTimeOut` from `stop_timeout`. | Settled in TASK-0015: `brew services stop` delivers `SIGTERM` and `launchctl print` reports `exit timeout = 15`. cuttle exits within milliseconds, so the `SIGKILL` at 15 s was not reached. |
 | C4 | The `.env` override reaches the agent's environment. | Settled in TASK-0015 with P11. |
-| C5 | A bottle built on macOS 26 runs on macOS 27, because the binary sets its own minimum macOS and links only system libraries and frameworks. | P13 on `xcode-27`, which pours `arm64_tahoe` and runs `brew test`. |
-| C6 | The `publish.yml` permissions in D8 suffice for `brew pr-pull`, the attestation, the release upload, the push to `main`, and the branch deletion. | The first `publish.yml` run (TASK-0026). A refusal before `brew pr-upload` leaves nothing behind in the tap. |
+| C5 | A bottle built on macOS 26 runs on macOS 27, because the binary sets its own minimum macOS and links only system libraries and frameworks. | Settled in TASK-0026: the first `install-check.yml` run poured `arm64_tahoe` on `xcode-27` (macOS 27.0.1) and passed `brew test` and the attestation check. |
+| C6 | The `publish.yml` permissions in D8 suffice for `brew pr-pull`, the attestation, the release upload, the push to `main`, and the branch deletion. | Settled in TASK-0026: the first `publish.yml` run passed every step with them. A refusal before `brew pr-upload` leaves nothing behind in the tap. |
 
 ## Alternatives considered
 
