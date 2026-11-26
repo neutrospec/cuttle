@@ -2,7 +2,8 @@
 
 **Status** — Proposed (TASK-0001, 2026-11-25; revised in iteration 2).
 D8 and the C2–C4 assumptions revised in TASK-0015 (M3.1) after checks with
-the installed Homebrew.
+the installed Homebrew. Bottles, the release procedure, P13, C5, and C6
+added in TASK-0026.
 
 ## Context
 
@@ -322,8 +323,15 @@ status 2 and writes to stderr, which launchd sends to
   each release it is copied into the tap with `url` naming the new tag and
   `sha256` set to that tag tarball's checksum: a tag's tarball cannot
   contain its own checksum, so the repository copy holds a placeholder.
+  The source file never has a `bottle do` block. `brew pr-pull` writes that
+  block in the tap, and the next release's copy drops it, because it
+  describes the previous version's bottles. The header comment, the same
+  in both copies, says so.
 - Releases are tags `vX.Y.Z` with GitHub's source tarball. `head` tracks
-  `main` for development.
+  `main` for development. The tap serves prebuilt bottles where one fits
+  the Mac and otherwise builds from source; see
+  [Bottles](#bottles) and the [release procedure](#release-procedure)
+  below.
 
 ```ruby
 class Cuttle < Formula
@@ -450,6 +458,162 @@ runs `launchctl enable`, which leaves an `sh.brew.cuttle => enabled`
 record in launchd's per-user override database; it is launchd's default
 state, harmless, and removing it needs root.
 
+#### Bottles
+
+The tap's own GitHub Actions build the bottles with Homebrew's standard
+flow, from the workflows that `brew tap-new` generates (Homebrew 7.0.16,
+`.github/workflows/tap-new-tests.yml` and `tap-new-publish.yml`):
+
+- `tests.yml` runs `brew test-bot` for each pull request that changes
+  `Formula/cuttle.rb` and keeps the bottles as workflow artifacts. Pushes
+  to the tap's `main` do not run it.
+- `publish.yml` is dispatched by hand with the pull request number and
+  head commit. It refuses unless the pull request is open against `main`,
+  changes no formula besides `Formula/cuttle.rb`, and has a green
+  `tests.yml` run for that commit; `brew pr-pull` alone takes the newest
+  completed run, passed or failed. It then runs `brew pr-pull --no-upload`,
+  attests the bottles with `actions/attest`, uploads them with
+  `brew pr-upload`, pushes the pull request's commits and the bottle commit
+  to `main`, and deletes the pull request branch if it still points at the
+  published commit, which leaves the pull request closed. Attesting before
+  the upload is what homebrew-core's own publish workflow does.
+- `install-check.yml` is dispatched by hand with the release version and
+  reproduces an install on another computer (release procedure, step 5).
+
+The build matrix is `macos-15` and `macos-26`, GitHub's standard runners
+for Apple Silicon macOS 15 and 26, which give the bottle tags
+`arm64_sequoia` and `arm64_tahoe`:
+
+- Homebrew's Tier 1 on Apple Silicon is macOS 27 (Golden Gate), 26, and
+  15. Intel macOS is Tier 3: Homebrew no longer builds Intel bottles and
+  removes Intel support in or after September 2027 (`docs/Support-Tiers.md`,
+  reviewed 2026-11-19). homebrew-core's `go` 1.27.4 has no Intel macOS
+  bottle, and `brew test-bot` bottles a formula only when its build
+  dependencies are bottled for the runner's macOS, so an Intel runner
+  would yield no bottle. Intel Macs build from source.
+- The only macOS 27 runner, `xcode-27`, is a public preview with possible
+  queueing and unstable software (actions/runner-images announcement
+  14404), so it does not gate publishing. It runs the install check, where
+  it proves the fallback.
+- The labels are pinned, because `macos-latest` moves to new macOS
+  versions on GitHub's schedule and would change the tags silently. When a
+  runner image retires, as macOS 14 did on 2026-11-02, or a macOS 27 image
+  becomes generally available, change the `tests.yml` matrix and the
+  expected tags in `install-check.yml` together.
+
+On a Mac with no bottle for its macOS, Homebrew pours the newest bottle
+for an older macOS on the same architecture (`find_older_compatible_tag`
+in `Library/Homebrew/extend/os/mac/utils/bottles.rb`; `brew bottle` writes
+the tags newest first). macOS 27 on Apple Silicon therefore pours
+`arm64_tahoe`. Only Homebrew's developer mode on a prerelease macOS with
+`HOMEBREW_SKIP_OR_LATER_BOTTLES` turns this off. An older bottle is safe
+for cuttle: Go records the minimum macOS in the binary whatever the build
+machine runs (`LC_BUILD_VERSION` `minos 13.0` with Go 1.27), and with
+`CGO_ENABLED=0` the binary links only `libSystem`, `libresolv`,
+CoreFoundation, and Security. Assumption C5.
+
+Without a fitting bottle, on Intel, on Apple Silicon before macOS 15,
+with `--build-from-source`, or with `--HEAD`, `brew install` builds from
+source with Homebrew's `go` as before: `depends_on "go" => :build`,
+`fetch`, and `install` are unchanged. A version already built from source
+stays so until the next upgrade or `brew reinstall cuttle`.
+
+The bottles are hosted on the tap's GitHub Releases, at
+`https://github.com/neutrospec/homebrew-tap/releases/download/cuttle-<version>/`,
+the root URL that `brew test-bot` gives a formula of a tap other than
+homebrew/core (`Library/Homebrew/test_bot/formulae.rb`). Downloads need no
+token. GitHub Packages, the `--github-packages` choice of `brew tap-new`,
+would need `packages: write` and a registry token and adds nothing for a
+public tap. When a user sets `HOMEBREW_VERIFY_ATTESTATIONS`, Homebrew
+checks a tap bottle's build provenance against the tap repository and
+refuses a bottle without one (`check_formula_attestation` in
+`Library/Homebrew/attestation.rb`), so every bottle is attested.
+
+The workflows use `github.token`. The tap's default workflow permission
+is read, its `main` has no protection or rulesets, and each job declares
+its permissions:
+
+- `tests.yml`: `actions`, `checks`, `contents`, and `pull-requests`, all
+  read, as in the template.
+- `publish.yml`: `contents: write` to create the release, upload the
+  bottles, push `main`, and delete the branch; `actions: read` for the
+  workflow run and its artifacts; `checks: read` to match the pull
+  request's check suites to `tests.yml`; `pull-requests: read` for its
+  commits, files, labels, and reviews; `issues: read` for the issue
+  listing in `brew pr-pull`; `attestations: write` and `id-token: write`
+  for the attestation. The template's `pull-requests: write` is lowered to
+  read, because neither `brew pr-pull` nor `brew pr-upload` writes to a
+  pull request. Assumption C6.
+- `install-check.yml`: `contents: read` and `attestations: read`.
+
+A push made with `github.token` starts no workflow, so the bottle commit
+does not run the tap's `audit.yml`.
+
+The tap also carries `Formula/canopy.rb`, which canopy's release bot
+pushes to `main` and which builds from source by design. Because
+`tests.yml` runs only for pull requests that change `Formula/cuttle.rb`
+and `publish.yml` refuses pull requests that change another formula,
+canopy still runs `audit.yml` alone and gets no bottles. The dependency
+runs the other way: `brew test-bot --only-tap-syntax` runs `brew style`,
+whose actionlint step covers every workflow, `brew readall`, and
+`brew audit` over the whole tap, so a defect in canopy's formula or in
+`audit.yml` fails a cuttle pull request until it is fixed.
+
+#### Release procedure
+
+Each step that pushes to a remote or dispatches a workflow needs the
+user's approval.
+
+1. After the tag `vX.Y.Z` is published in `neutrospec/cuttle`, take the
+   sha256 of
+   `https://github.com/neutrospec/cuttle/archive/refs/tags/vX.Y.Z.tar.gz`.
+   Copy `packaging/homebrew/cuttle.rb` to `Formula/cuttle.rb` on a new
+   branch `cuttle-X.Y.Z` of the tap from its `main`, change only `url` and
+   `sha256`, and commit as `cuttle vX.Y.Z`. The copy drops the previous
+   version's `bottle do` block.
+2. Push the branch and open a pull request against `main`.
+3. Wait until `tests.yml` is green for the pull request's head commit on
+   both runners, with the artifacts `bottles_macos-15` and
+   `bottles_macos-26`. Fix failures with further commits on the branch.
+4. Dispatch `publish.yml` with the pull request number and head commit.
+   Check that the release `cuttle-X.Y.Z` holds
+   `cuttle-X.Y.Z.arm64_sequoia.bottle.tar.gz` and
+   `cuttle-X.Y.Z.arm64_tahoe.bottle.tar.gz`; that `main` ends with the pull
+   request's commit and `cuttle: add X.Y.Z bottle.`, whose `bottle do`
+   block names both tags and the release URL; that the branch is gone and
+   the pull request closed; and that the tap lists the attestations. If a
+   run fails after publishing the release but before pushing `main`,
+   delete the release and its tag `cuttle-X.Y.Z` in the tap and dispatch
+   again, because `brew pr-upload` replaces assets only in a draft
+   release.
+5. Dispatch `install-check.yml` with `X.Y.Z`. On clean runners,
+   `brew install neutrospec/tap/cuttle` must pour the expected bottle,
+   `arm64_sequoia` on `macos-15` and `arm64_tahoe` on `macos-26` and on
+   `xcode-27` (macOS 27), install no formula besides cuttle and no `go`,
+   and leave a receipt that says the keg was poured from a bottle. Then
+   `cuttle version` must print `cuttle X.Y.Z`, `brew test` must pass, and
+   a reinstall with `HOMEBREW_VERIFY_ATTESTATIONS=1` must verify the
+   attestation.
+6. On the Mac that runs the service, run `brew update` and
+   `brew upgrade cuttle`, which pours the bottle, then `cuttle check` and
+   `brew services restart cuttle`, as the README says.
+
+`publish.yml` pushes a release's new `url` together with its bottle
+commit, so the tap's `main` never offers a version without bottles for
+the matrix.
+
+The tap receives only these refs, the counterpart of the public-ref rule
+for `neutrospec/cuttle` in AGENTS.md:
+
+- `main`: changes the user approves, such as to the tap's workflows,
+  canopy's release bot commits, and `publish.yml`'s push of each
+  release's commits and bottle commit;
+- one branch `cuttle-X.Y.Z` per release, which `publish.yml` deletes;
+- tags `cuttle-X.Y.Z`, which GitHub creates when `publish.yml` publishes
+  the release of that name with its bottles and their attestations.
+
+The tap never receives `vX.Y.Z` tags; they belong to `neutrospec/cuttle`.
+
 ## Acceptance criteria
 
 | ID | Criterion | Check |
@@ -466,6 +630,7 @@ state, harmless, and removing it needs root.
 | P10 | `brew services stop cuttle` logs `stopped` within 15 s without `SIGKILL`; `restart` works; after `kill -9` launchd relaunches it; with an invalid configuration it is relaunched with errors in the log and serves once the file is fixed. | T2 at M3 |
 | P11 | With `XDG_STATE_HOME` in `cuttle.env`, the service uses that state directory after `brew services restart`. | T2 at M3 |
 | P12 | Under the service, the application log rotates and `var/log/cuttle.log` holds only start-up output. | T2 at M3 |
+| P13 | After `publish.yml`, `brew install neutrospec/tap/cuttle` on a clean runner pours `arm64_sequoia` on `macos-15` and `arm64_tahoe` on `macos-26` and `xcode-27`, installs no `go` and no formula besides cuttle, prints the release version, passes `brew test`, and verifies the attestation. | T2 at each release: the tap's `install-check.yml` (D8, release procedure, step 5) |
 
 ## Assumptions
 
@@ -475,6 +640,8 @@ state, harmless, and removing it needs root.
 | C2 | `brew test` can use loopback TCP, possibly with `allow_network_access! :test`. | Settled in TASK-0015: loopback TCP needs network access in the test phase, which the default and `allow_network_access! :test` give and `deny_network_access! :test` takes away (D8). |
 | C3 | launchd sends `SIGTERM` and waits `ExitTimeOut` from `stop_timeout`. | Settled in TASK-0015: `brew services stop` delivers `SIGTERM` and `launchctl print` reports `exit timeout = 15`. cuttle exits within milliseconds, so the `SIGKILL` at 15 s was not reached. |
 | C4 | The `.env` override reaches the agent's environment. | Settled in TASK-0015 with P11. |
+| C5 | A bottle built on macOS 26 runs on macOS 27, because the binary sets its own minimum macOS and links only system libraries and frameworks. | P13 on `xcode-27`, which pours `arm64_tahoe` and runs `brew test`. |
+| C6 | The `publish.yml` permissions in D8 suffice for `brew pr-pull`, the attestation, the release upload, the push to `main`, and the branch deletion. | The first `publish.yml` run (TASK-0026). A refusal before `brew pr-upload` leaves nothing behind in the tap. |
 
 ## Alternatives considered
 
