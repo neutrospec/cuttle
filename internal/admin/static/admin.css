@@ -740,6 +740,10 @@ body:has(dialog[open]) .savebar { display: none; }
      desktop rules pad the first or last cell. */
   table.resp td, table.data.resp td, table.data.resp td:first-child, table.data.resp td:last-child { padding: 2px 14px 2px 0; }
   table.resp td.lead-cell { display: block; }
+  /* A host that is not the lead of a stacked row, such as an upstream's
+     address, shares its line with other cells, so a long name breaks
+     anywhere rather than widening the page (OI-0006 T-R1). */
+  table.resp td.host:not(.lead-cell) { overflow-wrap: anywhere; }
   table.resp td.n { text-align: left; }
   table.resp td[data-label]::before { content: attr(data-label) " "; color: var(--muted); font-family: var(--sans); }
   table.resp td.opt, table.resp td.barcol { display: none; }
@@ -758,6 +762,65 @@ body:has(dialog[open]) .savebar { display: none; }
   .toolbar .meta + .meta { margin-left: 0; }
   .editor-form textarea { min-height: 20rem; font-size: 12.5px; }
 }
+/* -------------------------------------------- settings pages (task D)
+   Interfaces, the interface editor, Proxy, Remote clients, General, and
+   Account (design 0009 D3.6–D3.9). */
+.settings-form { display: grid; }
+.settings-form .fsec[disabled] { opacity: .75; }
+.ro-note { margin-bottom: 16px; }
+.default-btn { pointer-events: none; }
+.msgs { display: grid; gap: 2px; }
+.field.choice .sub { margin-top: 6px; }
+#field-ports:not(:has(input[value="these"]:checked)) .sub,
+#field-admin_listen:not(:has(input[value="at"]:checked)) .sub { display: none; }
+.ident:has(input[value="mac"]:checked) .sub-device,
+.ident:has(input[value="device"]:checked) .sub-mac { display: none; }
+.ident .subs { margin-top: 6px; }
+.rcard code { font-size: 12px; }
+.remote-off { margin-bottom: 20px; }
+.if-group > summary { color: var(--ink-2); }
+.if-group[open] > summary { color: var(--ink); }
+.if-group > .fields { gap: 18px; }
+
+/* The interface list editor (design 0009 D3.8) */
+.ifl .ifl-choice { margin-bottom: 4px; }
+.ifl.has-choice:not(:has(input[data-ifl-set]:checked)) .ifl-body { display: none; }
+.iflist li .ifl-name { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; min-width: 0; }
+.iflist li .name-code { overflow-wrap: anywhere; }
+.iflist li.ifl-empty { display: block; padding: 10px 12px; }
+.iflist li.ifl-empty[hidden] { display: none; }
+.iflist li.moved { animation: again .4s ease-out; }
+html.js .ifl-add { display: none; }
+.iflist-add .input { min-height: 32px; }
+
+/* Interfaces: definitions, the row menu, and the detected table */
+.ifmenu { position: relative; justify-self: end; }
+.ifmenu > summary { list-style: none; }
+.ifmenu > summary::-webkit-details-marker { display: none; }
+.ifmenu .menu { right: 0; top: 36px; }
+.ifmenu form { display: block; }
+table.detected td.addr { font-size: 12.5px; overflow-wrap: anywhere; }
+table.detected td.addr .addr6 { display: block; color: var(--ink-2); }
+table.detected td.def-cell { white-space: nowrap; text-align: right; }
+table.detected td.def-cell .badge { text-decoration: none; }
+.section-head > a.btn { align-self: center; }
+
+/* The editor, as a page and in the Interfaces page's dialog */
+.editor-dialog { width: min(680px, calc(100% - 32px)); }
+.editor-box, .editor-box .if-form { display: flex; flex-direction: column; min-height: 0; }
+.editor-box.in-dialog { flex: 1 1 auto; }
+.editor-box .dlg-body { flex: 1 1 auto; min-height: 0; }
+.editor-page { max-width: 760px; }
+.editor-page .dlg-foot { border-radius: 0 0 10px 10px; }
+
+/* Account */
+.account-form .fields { max-width: 420px; }
+
+@media (max-width: 759px) {
+  table.detected td.def-cell { display: block; text-align: left; padding-top: 6px; }
+  .ifmenu .menu { top: 36px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

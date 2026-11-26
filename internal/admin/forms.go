@@ -214,6 +214,8 @@ func postedForm(op *formOp, r *http.Request) *form {
 			f.values[k] = vs
 		}
 	}
+	// A button of the interface list editor without the script.
+	f.listAction(r)
 	return f
 }
 

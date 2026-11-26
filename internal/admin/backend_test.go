@@ -10,6 +10,7 @@ import (
 
 	"github.com/neutrospec/cuttle/internal/config"
 	"github.com/neutrospec/cuttle/internal/control"
+	"github.com/neutrospec/cuttle/internal/iface"
 	"github.com/neutrospec/cuttle/internal/stats"
 )
 
@@ -55,6 +56,12 @@ type fakeBackend struct {
 	restart []string
 	// refuse, when set, makes Reload refuse the file with this error.
 	refuse string
+	// links is the injected interface table and linksErr its read error
+	// (design 0009 W20).
+	links    []iface.Link
+	linksErr error
+	// linkReads counts the reads of the interface table.
+	linkReads int
 }
 
 func newFakeBackend(t *testing.T) *fakeBackend {
@@ -145,4 +152,12 @@ func (b *fakeBackend) reloadCount() int {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.reloads
+}
+
+// Interfaces returns the injected interface table.
+func (b *fakeBackend) Interfaces() ([]iface.Link, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.linkReads++
+	return b.links, b.linksErr
 }

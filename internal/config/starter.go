@@ -83,7 +83,10 @@ func StarterTemplate() string { return starterTemplate }
 
 // EnsureStarter writes the starter configuration to path if no file exists
 // there. It reports whether it wrote one. Missing directories are created
-// with mode 0700; the file gets mode 0600 through the atomic write.
+// with mode 0700; the file gets mode 0600 through the atomic write. When
+// the directory sync after the rename fails, the file is in place: it
+// reports true with an error that wraps ErrNotSynced, which the caller
+// reports as a warning (OI-0006 Z-R4).
 func EnsureStarter(path string) (bool, error) {
 	if _, err := os.Stat(path); err == nil {
 		return false, nil
@@ -102,7 +105,7 @@ func EnsureStarter(path string) (bool, error) {
 		return false, err
 	}
 	if err := WriteAtomic(path, data, WriteOptions{}); err != nil {
-		return false, err
+		return errors.Is(err, ErrNotSynced), err
 	}
 	return true, nil
 }

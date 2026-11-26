@@ -1,0 +1,45 @@
+{{/* interface is the editor of an interface definition (design 0009
+   D3.6): the name and note, the identity as three choices, and the kind
+   guard. Define… opens it prefilled from a detected row. With the
+   script, the Interfaces page shows the editor block in a dialog. Its
+   Data is a formPage whose View is an ifEditorView. */}}
+{{define "content"}}{{with .Data}}
+<header class="page-head"><div><div class="crumbs"><a href="/interfaces">Interfaces</a></div>
+<h1>{{with .View}}{{.Title}}{{else}}Interface{{end}}</h1>{{with .View}}{{if .Sub}}<p class="lead">{{.Sub}}</p>{{end}}{{end}}</div></header>
+{{if .View}}{{if .View.ReadOnly}}{{template "readonly"}}{{end}}{{end}}
+<div class="panel editor-page">{{template "editor" $}}</div>
+{{template "review-dialog"}}{{end}}{{end}}
+
+{{/* editor is the editor's form, as a page or as a dialog's content. Its
+   argument is the pageData. */}}
+{{define "editor"}}{{with .Data}}{{$v := .View}}{{$f := .Form}}<div class="editor-box{{if $v}}{{if not $v.InPage}} in-dialog{{end}}{{end}}" data-block="editor">
+<form method="post" action="/config/draft" class="if-form"{{if $v}}{{if and $v.InPage (not $v.ReadOnly)}} data-guard="Unsaved changes to the interface" data-guard-discard="/interfaces"{{if $f.Dirty}} data-guard-dirty{{end}}{{end}}{{end}}>
+{{if $v}}{{if not $v.InPage}}<div class="dlg-head"><div><h2 id="editor-h">{{$v.Title}}</h2>{{if $v.Sub}}<p>{{$v.Sub}}</p>{{end}}</div><button class="btn quiet icon-btn" type="button" data-close aria-label="Close">{{template "icon" "x"}}</button></div>
+{{end}}{{end}}<div class="dlg-body">
+<div id="form-issues">{{template "form-issues" $}}</div>
+{{template "default-button"}}<input type="hidden" name="csrf" value="{{$.Token}}">
+{{range $f.Hidden}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">
+{{end}}{{if $v}}<fieldset class="fields"{{if $v.ReadOnly}} disabled{{end}}>
+<div class="row2">{{template "text-field" ($f.Field "name")}}{{template "text-field" ($f.Field "note")}}</div>
+{{with $f.Field "ident"}}<div class="field choice ident{{if .Invalid}} invalid{{end}}" id="field-ident"><span class="label" id="f-ident-l">{{.Label}}</span>
+<div class="rcards" role="radiogroup" id="f-ident" aria-labelledby="f-ident-l"{{with .Described}} aria-describedby="{{.}}"{{end}}>
+<label class="rcard"><input type="radio" name="ident" value="mac"{{if eq .Value "mac"}} checked{{end}}><b>Hardware address</b><span class="hint">{{with $v.Row}}<code>{{.MAC}}</code>. {{end}}Follows the adapter across ports and replugging; recommended for adapters and phones.</span></label>
+<label class="rcard"><input type="radio" name="ident" value="device"{{if eq .Value "device"}} checked{{end}}><b>Device name</b><span class="hint">{{with $v.Row}}<code>{{.Device}}</code>, {{.KindLabel}}. {{end}}Stable for built-in Wi-Fi, which may use another hardware address per network. Add a kind guard.</span></label>
+<label class="rcard"><input type="radio" name="ident" value="both"{{if eq .Value "both"}} checked{{end}}><b>Both</b><span class="hint">Matches only while the device has this hardware address.</span></label>
+</div>
+{{template "field-msgs" .}}{{end}}<div class="row2 subs"><div class="sub sub-mac">{{template "text-field" ($f.Field "mac")}}</div><div class="sub sub-device">{{template "text-field" ($f.Field "device")}}</div></div>
+</div>
+{{with $f.Field "kind"}}<div class="field{{if .Invalid}} invalid{{end}}" id="field-kind"><label for="f-kind">{{.Label}}</label>
+<select class="input" id="f-kind" name="kind" aria-describedby="{{.Described}}">{{range $v.Kinds}}<option value="{{.Value}}"{{if .Checked}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+{{template "field-hint" .}}{{template "field-msgs" .}}</div>
+{{end}}{{if $v.Users}}<p class="hint">Used by {{range $i, $u := $v.Users}}{{if $i}}, {{end}}{{$u.Before}}<code>{{$u.Name}}</code>{{$u.After}}{{end}}. Renaming updates these lists in the same save.</p>
+{{end}}</fieldset>
+{{end}}</div>
+<div class="dlg-foot">
+{{if $v}}{{if not $v.ReadOnly}}<button type="submit" class="btn primary" name="intent" value="review" data-primary data-fragment="review" data-alt="form-issues">Review changes</button>
+<button type="submit" class="btn" name="intent" value="check" data-fragment="form-issues">Check</button>
+{{end}}{{end}}<span class="spacer"></span>
+<a class="btn quiet" href="/interfaces" data-close>Cancel</a>
+</div>
+</form>
+</div>{{end}}{{end}}

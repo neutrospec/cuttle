@@ -38,6 +38,11 @@ func cmdInit(args []string, lookup env, stdout, stderr io.Writer) int {
 		return exitFailure
 	}
 	wrote, err := config.EnsureStarter(path)
+	if wrote && errors.Is(err, config.ErrNotSynced) {
+		// The file is in place (OI-0006 Z-R4).
+		fmt.Fprintln(stderr, "cuttle: warning: wrote the starter configuration, but", err)
+		err = nil
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, "cuttle:", err)
 		return exitFailure

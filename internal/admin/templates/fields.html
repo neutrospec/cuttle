@@ -1,0 +1,72 @@
+{{/* fields holds the field components of the settings pages and editors
+   of design 0009 D3.6–D3.8 (task D). Each block takes a fieldView from
+   form.Field, form.Action, or form.IfList: a label, the control, the
+   hint, and the field's errors and warnings, tied to the control with
+   aria-describedby. */}}
+
+{{define "field-label"}}<label for="{{.ID}}">{{.Label}}{{if .Restart}} <span class="badge restart">Restart</span>{{end}}</label>{{end}}
+
+{{define "field-hint"}}{{if .Hint}}<div class="hint" id="{{.HintID}}">{{if .Restart}}Applies at the next start. {{end}}{{.Hint}}</div>
+{{end}}{{end}}
+
+{{define "field-msgs"}}{{if .HasMsgs}}<div class="msgs" id="{{.MsgID}}">{{range .Errors}}<p class="err">{{.}}</p>{{end}}{{range .Warnings}}<p class="wrn">{{.}}</p>{{end}}</div>
+{{end}}{{end}}
+
+{{define "text-field"}}<div class="field{{if .Invalid}} invalid{{end}}" id="field-{{.Name}}">{{template "field-label" .}}
+<input class="input{{if .Mono}} mono{{end}}" type="text" id="{{.ID}}" name="{{.Name}}" value="{{.Value}}"{{if .Placeholder}} placeholder="{{.Placeholder}}"{{end}}{{if .Numeric}} inputmode="numeric"{{end}} autocomplete="off" spellcheck="false" autocapitalize="off"{{with .Described}} aria-describedby="{{.}}"{{end}}{{if .Invalid}} aria-invalid="true"{{end}}>
+{{template "field-hint" .}}{{template "field-msgs" .}}</div>
+{{end}}
+
+{{/* list-field is the list input of design 0009 D5: a textarea with one
+   entry per line, which the script shows as chips. */}}
+{{define "list-field"}}<div class="field{{if .Invalid}} invalid{{end}}" id="field-{{.Name}}">{{template "field-label" .}}
+<textarea id="{{.ID}}" name="{{.Name}}" class="input list" rows="3" data-list{{with .Bad}} data-bad="{{.}}"{{end}}{{if .Placeholder}} placeholder="{{.Placeholder}}"{{end}} spellcheck="false" autocomplete="off" autocapitalize="off"{{with .Described}} aria-describedby="{{.}}"{{end}}{{if .Invalid}} aria-invalid="true"{{end}}>
+{{.Value}}</textarea>
+{{template "field-hint" .}}{{template "field-msgs" .}}</div>
+{{end}}
+
+{{define "check-field"}}<div class="field{{if .Invalid}} invalid{{end}}" id="field-{{.Name}}"><label class="check"><input type="checkbox" id="{{.ID}}" name="{{.Name}}" value="true"{{if .Checked}} checked{{end}}{{with .Described}} aria-describedby="{{.}}"{{end}}><span>{{.Label}}</span>{{if .Hint}}<span class="hint" id="{{.HintID}}">{{.Hint}}</span>{{end}}</label>
+{{template "field-msgs" .}}</div>
+{{end}}
+
+{{/* action-field is the segmented action control of design 0009 D3.4:
+   Direct, each upstream, and Block, in the route colors. */}}
+{{define "action-field"}}<div class="field{{if .Invalid}} invalid{{end}}" id="field-{{.Name}}"><span class="label" id="{{.ID}}-l">{{.Label}}</span>
+<div class="seg action" role="radiogroup" id="{{.ID}}" aria-labelledby="{{.ID}}-l"{{with .Described}} aria-describedby="{{.}}"{{end}}>{{range .Options}}<label><input type="radio" name="{{$.Name}}" value="{{.Value}}"{{if .Checked}} checked{{end}}{{if .Disabled}} disabled{{end}}><span class="{{.Class}}">{{.Label}}</span></label>{{end}}</div>
+{{template "field-hint" .}}{{template "field-msgs" .}}</div>
+{{end}}
+
+{{/* default-button is the form's first submit button, which Enter in a
+   text field presses (implicit submission): it reviews, so that Enter
+   never presses a button of the interface list editor. */}}
+{{define "default-button"}}<button type="submit" class="sr default-btn" name="intent" value="review" data-fragment="review" data-alt="form-issues" tabindex="-1" aria-hidden="true">Review changes</button>
+{{end}}
+
+{{/* iflist is the interface list editor of design 0009 D3.8, for
+   proxy.interfaces, a rule's interfaces, and an upstream's interfaces:
+   the entries in priority order with their state and Move up, Move down,
+   and Remove, and an Add select of the other definitions. Each entry is a
+   hidden input named like the field. Without the script each button
+   submits the form for editing with the change in the query; the script
+   makes the change in place. Its argument is an ifListView. */}}
+{{define "iflist"}}<div class="field ifl{{if .Choice}} has-choice{{end}}{{if .Invalid}} invalid{{end}}" id="field-{{.Name}}" data-iflist="{{.Name}}">
+<span class="label" id="{{.ID}}-l">{{.Label}}</span>
+{{if not .Defined}}{{range .Entries}}<input type="hidden" name="{{$.Name}}" value="{{.Name}}">
+{{end}}<p class="hint">No interfaces are defined, so connections follow macOS routing. <a href="/interfaces">Define interfaces</a> to choose which ones cuttle uses.</p>
+{{else}}{{with .Choice}}<div class="seg sm ifl-choice" role="radiogroup" id="{{.ID}}" aria-labelledby="{{$.ID}}-l">{{range .Options}}<label><input type="radio" name="{{$.Choice.Name}}" value="{{.Value}}"{{if .Checked}} checked{{end}}{{if eq .Value $.SetOption}} data-ifl-set{{end}}><span>{{.Label}}</span></label>{{end}}</div>
+{{end}}<div class="ifl-body">
+<ol class="iflist" id="{{.ID}}" aria-labelledby="{{.ID}}-l">
+{{range .Entries}}<li data-n="{{.Name}}"><input type="hidden" name="{{$.Name}}" value="{{.Name}}"><span class="pos">{{.Pos}}</span><span class="ifl-name"><span class="name-code">{{.Name}}</span><span class="state {{.State}}">{{.Text}}</span></span><span class="moves"><button class="btn quiet icon-btn sm" type="submit" name="intent" value="edit" formaction="{{.Up}}" data-ifl="up" aria-label="Move {{.Name}} up"{{if .First}} disabled{{end}}>{{template "icon" "up"}}</button><button class="btn quiet icon-btn sm" type="submit" name="intent" value="edit" formaction="{{.Down}}" data-ifl="down" aria-label="Move {{.Name}} down"{{if .Last}} disabled{{end}}>{{template "icon" "down"}}</button></span><button class="btn quiet icon-btn sm" type="submit" name="intent" value="edit" formaction="{{.Remove}}" data-ifl="remove" aria-label="Remove {{.Name}}">{{template "icon" "x"}}</button></li>
+{{end}}<li class="ifl-empty"{{if .Entries}} hidden{{end}}><span class="hint">{{.Empty}}</span></li>
+</ol>
+<div class="iflist-add"{{if not .Available}} hidden{{end}}><select class="input" name="add:{{.Name}}" aria-label="Add an interface to the list" data-ifl-add><option value="">Add interface…</option>{{range .Available}}<option value="{{.Name}}" data-state="{{.State}}" data-text="{{.Text}}">{{.Name}}</option>{{end}}</select><button class="btn sm ifl-add" type="submit" name="intent" value="edit" formaction="{{.AddAction}}">{{template "icon" "plus"}}Add</button></div>
+</div>
+<div class="hint">Requests use only these interfaces, in this order; the first one that is online carries the connection.</div>
+{{end}}{{template "field-msgs" .}}</div>
+{{end}}
+
+{{/* readonly says why a form page shows the running configuration and
+   cannot change it (design 0009 D3.13); the shell's banner holds the
+   errors and the ways to fix them. */}}
+{{define "readonly"}}<div class="notice ro-note" role="status">{{template "icon" "info"}}<span>This page shows the running configuration and is read-only until the file on disk is fixed.</span></div>
+{{end}}
