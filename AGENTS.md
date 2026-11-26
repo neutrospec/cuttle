@@ -250,9 +250,9 @@ truth. On resume, reconcile the board with them before acting.
   before each push to the tap the orchestrator runs the check in that
   procedure from the main checkout's root instead. It applies
   `CUTTLE_PUBLISH_SCAN_PATTERNS` with `/usr/bin/grep -a -i -E` to
-  `git log -p --format=%B origin/main..<ref>` and to the branch name, and
-  requires every author and committer in that range to be one of
-  `CUTTLE_PUBLISH_IDENTITIES`. Push only when it prints
+  `git log -p --format=%B origin/main..<ref>` and to the branch name,
+  refuses a merge commit in that range, and requires every author and
+  committer in it to be one of `CUTTLE_PUBLISH_IDENTITIES`. Push only when it prints
   `tap push check: pass`.
 
 ## Evidence by Git tree

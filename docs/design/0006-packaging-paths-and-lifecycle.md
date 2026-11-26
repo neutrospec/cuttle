@@ -506,7 +506,7 @@ for Apple Silicon macOS 15 and 26, which give the bottle tags
   bottle, and `brew test-bot` bottles a formula only when its build
   dependencies are bottled for the runner's macOS, so an Intel runner
   would yield no bottle. Intel Macs build from source.
-- The only macOS 27 runner, `xcode-27`, generally available since
+- The only macOS 27 runner, `xcode-27`, announced generally available on
   2026-11-23 (actions/runner-images announcement 15397), is also the only
   runner newer than every bottle tag. It therefore stays out of the build
   matrix and runs the install check, where it proves the older-OS
@@ -596,9 +596,11 @@ Before each push to the tap, the orchestrator runs this check from the
 main checkout's root, which holds `.env`. `scripts/publish-scan` does not
 fit the tap: it scans everything a remote serves, and the tap serves
 GitHub's `refs/pull/*` refs and canopy's bot commits. The check applies
-the same pattern and the same `grep` to exactly what the push sends: the
-patches and messages of `origin/main..<ref>` and the branch name. It also
-requires every author and committer of those commits to be one of
+the same pattern and the same `grep` to what the push sends: the patches
+and messages of `origin/main..<ref>` and the branch name. It refuses a
+range that contains a merge commit, because `git log -p` shows no diff
+for a merge and the release flow never makes one. It also requires every
+author and committer of those commits to be one of
 `CUTTLE_PUBLISH_IDENTITIES`. Save it in a scratch directory and run
 `sh <file> <tap clone> <local ref>`, for example
 `sh tap-push-check.sh <tap clone> bump-cuttle-X.Y.Z`. It prints
@@ -619,6 +621,8 @@ d=$(mktemp -d)
 trap 'rm -rf "$d"' EXIT
 git -C "$tap" rev-list "$range" >"$d/commits"
 test -s "$d/commits" || { echo "$range is empty" >&2; exit 1; }
+test -z "$(git -C "$tap" rev-list --merges "$range")" ||
+	{ echo "$range contains a merge commit" >&2; exit 1; }
 git -C "$tap" -c core.quotePath=false log -p --text --no-ext-diff --no-textconv \
 	--no-use-mailmap --no-show-signature --format=%B "$range" >"$d/text"
 printf '%s\n' "$ref" >>"$d/text"
