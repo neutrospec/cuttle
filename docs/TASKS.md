@@ -41,32 +41,31 @@ A closed task becomes one line under Closed:
 
 ## Active
 
-### TASK-0017 — M4 design: full configuration in the web admin
+### TASK-0019 — M4.1 B2: admin shell, visual system, and script core
 
-- Milestone: M4
-- Status: review
-- Iteration: 3/3
-- Workers: designer done on branch `t3/web-config-admin-design`; fresh
-  reviewer re-checking the last fixes
-- Base: `829a072`
-- Candidate: `704b11e` (tree `dc39942`); `e168d7b` (tree `373c157`) was
-  returned for N1
-- Evidence: the designer checked the prototype in light and dark and at
-  390 px with no horizontal overflow; its canonical TOML example round-trips
-- Findings: N1 (medium, security): forms re-rendered from posted values
-  must carry the posted rendered values, or earlier changes such as "No
-  ports" drop out of the next review; N2–N7 (minor and nits) folded in
-- Next action: reviewer — re-check the fixes in `e168d7b..704b11e`
+- Milestone: M4.1
+- Status: implement
+- Iteration: 1/3
+- Workers: implementer on a T3 worktree branch, alongside TASK-0018
+- Base: this board update
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: implementer — build task B2 of design 0009 (W13) to the
+  approved prototype and return the candidate
 
-Decisions for TASK-0017 (2026-11-26):
+### TASK-0018 — M4.1 A: configuration model and canonical writer
 
-- The user deferred M3.2, M3.3, and the device check I20 and put M4
-  first; the M4 decisions are in the roadmap.
-- The user approved the prototype at `6421b01` as the visual reference
-  for M4 (2026-11-26).
-- The user chose the optional `note` key on rules, upstreams, and
-  interfaces, and a password change that counts wrong current passwords
-  in the login backoff (2026-11-26).
+- Milestone: M4.1
+- Status: implement
+- Iteration: 1/3
+- Workers: implementer on a T3 worktree branch, alongside TASK-0019
+- Base: this board update
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: implementer — build task A of design 0009 (W1–W4, W14,
+  OI-0006 U-R1) and return the candidate
 
 ## Closed
 
@@ -76,6 +75,10 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0017 — M4 design: full configuration in the web admin — landed
+  `0167a58`, gates: none @ `4b8d4a7`; reviewed tree `dc39942` (iteration 3
+  of 3); prototype approved by the user; follow-ups Y-R1–Y-R5 binding for
+  task B1 in OI-0006
 - TASK-0016 — Publish v0.1.0 — landed: `main` and `v0.1.0` (`8b6acea`)
   pushed to `neutrospec/cuttle`, tap `c54ee0c`, gates: none @ `4c76d26`;
   the remote scan shows only the two accepted matches (OI-0004); final P8

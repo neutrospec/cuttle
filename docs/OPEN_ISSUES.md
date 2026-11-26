@@ -454,10 +454,24 @@ Move resolved items to Closed with their resolving commit or evidence.
     check fails; decide whether to allow and scan them. X-R5
     (implementer, nit): `buildVersion` ignores `info.Main.Version`, so
     `go install …/cmd/cuttle@<tag>` reports `dev`.
+  - Y-R1–Y-R5 (from the TASK-0017 final re-check; binding requirements for
+    M4 task B1, design 0009): Y-R1: `POST /config/apply` checks the
+    `reviewed` digest, not the `GET`-time `base`; extend W8 so an apply
+    after a notice-row review writes, and a file that changed after the
+    review and back to the `base` content still gets `409`; fix the two
+    0009 sentences that still say `base` (D7 apply and the alternatives).
+    Y-R2: a delete posts the entity's rendered values, and if the current
+    entity differs, the review warns that deleting removes the other
+    change. Y-R3: `route.host` "Add to rule" answers `409` when the target
+    rule no longer has the chosen action or now has `ports`; add the case
+    to W25. Y-R4 (nit): D4 lists every choice control (interface identity,
+    "Use the default list", "System routing") as mapping by the table, so
+    a hidden sub-field cannot keep a key the choice removes. Y-R5 (nit):
+    the conflict notice names the fields that changed elsewhere and stay.
 - Next action: orchestrator — include the open items (V5, V8, V11, V12, P1,
   W1–W3, Z2, Z4, G1–G2, P-R3–P-R7, Q-R1–Q-R4, Q-R6–Q-R8, S-R1–S-R2,
-  U-R1–U-R5, and X-R1–X-R5) in the briefs of the stages they affect; the
-  producer closes each item with the commit that settles it.
+  U-R1–U-R5, X-R1–X-R5, and Y-R1–Y-R5) in the briefs of the stages they
+  affect; the producer closes each item with the commit that settles it.
   The M1.4 items, R5 with the C13 remainder, the per-request source
   recheck of 0003 D10 with N5, the bind retry of V1, Z3, W-R1, and W-R2,
   are settled in TASK-0007.
