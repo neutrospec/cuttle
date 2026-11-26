@@ -52,15 +52,18 @@ A closed task becomes one line under Closed:
 - Candidate: `6421b01` (tree `faf6387`): design 0009 and its prototype
 - Evidence: the designer checked the prototype in light and dark and at
   390 px with no horizontal overflow; its canonical TOML example round-trips
-- Findings: none yet; open user questions: the `note` key, the shared
-  login backoff for password changes, and prototype approval
-- Next action: reviewer — design review of `829a072..6421b01`; the user
-  approves the prototype
+- Findings: none yet
+- Next action: reviewer — design review of `829a072..6421b01`
 
 Decisions for TASK-0017 (2026-11-26):
 
 - The user deferred M3.2, M3.3, and the device check I20 and put M4
   first; the M4 decisions are in the roadmap.
+- The user approved the prototype at `6421b01` as the visual reference
+  for M4 (2026-11-26).
+- The user chose the optional `note` key on rules, upstreams, and
+  interfaces, and a password change that counts wrong current passwords
+  in the login backoff (2026-11-26).
 
 ## Closed
 
