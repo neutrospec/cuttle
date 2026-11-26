@@ -429,7 +429,10 @@ table.data th:first-child, table.data td:first-child { padding-left: 16px; }
 table.data th:last-child, table.data td:last-child { padding-right: 16px; }
 table.data .n { text-align: right; white-space: nowrap; }
 table.data td.n { color: var(--ink-2); }
-table.data td.host { min-width: 11em; }
+/* A host keeps its whole name on one line while the table has room: the
+   other columns wrap first, and a host breaks only where it would
+   overflow its cell. */
+table.data td.host { min-width: 11em; overflow-wrap: break-word; }
 table.data td.when { min-width: 6.5em; color: var(--ink-2); }
 table.data.dense th, table.data.dense td { padding-left: 8px; padding-right: 8px; }
 table.data.dense td:not(.host) { overflow-wrap: normal; }
@@ -539,6 +542,8 @@ a.r-name:hover { text-decoration: underline; }
 .ent .e-name { font-family: var(--mono); font-weight: 600; font-size: 13.5px; text-decoration: none; overflow-wrap: anywhere; }
 .ent .e-note { color: var(--ink-2); font-size: 13px; }
 .ent .e-col { display: grid; gap: 4px; justify-items: start; min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
+.ent .e-col .state { align-items: flex-start; white-space: normal; }
+.ent .e-col .state::before { margin-top: 5px; }
 .ent .e-col .hint { font-size: 12px; }
 .ent .r-traffic { padding-top: 0; }
 .ent-head { padding: 10px 10px 8px 16px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); }
@@ -703,10 +708,13 @@ pre.disk {
      main values after it with their labels, the rest hidden. */
   table.resp thead { display: none; }
   table.resp, table.resp tbody, table.resp tr { display: block; }
-  table.resp tr { padding: 10px 12px; border-top: 1px solid var(--line); }
+  table.resp tr { padding: 10px 16px; border-top: 1px solid var(--line); }
   table.resp tbody tr:first-child { border-top: 0; }
-  table.resp td { display: inline-block; border: 0; padding: 2px 14px 2px 0; }
-  table.resp td.lead-cell { display: block; padding-right: 0; }
+  table.resp td { display: inline-block; border: 0; }
+  /* Every line of a stacked row starts at the row's inset, also where the
+     desktop rules pad the first or last cell. */
+  table.resp td, table.data.resp td, table.data.resp td:first-child, table.data.resp td:last-child { padding: 2px 14px 2px 0; }
+  table.resp td.lead-cell { display: block; }
   table.resp td.n { text-align: left; }
   table.resp td[data-label]::before { content: attr(data-label) " "; color: var(--muted); font-family: var(--sans); }
   table.resp td.opt, table.resp td.barcol { display: none; }

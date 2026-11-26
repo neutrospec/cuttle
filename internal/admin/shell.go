@@ -168,23 +168,31 @@ func (s *Server) shellBanners(st *control.Status, page string) []banner {
 		out = append(out, b)
 	}
 	if keys := st.Config.RestartRequired; len(keys) > 0 {
-		var title []seg
-		for i, k := range keys {
-			switch {
-			case i == 0:
-			case i == len(keys)-1:
-				title = append(title, seg{Text: " and "})
-			default:
-				title = append(title, seg{Text: ", "})
-			}
-			title = append(title, seg{Text: k, Code: true})
-		}
-		verb := " changes apply at the next start."
-		title = append(title, seg{Text: verb})
-		out = append(out, banner{Kind: "warn", Title: title,
-			Lines: [][]seg{rich("Restart with `" + restartCommand + "` to use the new values.")}})
+		out = append(out, banner{Kind: "warn", Title: restartTitle(keys), Lines: [][]seg{restartLine()}})
 	}
 	return out
+}
+
+// restartTitle says which restart-only keys wait for the next start,
+// such as "`a`, `b` and `c` changes apply at the next start."
+func restartTitle(keys []string) []seg {
+	var out []seg
+	for i, k := range keys {
+		switch {
+		case i == 0:
+		case i == len(keys)-1:
+			out = append(out, seg{Text: " and "})
+		default:
+			out = append(out, seg{Text: ", "})
+		}
+		out = append(out, seg{Text: k, Code: true})
+	}
+	return append(out, seg{Text: " changes apply at the next start."})
+}
+
+// restartLine says how to restart (design 0009 D2).
+func restartLine() []seg {
+	return rich("Restart with `" + restartCommand + "` to use the new values.")
 }
 
 // when formats a time for the shell: the time of day for today, the date

@@ -236,7 +236,9 @@ type pageData struct {
 	// Page names a session page by its navigation entry; the layout then
 	// draws the shell with that entry marked (design 0009 D2).
 	Page string
-	// Refresh, when positive, reloads the page after that many seconds.
+	// Refresh, when positive, reloads the page after that many seconds:
+	// the script does, and waits while a menu or dialog is open; without
+	// the script, a <noscript> meta refresh does.
 	Refresh int
 	// Data holds the page's own content.
 	Data any

@@ -108,7 +108,16 @@
   // earlier response is dropped.
   const pending = new WeakMap();
 
-  class FragmentError extends Error {}
+  // FragmentError is an answer that is not a fragment: a refusal such as
+  // 403 after the session ended or 400 for a bad form, or a redirect to
+  // the sign-in page. It keeps the status and the server's first line.
+  class FragmentError extends Error {
+    constructor(status, text, signedOut) {
+      super(text);
+      this.status = status;
+      this.signedOut = signedOut;
+    }
+  }
 
   async function loadFragment(target, url, init = {}) {
     const previous = pending.get(target);
@@ -123,11 +132,13 @@
         signal: ctl.signal,
       });
       const type = res.headers.get("Content-Type") || "";
-      if (!type.startsWith("text/html")) throw new FragmentError("not a fragment");
       const text = await res.text();
+      const refused = () => new FragmentError(res.status, type.startsWith("text/plain") ? text.trim().split("\n")[0] : "",
+        res.status === 403 || (res.redirected && new URL(res.url).pathname === "/login"));
+      if (!type.startsWith("text/html")) throw refused();
       const parsed = new DOMParser().parseFromString(text, "text/html");
       const root = parsed.body.firstElementChild;
-      if (!root || !root.hasAttribute("data-block")) throw new FragmentError("not a fragment");
+      if (!root || !root.hasAttribute("data-block")) throw refused();
       // DOMParser never runs scripts; the fragment keeps none anyway.
       $$("script", root).forEach((s) => s.remove());
       const node = doc.adoptNode(root);
@@ -140,13 +151,21 @@
   }
 
   // failed shows the request-failed state of design 0009 D3.13 in the
-  // target; retry runs the request again the way the page would without
-  // the script.
-  function failed(target, retry) {
+  // target, saying what happened: no answer, an ended session, or the
+  // server's refusal; retry runs the request again the way the page
+  // would without the script.
+  function failed(target, retry, err) {
+    let text = "Could not reach cuttle. Check that it is running, then try again.";
+    let signIn = null;
+    if (err instanceof FragmentError && err.signedOut) {
+      text = "Your session ended or this page expired. Sign in again, then try again.";
+      signIn = el("a", { class: "btn sm", href: "/login" }, "Sign in");
+    } else if (err instanceof FragmentError) {
+      text = "cuttle refused the request" + (err.message ? ": " + err.message.slice(0, 200) : " (" + err.status + ")") + ".";
+    }
     const again = el("button", { type: "button", class: "btn sm" }, "Try again");
     again.addEventListener("click", retry);
-    const panel = el("div", { class: "failed", role: "alert", "data-block": "failed" },
-      el("span", {}, "Could not reach cuttle. Check that it is running, then try again."), again);
+    const panel = el("div", { class: "failed", role: "alert", "data-block": "failed" }, el("span", {}, text), signIn, again);
     target.replaceChildren(panel);
   }
 
@@ -186,7 +205,7 @@
       done();
       if (err.name === "AbortError") return;
       form.dataset.plain = "1";
-      failed(target, () => form.requestSubmit(sub));
+      failed(target, () => form.requestSubmit(sub), err);
     });
   });
 
@@ -490,6 +509,22 @@
     field.focus();
     if (field.select) field.select();
   });
+
+  /* ---------------------------------------------------------- refresh */
+  // A page with data-refresh="<seconds>", such as /live, reloads itself
+  // as its <noscript> meta refresh would, but waits while a menu or a
+  // dialog is open, so the refresh never closes what the operator opened.
+  const refresh = Number(doc.body.dataset.refresh || 0);
+  if (refresh > 0) {
+    const tick = () => {
+      if (menus().length || $("dialog[open]")) {
+        setTimeout(tick, 1000);
+        return;
+      }
+      location.reload();
+    };
+    setTimeout(tick, refresh * 1000);
+  }
 
   /* ------------------------------------------------------------ start */
   // enhance arms the controls inside root: toasts, dialogs, list inputs,

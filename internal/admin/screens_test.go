@@ -156,6 +156,31 @@ func TestAdminScreens(t *testing.T) {
 			}
 			for _, pg := range pages {
 				p.Navigate(base + pg.path)
+				// At desktop width a host stays on one line; on a phone a
+				// stacked row starts each line at the same inset.
+				var broken []string
+				var offset []int
+				var shown int
+				eval(`[...document.querySelectorAll("td.host")].filter((td) => {
+					const r = document.createRange(); r.selectNodeContents(td);
+					return [...r.getClientRects()].filter((x) => x.width > 0).length > 1; }).map((td) => td.textContent)`, &broken)
+				eval(`(() => {
+					const inset = (td) => { const cs = getComputedStyle(td);
+						return td.getBoundingClientRect().left + parseFloat(cs.borderLeftWidth) + parseFloat(cs.paddingLeft); };
+					return [...document.querySelectorAll("table.resp tbody tr")].map((tr) => {
+						const c = [...tr.children].filter((td) => getComputedStyle(td).display !== "none");
+						return c.length < 2 ? 0 : Math.round(inset(c[0]) - inset(c[1]));
+					}).filter((d) => d !== 0); })()`, &offset)
+				if !w.mobile && pg.name != "gallery" && len(broken) > 0 {
+					t.Errorf("%s%s: hosts break across lines: %q", pg.name, suffix, broken)
+				}
+				eval(`[...document.querySelectorAll("table.resp td.opt, table.resp td.barcol")].filter((td) => getComputedStyle(td).display !== "none").length`, &shown)
+				if w.mobile && len(offset) > 0 {
+					t.Errorf("%s%s: stacked rows start their lines at different insets: %v px", pg.name, suffix, offset)
+				}
+				if w.mobile && shown > 0 {
+					t.Errorf("%s%s: %d cells that a phone hides are shown", pg.name, suffix, shown)
+				}
 				check(pg.name, pg.h1)
 			}
 			// A save that needs a restart: a toast and the shell's banner.
@@ -171,7 +196,8 @@ func TestAdminScreens(t *testing.T) {
 			}
 			eval(`({toast: (document.querySelector(".toast.warn") || {}).textContent || "",
 				banner: (document.querySelector(".banners .banner.warn") || {}).textContent || ""})`, &shown)
-			if !strings.Contains(shown.Toast, "Restart required for: proxy.listen.") || !strings.Contains(shown.Banner, "proxy.listen changes apply at the next start.") {
+			if !strings.Contains(shown.Toast, "Restart required.") || !strings.Contains(shown.Toast, "proxy.listen changes apply at the next start.") ||
+				!strings.Contains(shown.Banner, "proxy.listen changes apply at the next start.") {
 				t.Errorf("save%s: toast %q, banner %q", suffix, shown.Toast, shown.Banner)
 			}
 			check("advanced-saved", "Advanced")
@@ -304,6 +330,55 @@ func TestAdminScreens(t *testing.T) {
 		t.Errorf("phone menu: open and current %v, closed by Escape %v", menu, closed)
 	}
 	clean("interactions")
+
+	// /live refreshes itself after 5 s, but not while its menu is open.
+	p.Navigate(base + "/live")
+	var kept [2]bool
+	eval(`(() => { window.__stay = true; document.querySelector(".topbar summary").click();
+		return new Promise((r) => setTimeout(() => r([window.__stay === true, document.querySelector(".topbar details").open]), 6500)); })()`, &kept)
+	if kept != [2]bool{true, true} {
+		t.Errorf("/live refreshed while its menu was open: page kept %v, menu open %v", kept[0], kept[1])
+	}
+	p.Key("Escape", 27)
+	p.WaitLoad()
+	var fresh bool
+	eval(`window.__stay === undefined`, &fresh)
+	if !fresh {
+		t.Error("/live did not refresh after its menu closed")
+	}
+	clean("live refresh")
+
+	// A refused fragment request says what happened, and keeps Try again:
+	// a session that ended (403) offers to sign in; another refusal shows
+	// the server's message.
+	p.Viewport(1280, 900, false)
+	refused := func(field, value string) (text string, signIn, again bool) {
+		t.Helper()
+		p.Navigate(base + "/settings")
+		var r struct {
+			Text   string `json:"text"`
+			SignIn bool   `json:"signIn"`
+			Again  bool   `json:"again"`
+		}
+		eval(`(() => { document.querySelector('.editor-form input[name="`+field+`"]').value = "`+value+`";
+			document.querySelector('[data-fragment="settings-result"]').click();
+			return new Promise((r) => { const t0 = Date.now(); (function poll() {
+				const f = document.querySelector('#settings-result > [data-block="failed"]');
+				if (f || Date.now() - t0 > 5000) r({text: f ? f.textContent : "", signIn: !!(f && f.querySelector('a[href="/login"]')),
+					again: !!(f && [...f.querySelectorAll("button")].some((b) => b.textContent === "Try again"))});
+				else setTimeout(poll, 50); })(); }); })()`, &r)
+		// Chrome logs the refusal as a network error; it is the answer
+		// under test here.
+		p.Problems()
+		return r.Text, r.SignIn, r.Again
+	}
+	if text, signIn, again := refused("csrf", "expired"); !strings.HasPrefix(text, "Your session ended or this page expired.") || !signIn || !again {
+		t.Errorf("403 as a fragment: %q, sign-in link %v, Try again %v", text, signIn, again)
+	}
+	shoot("advanced-refused-1280-light")
+	if text, signIn, again := refused("base", "zz"); !strings.HasPrefix(text, "cuttle refused the request: 400 Bad Request: missing or invalid base.") || signIn || !again {
+		t.Errorf("400 as a fragment: %q, sign-in link %v, Try again %v", text, signIn, again)
+	}
 
 	// Without the script every control is the plain one: the list input
 	// is its textarea, toasts sit in the page above the banners, the save

@@ -444,7 +444,8 @@ func TestAdminSettings(t *testing.T) {
 	_, b = page()
 	moved := strings.Replace(newRules, "127.0.0.1:18080", "127.0.0.1:18082", 1)
 	res, body = save(moved, b)
-	if res.StatusCode != http.StatusOK || !strings.Contains(body, "Restart required for: proxy.listen.") {
+	if res.StatusCode != http.StatusOK || !strings.Contains(body, "<strong>Saved and reloaded. Restart required.</strong>") ||
+		!strings.Contains(body, "<code>proxy.listen</code> changes apply at the next start.") {
 		t.Errorf("proxy.listen change: %d\n%s", res.StatusCode, body)
 	}
 	_, out, _ = runCLI(a.lookup, "status")

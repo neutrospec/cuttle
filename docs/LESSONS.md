@@ -287,3 +287,22 @@ removes entries. Append new entries at the end, oldest first.
   poll until a different node is there. Keep trigger and content markers
   apart: triggers carry `data-fragment="<target id>"`, and fragment roots
   carry `data-block="<name>"`.
+
+### 2026-11-26 — implementer — the first match in a page with a shell
+
+- Task: TASK-0019 iteration 2, browser checks in `TestAdminScreens` for
+  the refused-fragment messages and the phone table rows.
+- Attempts: 2 failures of the same kind as the entry above, and one
+  check that a mutation survived.
+- What failed: `document.querySelector('input[name="csrf"]')` returned the
+  sidebar's sign-out form, which comes before the editor in the page, so
+  the probe changed the wrong token, the request succeeded, and the check
+  saw no refusal. Separately, a check for misaligned phone rows compared
+  `getBoundingClientRect().left` of the cells; the defect was padding
+  inside the cell, so the check passed with the defect restored.
+- What to do instead: The admin shell repeats the navigation and the
+  sign-out form (sidebar and phone menu), so scope every selector to the
+  element under test, such as `.editor-form input[name="csrf"]`. Measure
+  what the operator sees: the content edge (`left` plus border and
+  padding) or the text's `Range` rects, and prove each layout check by
+  restoring the defect once.

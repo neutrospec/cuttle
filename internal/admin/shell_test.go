@@ -336,6 +336,70 @@ func TestAdminDomainsWindow(t *testing.T) {
 	}
 }
 
+// TestAdminSaveToast checks the toast of a save on the Advanced page
+// (design 0009 D7): validator warnings, which a file may keep for good,
+// leave it an ok toast that closes by itself and names their count while
+// the page lists them; restart-only keys make it a warn toast that stays,
+// with the shell banner's wording.
+func TestAdminSaveToast(t *testing.T) {
+	f := newFixture(t, true)
+	f.withExample()
+	b := f.browser()
+	csrf := b.login()
+	save := func(text string) string {
+		t.Helper()
+		_, base := b.settingsForm()
+		res := b.do(req{method: http.MethodPost, path: "/settings", form: url.Values{"csrf": {csrf}, "text": {text}, "base": {base}}})
+		body := bodyOf(t, res)
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("save: %d:\n%s", res.StatusCode, body)
+		}
+		return body
+	}
+	toastOf := func(body string) string {
+		t.Helper()
+		i := strings.Index(body, `<div class="toast `)
+		if i < 0 {
+			t.Fatalf("no toast:\n%s", body)
+		}
+		return body[i : i+strings.Index(body[i:], "</div></div>")]
+	}
+	// Two warnings: the example's upstreams have no interface list.
+	body := save(strings.Replace(exampleConfig, `default = "direct"`, `default = "block"`, 1))
+	if got := toastOf(body); !strings.HasPrefix(got, `<div class="toast ok" role="status" data-toast="ok">`) ||
+		!strings.Contains(got, "<strong>Saved and reloaded.</strong>") || !strings.Contains(got, "The file has 2 warnings; this page lists them.") {
+		t.Errorf("save with warnings: toast %s", got)
+	}
+	if !strings.Contains(body, `<h2 id="warnings-h">Warnings <span class="count">2</span></h2>`) {
+		t.Error("save with warnings: the page does not list them")
+	}
+	body = save(strings.Replace(readFile(t, f.be.path), `"127.0.0.1:41728"`, `"127.0.0.1:41730"`, 1))
+	if got := toastOf(body); !strings.HasPrefix(got, `<div class="toast warn" role="alert" data-toast="warn">`) ||
+		!strings.Contains(got, "<strong>Saved and reloaded. Restart required.</strong>") ||
+		!strings.Contains(got, "<code>proxy.listen</code> changes apply at the next start. Restart with <code>brew services restart cuttle</code> to use the new values.") ||
+		!strings.Contains(got, "The file has 2 warnings; this page lists them.") {
+		t.Errorf("save that needs a restart: toast %s", got)
+	}
+}
+
+// TestAdminLiveRefresh checks that /live refreshes itself every 5 s
+// through the script, which can wait while a menu is open, and through a
+// <noscript> meta refresh without it; no other page refreshes.
+func TestAdminLiveRefresh(t *testing.T) {
+	f := newFixture(t, true)
+	b := f.browser()
+	b.login()
+	body := bodyOf(t, b.get("/live"))
+	if !strings.Contains(body, `<noscript><meta http-equiv="refresh" content="5"></noscript>`) || !strings.Contains(body, `<body data-refresh="5">`) {
+		t.Errorf("/live does not refresh:\n%s", body)
+	}
+	for _, p := range []string{"/", "/domains", "/settings"} {
+		if body := bodyOf(t, b.get(p)); strings.Contains(body, "http-equiv") || strings.Contains(body, "data-refresh") {
+			t.Errorf("%s refreshes", p)
+		}
+	}
+}
+
 // TestAdminFragment checks the fragment requests of design 0009 D10 on
 // the Advanced page: with Cuttle-Fragment: 1, Validate answers only the
 // result block, whose root carries data-block, with the same status,

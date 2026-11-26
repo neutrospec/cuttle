@@ -8,13 +8,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light dark">
-{{if gt .Refresh 0}}<meta http-equiv="refresh" content="{{.Refresh}}">
+{{/* A page that refreshes itself does so with the script, which waits
+   while a menu or dialog is open; without the script, the meta element
+   does it. */}}{{if gt .Refresh 0}}<noscript><meta http-equiv="refresh" content="{{.Refresh}}"></noscript>
 {{end}}<title>{{.Title}} · cuttle</title>
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/admin.css">
 {{if .Shell}}<script src="/static/admin.js" defer></script>
 {{end}}</head>
-<body>
+<body{{if gt .Refresh 0}} data-refresh="{{.Refresh}}"{{end}}>
 {{template "icons"}}
 {{if .Shell}}<a class="skip" href="#main">Skip to content</a>
 <div class="app">

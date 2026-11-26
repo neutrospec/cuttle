@@ -224,28 +224,25 @@ func (s *Server) postSettings(w http.ResponseWriter, r *http.Request, _ string, 
 	s.renderSettings(w, r, http.StatusOK, v, d, savedToast(res, unsynced))
 }
 
-// savedToast reports a save that the reload accepted (design 0009 D7):
-// restart-only keys, warnings, and a directory that could not be synced
-// (OI-0006 U-R1) make it a toast that stays. The page lists the
-// warnings, which the validator gives for the saved text.
+// savedToast reports a save that the reload accepted (design 0009 D7).
+// Restart-only keys and a directory that could not be synced make it a
+// toast that stays; validator warnings, which a file may keep for good,
+// leave it an ok toast that names their count, and the page lists them.
 func savedToast(res control.ReloadResult, unsynced bool) toast {
 	t := toast{Kind: "ok", Title: "Saved and reloaded."}
 	if unsynced {
 		t.Kind, t.Title = "warn", "Saved and reloaded; the directory could not be synced."
+		t.Lines = append(t.Lines, plain("The file holds the new text, but a power loss soon after the save could undo it."))
 	}
 	if keys := res.RestartRequired; len(keys) > 0 {
 		t.Kind = "warn"
 		if !unsynced {
 			t.Title = "Saved and reloaded. Restart required."
 		}
-		t.Lines = append(t.Lines, append(plain("Restart required for: "+strings.Join(keys, ", ")+". These keys apply at the next start: "),
-			seg{Text: restartCommand, Code: true}))
+		t.Lines = append(t.Lines, append(append(restartTitle(keys), seg{Text: " "}), restartLine()...))
 	}
 	if n := len(res.Warnings); n > 0 {
-		if t.Kind == "ok" {
-			t.Kind, t.Title = "warn", "Saved and reloaded with "+plural(n, "warning")+"."
-		}
-		t.Lines = append(t.Lines, plain("The page lists the "+plural(n, "warning")+"."))
+		t.Lines = append(t.Lines, plain("The file has "+plural(n, "warning")+"; this page lists them."))
 	}
 	return t
 }
