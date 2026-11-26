@@ -237,6 +237,23 @@ truth. On resume, reconcile the board with them before acting.
   to a scratch bare repository and run `scripts/publish-scan` on it with
   the untracked `.env`, then run it on the remote after the push. Only the
   matches that [OI-0004](docs/OPEN_ISSUES.md) accepts may remain.
+- The tap `neutrospec/homebrew-tap` receives from agents only commits to
+  `main` and one pull request branch `bump-cuttle-X.Y.Z` per release. Its
+  `publish.yml` creates the `cuttle-X.Y.Z` release and tag and deletes
+  the branch; agents never push tags or releases to the tap. Follow the
+  [release procedure](docs/design/0006-packaging-paths-and-lifecycle.md#release-procedure),
+  with the user's approval for each push and workflow dispatch. The
+  one-time bootstrap first pushes the workflows commit to the tap's
+  `main`, so that `publish.yml` is on the default branch, and only then
+  opens the pull request. `scripts/publish-scan` cannot scan a commit
+  range, and the tap serves `refs/pull/*` and canopy's bot commits, so
+  before each push to the tap the orchestrator runs the check in that
+  procedure from the main checkout's root instead. It applies
+  `CUTTLE_PUBLISH_SCAN_PATTERNS` with `/usr/bin/grep -a -i -E` to
+  `git log -p --format=%B origin/main..<ref>` and to the branch name,
+  refuses a merge commit in that range, and requires every author and
+  committer in it to be one of `CUTTLE_PUBLISH_IDENTITIES`. Push only when it prints
+  `tap push check: pass`.
 
 ## Evidence by Git tree
 

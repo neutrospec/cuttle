@@ -32,9 +32,11 @@ ordered rules on host name, domain, IP prefix, and port:
 
 ## Install
 
-cuttle needs macOS. It installs from the `neutrospec/tap` Homebrew tap,
-which builds it from source with Homebrew's `go`, and runs as a user-level
-LaunchAgent under `brew services`; no step needs `sudo`.
+cuttle needs macOS. It installs from the `neutrospec/tap` Homebrew tap
+and runs as a user-level LaunchAgent under `brew services`; no step needs
+`sudo`. On Apple Silicon with macOS 15 or later, Homebrew pours a prebuilt
+bottle, including on a macOS newer than any bottle. Elsewhere, such as on
+Intel Macs, it builds cuttle from source with Homebrew's `go`.
 
 ```sh
 brew install neutrospec/tap/cuttle
@@ -238,7 +240,9 @@ or later; the gates use the Homebrew `go`. A plain `go build` reports its
 version as `dev+<revision>` (`.dirty` with uncommitted changes); release
 builds set it with `-ldflags "-X main.version=..."`. The Homebrew formula's
 source is [packaging/homebrew/cuttle.rb](packaging/homebrew/cuttle.rb),
-which is copied into the tap at each release. Run the
+which is copied into the tap at each release; the tap's CI builds the
+bottles ([design 0006 D8](docs/design/0006-packaging-paths-and-lifecycle.md#release-procedure)
+has the release procedure). Run the
 gate tiers of [AGENTS.md](AGENTS.md#evidence-by-git-tree) from the
 repository root with `scripts/gate`, which runs exactly the commands of
 [design 0007 D7](docs/design/0007-test-environment-and-gates.md#d7-gates):
