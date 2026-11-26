@@ -41,25 +41,18 @@ A closed task becomes one line under Closed:
 
 ## Active
 
-### TASK-0021 — M4.2 C: rules and upstreams
+### TASK-0023 — M4.4 E: dashboard integration and the M4 browser check
 
-- Milestone: M4.2
-- Status: review
-- Iteration: 2/3
-- Workers: implementer done on branch `t3/rules-upstreams-pages`; fresh
-  reviewer re-checking the fixes and the merge
-- Base: `e5ff391`
-- Candidate: `1c0517b` (tree `c38c5d1`), with `main` at `89243f3` merged
-  in `6e27545`; `ecf1585` (tree `ba2d923`) was returned for F1
-- Evidence: implementer ran `scripts/gate t0`, `t1`, and
-  `scripts/admin-check` on `ba2d923`, all pass; W15–W19 tests, AA-R1–AA-R3,
-  AA-R5, AA-R6, and Z-R3 settled, 16 mutation proofs, and screenshots at
-  1280 and 390 px in light and dark
-- Findings: F1 (major): without the script, moving a rule down lands one
-  position higher than typed (W16); F2 (medium, UI): the no-script rules
-  layout shifts when the drag handle is hidden; N1–N4 and AB-R5 folded in
-- Next action: reviewer — re-check the fixes, the merge, and AB-R10 in
-  `ecf1585..1c0517b`
+- Milestone: M4.4
+- Status: implement
+- Iteration: 1/3
+- Workers: implementer on a T3 worktree branch
+- Base: this board update
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: implementer — build task E of design 0009 (W24–W26) with
+  the M4 follow-ups listed in the brief and return the candidate
 
 ## Closed
 
@@ -69,6 +62,9 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0021 — M4.2 C: rules and upstreams — landed `d784fcf`, gates: T0 T1 T2 @
+  `c38c5d1` (landed tree differs only in tracking records); iteration 2 of
+  3; follow-ups AC-R1–AC-R4 in OI-0006
 - TASK-0022 — M4.3 D: interfaces, proxy, remote clients, general, account —
   landed `68d788c`, gates: T0 T1 T2 @ `412f9d0` (landed tree differs only in
   tracking records); iteration 1 of 3; follow-ups AB-R1–AB-R10 in OI-0006
