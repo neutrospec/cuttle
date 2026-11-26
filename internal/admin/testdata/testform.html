@@ -1,0 +1,17 @@
+{{/* testform is the page of the test-only form ops in ops_test.go: every
+   field as a textarea with its issues, the hidden state of the form, and
+   the issues block. Its Data is a formPage whose View lists the fields. */}}
+{{define "content"}}{{with .Data}}
+<header class="page-head"><div><h1>Test form</h1></div></header>
+<div id="form-issues">{{template "form-issues" $}}</div>
+<form method="post" action="/config/draft" class="test-form">
+<input type="hidden" name="csrf" value="{{$.Token}}">
+{{range .Form.Hidden}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">
+{{end}}{{range .View}}<div class="field" id="field-{{.}}"><label for="f-{{.}}">{{.}}</label>
+<textarea id="f-{{.}}" name="{{.}}" data-bad="{{$.Data.Form.Bad .}}">{{$.Data.Form.Value .}}</textarea>
+{{range $.Data.Form.Errors .}}<p class="err">{{.}}</p>
+{{end}}{{range $.Data.Form.Warnings .}}<p class="wrn">{{.}}</p>
+{{end}}</div>
+{{end}}<button type="submit" name="intent" value="review">Review changes</button>
+</form>
+{{template "review-dialog"}}{{end}}{{end}}

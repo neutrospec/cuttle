@@ -279,9 +279,13 @@ exact range.
 | `GET` | `/` | Session | Overview: totals per route and per interface, top hosts, live counters, upstream and interface states, configuration and statistics status |
 | `GET` | `/domains` | Session | Host table filtered by `route`, `source`, `interface`, and window |
 | `GET` | `/live` | Session | Active tunnels; refreshes every 5 s, through the admin script, which waits while a menu or dialog is open ([0009 D10](0009-web-configuration.md#d10-javascript)), or through a `<noscript>` `<meta http-equiv="refresh">` |
-| `GET` | `/settings` | Session | Configuration editor (D10) |
+| `GET` | `/settings` | Session | Configuration editor (D10) and the previous version ([0009 D3.10](0009-web-configuration.md#d310-advanced)) |
+| `GET` | `/settings/backup` | Session | The previous version, `.bak`, and its diff with the current file |
 | `POST` | `/settings/validate` | Session, CSRF | Validate text without saving |
 | `POST` | `/settings` | Session, CSRF | Validate, save, reload |
+| `POST` | `/config/draft` | Session, CSRF | Check, review, or return to editing a draft; never writes ([0009 D7](0009-web-configuration.md#d7-edit-and-save-pipeline)) |
+| `POST` | `/config/apply` | Session, CSRF | Write a reviewed candidate and reload |
+| `POST` | `/config/reload` | Session, CSRF | Reload the file as it is |
 | `GET` | `/static/*` | Host check | Embedded styles |
 
 `route` is `direct`, `upstream` (all upstreams), `upstream:<name>`,
@@ -345,6 +349,12 @@ The pages are rendered on the server; there is no JSON API and no
      given, for example because the file changed again in between, the page
      answers `422` with the errors, and the running configuration stays.
 - One save at a time runs from the write through the reload.
+- The page's primary action is Review changes, which shows the diff
+  before anything is written and applies through `POST /config/apply`
+  ([0009 D3.10, D7](0009-web-configuration.md#d310-advanced)); `POST
+  /settings` stays as the direct save and shares its save function with
+  that endpoint. The page also offers the previous version, `.bak`, for
+  comparison and restore.
 - `POST /settings/validate` runs the same checks and the validator on the
   submitted text and never writes: `200` when the text is valid, `422`
   with the messages otherwise.

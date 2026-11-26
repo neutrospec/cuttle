@@ -69,6 +69,17 @@ func WriteAtomic(path string, data []byte, opt WriteOptions) error {
 	return nil
 }
 
+// BackupPath returns the path of the previous version that WriteAtomic
+// keeps for path: <target>.bak beside the target of the symbolic links at
+// path (design 0004 D7, 0009 D12).
+func BackupPath(path string) (string, error) {
+	target, err := resolveLinks(path)
+	if err != nil {
+		return "", err
+	}
+	return target + ".bak", nil
+}
+
 // syncDir makes the renames in dir durable.
 func syncDir(dir string) error {
 	d, err := os.Open(dir)

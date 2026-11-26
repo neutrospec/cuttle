@@ -440,6 +440,40 @@ func TestAdminSettings(t *testing.T) {
 		t.Errorf("status after the save: sha256 %s, tunnels %+v", st.Config.SHA256, st.Tunnels)
 	}
 
+	// The same through the review of design 0009 D7 (W7): Review changes,
+	// then Apply changes, which writes, reloads, and returns to the page
+	// with a toast, while the tunnel keeps transferring.
+	_, b = page()
+	reviewed := strings.Replace(newRules, `"files.cuttle.test"`, `"files.cuttle.test", "more.cuttle.test"`, 1)
+	res, body = adminPost(t, c, base+"/config/draft", url.Values{"csrf": {csrf}, "op": {"text"}, "base": {b}, "return": {"/settings"},
+		"intent": {"review"}, "text": {reviewed}})
+	if res.StatusCode != http.StatusOK || !strings.Contains(body, "Edited as text: 1 line added, 1 removed") {
+		t.Fatalf("review: %d\n%s", res.StatusCode, body)
+	}
+	if now, _ := os.ReadFile(path); string(now) != newRules {
+		t.Fatal("the review changed the file")
+	}
+	applyForm := reviewForm(t, body)
+	res, body = adminPost(t, c, base+"/config/apply", applyForm)
+	if res.StatusCode != http.StatusSeeOther || res.Header.Get("Location") != "/settings" {
+		t.Fatalf("apply: %d %q\n%s", res.StatusCode, res.Header.Get("Location"), body)
+	}
+	if data, _ := os.ReadFile(path); string(data) != reviewed {
+		t.Errorf("after apply: %q", data)
+	}
+	if bak, _ := os.ReadFile(path + ".bak"); string(bak) != newRules {
+		t.Errorf(".bak after apply: %q", bak)
+	}
+	waitLog2(t, a.s.paths.Log.Path, 2, `msg=reloaded`)
+	if _, body, _ := adminGet(t, c, base+"/settings"); !strings.Contains(body, "<strong>Saved and reloaded.</strong>") {
+		t.Errorf("no toast after apply:\n%s", body)
+	}
+	echo("after the apply")
+	if code := getStatus(t, proxyClient(t, proxyAddr), "http://more.cuttle.test/bytes?n=10"); code != http.StatusForbidden {
+		t.Errorf("more.cuttle.test after the apply: %d, want 403", code)
+	}
+	newRules = reviewed
+
 	// A proxy.listen change saves and lists the key under restart required.
 	_, b = page()
 	moved := strings.Replace(newRules, "127.0.0.1:18080", "127.0.0.1:18082", 1)
@@ -453,5 +487,37 @@ func TestAdminSettings(t *testing.T) {
 		t.Errorf("status after the proxy.listen change:\n%s", out)
 	}
 	echo("after the second reload")
+
+	// A review that changes proxy.listen back to the value the instance
+	// started with lists no restart key: the review compares with the
+	// start configuration (design 0009 D7).
+	_, b = page()
+	res, body = adminPost(t, c, base+"/config/draft", url.Values{"csrf": {csrf}, "op": {"text"}, "base": {b}, "return": {"/settings"},
+		"intent": {"review"}, "text": {newRules}})
+	if res.StatusCode != http.StatusOK || strings.Contains(body, "The other changes apply when you apply them.") {
+		t.Errorf("review back to the start value: %d\n%s", res.StatusCode, body)
+	}
+	res, body = adminPost(t, c, base+"/config/draft", url.Values{"csrf": {csrf}, "op": {"text"}, "base": {b}, "return": {"/settings"},
+		"intent": {"review"}, "text": {strings.Replace(newRules, "127.0.0.1:18080", "127.0.0.1:18083", 1)}})
+	if res.StatusCode != http.StatusOK || !strings.Contains(body, "<code>proxy.listen</code> changes apply at the next start. The other changes apply when you apply them.") {
+		t.Errorf("review of another proxy.listen value: %d\n%s", res.StatusCode, body)
+	}
 	tunnel.Close()
+}
+
+var reviewInputRE = regexp.MustCompile(`<input type="hidden" name="([^"]+)" value="([^"]*)">`)
+
+// reviewForm returns the fields that a review's Apply changes posts.
+func reviewForm(t *testing.T, body string) url.Values {
+	t.Helper()
+	i := strings.Index(body, `<form method="post" action="/config/apply"`)
+	if i < 0 {
+		t.Fatalf("no review form:\n%s", body)
+	}
+	body = body[i : strings.Index(body[i:], "</form>")+i]
+	v := url.Values{}
+	for _, m := range reviewInputRE.FindAllStringSubmatch(body, -1) {
+		v.Add(html.UnescapeString(m[1]), html.UnescapeString(m[2]))
+	}
+	return v
 }

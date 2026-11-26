@@ -1,9 +1,10 @@
 {{/* settings is the Advanced page of design 0009 D3.10: the M2 text
-   editor of design 0005 D10 in the shell. */}}
+   editor of design 0005 D10 in the shell, whose primary action opens the
+   review, and the previous version. */}}
 {{define "content"}}{{with .Data}}
 <header class="page-head">
 <div><h1>Advanced</h1>
-<p class="lead">The configuration file as TOML text. A save checks the text, writes it atomically with the previous version kept in <code>.bak</code>, and reloads.</p></div>
+<p class="lead">The configuration file as TOML text. Review changes shows the diff; applying writes the file atomically, keeps the previous version in <code>.bak</code>, and reloads.</p></div>
 </header>
 <div class="split">
 <div class="stack">
@@ -13,20 +14,23 @@
 <div class="panel-foot"><pre class="disk">
 {{.DiskText}}</pre></div>
 </section>
-{{end}}{{if .Editable}}<form method="post" action="/settings" class="editor-form" data-guard="Unsaved changes to the configuration text" data-guard-discard="/settings"{{if .Dirty}} data-guard-dirty{{end}}>
+{{end}}{{if .Editable}}<form method="post" action="/config/draft" class="editor-form" data-guard="Unsaved changes to the configuration text" data-guard-discard="/settings"{{if .Dirty}} data-guard-dirty{{end}}>
 <input type="hidden" name="csrf" value="{{$.Token}}">
+<input type="hidden" name="op" value="text">
 <input type="hidden" name="base" value="{{.Base}}">
+<input type="hidden" name="return" value="/settings">
 <label for="text">{{if .Conflict}}Your text{{else}}Configuration{{end}}</label>
-<textarea id="text" name="text" rows="32" spellcheck="false" autocomplete="off" wrap="off">
+<textarea id="text" name="text" rows="32" spellcheck="false" autocomplete="off" wrap="off" aria-describedby="text-hint">
 {{.Text}}</textarea>
 <div class="form-foot">
-<button type="submit" class="btn primary" data-primary>Save and reload</button>
+<button type="submit" class="btn primary" name="intent" value="review" data-primary data-fragment="review" data-alt="settings-result">Review changes</button>
 <button type="submit" formaction="/settings/validate" class="btn" data-fragment="settings-result">Validate</button>
 <span class="spacer"></span>
-<span class="hint">Validate checks the text without saving it.</span>
+<span class="hint" id="text-hint">Nothing is written until you apply the review. Command-Enter reviews.</span>
 </div>
 </form>
 {{end}}</div>
+<div class="stack">
 <aside class="panel" aria-labelledby="file-h">
 <div class="panel-head"><h2 id="file-h">File</h2></div>
 <dl class="kv">
@@ -37,12 +41,24 @@
 {{end}}</pre>{{else}}succeeded{{end}}</dd>
 </dl>
 </aside>
+{{with .Backup}}<section class="panel" aria-labelledby="bak-h">
+<div class="panel-head"><h2 id="bak-h">Previous version</h2></div>
+{{if .Offered}}<dl class="kv">
+<dt>Saved</dt><dd>{{time .ModTime}}</dd>
+<dt>Size</dt><dd>{{bytes .Size}}</dd>
+</dl>
+{{if not .Valid}}<p class="panel-foot muted">It has errors, so it cannot be restored.</p>
+{{end}}<div class="panel-foot bak-actions"><a class="btn sm" href="/settings/backup">Compare with current</a>
+{{if and .Valid $.Data.Editable}}{{template "restore" $}}{{end}}</div>
+{{else}}<p class="panel-foot muted">{{.Reason}}</p>
+{{end}}</section>
+{{end}}</div>
 </div>
-{{end}}{{end}}
+{{template "review-dialog"}}{{end}}{{end}}
 
-{{/* settings-result is what Validate and Save report; the script loads
-   it alone as a fragment (design 0009 D10). Its argument is the
-   pageData. */}}
+{{/* settings-result is what Validate and a refused review report; the
+   script loads it alone as a fragment (design 0009 D10). Its argument is
+   the pageData. */}}
 {{define "settings-result"}}{{with .Data}}<div class="stack" data-block="settings-result">
 {{if .ReadError}}<div class="banner error" role="alert">{{template "icon" "alert"}}<div class="b-body"><strong>{{.ReadError}}</strong></div></div>
 {{end}}{{if .Notice}}<div class="banner {{if .NoticeOK}}ok{{else}}error{{end}}" role="{{if .NoticeOK}}status{{else}}alert{{end}}">{{template "icon" (bannerIcon (or (and .NoticeOK "ok") "error"))}}<div class="b-body"><strong>{{.Notice}}</strong></div></div>

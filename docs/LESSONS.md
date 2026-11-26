@@ -306,3 +306,17 @@ removes entries. Append new entries at the end, oldest first.
   what the operator sees: the content edge (`left` plus border and
   padding) or the text's `Range` rects, and prove each layout check by
   restoring the defect once.
+
+### 2026-11-26 — implementer — plus signs in html/template output
+
+- Task: TASK-0020, asserting on the review's diff marks and change
+  summary in the rendered admin pages.
+- Attempts: 2 failures of the same kind.
+- What failed: `html/template` writes `+` in text as `&#43;`. A regular
+  expression over the diff rows compared the mark cell with `"+"`
+  (`mark "&#43;" for " add"`), and after that was fixed, a check for
+  `"Rule <code>restricted</code>: domains +1"` failed the same way.
+- What to do instead: Unescape captured text with `html.UnescapeString`
+  before comparing it, or write the expected literal in its escaped form
+  (`domains &#43;1`). `&#34;` and `&#39;` replace `"` and `'` the same
+  way.

@@ -1,0 +1,23 @@
+{{/* backup is the previous version of design 0009 D3.10: the file that
+   the last save replaced, the diff from the current file to it, and
+   Restore, which opens the review. */}}
+{{define "content"}}{{with .Data}}
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/settings">Advanced</a> / Previous version</nav>
+<header class="page-head">
+<div><h1>Previous version</h1>
+<p class="lead">The file that the last save replaced{{with .Backup.Name}}, kept beside the configuration as <code>{{.}}</code>{{end}}. Restoring it goes through the same review and apply, and keeps the current file as the previous version, so a restore can itself be undone.</p></div>
+{{if and .Backup.Offered .Backup.Valid .Base}}<div class="actions">{{template "restore" $}}</div>
+{{end}}</header>
+{{if not .Backup.Offered}}<div class="banners"><div class="banner {{if .Backup.Missing}}info{{else}}warn{{end}}" role="status">{{template "icon" (or (and .Backup.Missing "info") "alert")}}<div class="b-body"><strong>{{.Backup.Reason}}</strong></div></div></div>
+{{else}}{{if .ReadError}}<div class="banners"><div class="banner warn" role="status">{{template "icon" "alert"}}<div class="b-body"><strong>The current file cannot be read, so the previous version cannot be restored: {{.ReadError}}</strong></div></div></div>
+{{end}}{{if not .Backup.Valid}}<div class="banners"><div class="banner error" role="alert">{{template "icon" "alert"}}<div class="b-body"><strong>The previous version has errors, so it cannot be restored.</strong><pre>{{range .Backup.Errors}}{{.}}
+{{end}}</pre></div></div></div>
+{{end}}<section class="panel" aria-labelledby="bak-h">
+<div class="panel-head"><h2 id="bak-h">Compared with the current file</h2></div>
+<dl class="kv">
+<dt>Saved</dt><dd>{{time .Backup.ModTime}}</dd>
+<dt>Size</dt><dd>{{bytes .Backup.Size}}</dd>
+</dl>
+<div class="panel-foot">{{template "diff" .Diff}}</div>
+</section>
+{{end}}{{template "review-dialog"}}{{end}}{{end}}

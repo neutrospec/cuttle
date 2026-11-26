@@ -105,7 +105,10 @@
   // request with Cuttle-Fragment: 1 (design 0009 D10). Its root element
   // carries data-block="<name>" and must be able to stand in <body>, such
   // as a div or a section. The latest request for a target wins; an
-  // earlier response is dropped.
+  // earlier response is dropped. The server may answer with another
+  // block that the request allowed in alts, the ids of other targets
+  // named like their blocks: a review refused for errors answers the
+  // page's issue block instead of the review (design 0009 D7).
   const pending = new WeakMap();
 
   // FragmentError is an answer that is not a fragment: a refusal such as
@@ -119,7 +122,7 @@
     }
   }
 
-  async function loadFragment(target, url, init = {}) {
+  async function loadFragment(target, url, init = {}, alts = []) {
     const previous = pending.get(target);
     if (previous) previous.abort();
     const ctl = new AbortController();
@@ -141,10 +144,12 @@
       if (!root || !root.hasAttribute("data-block")) throw refused();
       // DOMParser never runs scripts; the fragment keeps none anyway.
       $$("script", root).forEach((s) => s.remove());
+      const alt = alts.includes(root.dataset.block) && doc.getElementById(root.dataset.block);
+      const dest = alt || target;
       const node = doc.adoptNode(root);
-      target.replaceChildren(node);
+      dest.replaceChildren(node);
       enhance(node);
-      return { status: res.status, root: node };
+      return { status: res.status, root: node, target: dest };
     } finally {
       if (pending.get(target) === ctl) pending.delete(target);
     }
@@ -177,7 +182,9 @@
 
   // A submit button with data-fragment="<id>" posts its form for the
   // block that replaces the children of the element with that id, or of
-  // data-target. After a failed request the form submits normally.
+  // data-target; data-alt lists the ids of other targets the answer may
+  // name. A target inside a closed dialog opens it. After a failed
+  // request the form submits normally.
   doc.addEventListener("submit", (e) => {
     const form = e.target;
     const sub = e.submitter;
@@ -196,10 +203,11 @@
     if (method === "GET") url += (url.includes("?") ? "&" : "?") + params;
     else init.body = params;
     const done = busy(sub);
-    loadFragment(target, url, init).then((r) => {
+    const alts = (sub.dataset.alt || "").split(/\s+/).filter(Boolean);
+    loadFragment(target, url, init, alts).then((r) => {
       done();
       announceResult(r.root);
-      const dlg = target.closest("dialog");
+      const dlg = r.target.closest("dialog");
       if (dlg && !dlg.open) openDialog(dlg, sub);
     }, (err) => {
       done();
@@ -358,9 +366,11 @@
     return {
       watch,
       update,
-      // leaving lets a watched form's own submit leave the page.
+      // leaving lets a watched form's own submit leave the page, and
+      // a form marked data-leave, such as the review's Apply changes,
+      // which posts the edit that the watched form holds.
       leaving(form) {
-        if (watched.has(form)) leaving = true;
+        if (watched.has(form) || form.hasAttribute("data-leave")) leaving = true;
       },
       dirty: (form) => !!(watched.get(form) || {}).dirty,
     };

@@ -151,6 +151,11 @@ func (s *serveState) Config() *config.Config {
 	return s.cfg
 }
 
+// StartConfig returns the configuration the listeners were bound with,
+// which the reload compares for restart_required. It is set before the
+// admin listener starts and never changes.
+func (s *serveState) StartConfig() *config.Config { return s.startCfg }
+
 func (s *serveState) ConfigPath() string { return s.cfgPath }
 
 // Stats returns the statistics service, nil while unavailable. It is set

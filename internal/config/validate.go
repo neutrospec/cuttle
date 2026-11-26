@@ -52,6 +52,21 @@ const (
 	maxHold    = 5 * time.Minute
 )
 
+// ValidName reports whether name matches the schema pattern of a name of
+// kind: KindRule, KindUpstream, or KindInterface. The admin answers 404
+// to a page path whose name does not (design 0009 D7).
+func ValidName(kind, name string) bool {
+	switch kind {
+	case KindRule:
+		return ruleNameRe.MatchString(name)
+	case KindUpstream:
+		return upstreamNameRe.MatchString(name)
+	case KindInterface:
+		return interfaceNameRe.MatchString(name)
+	}
+	return false
+}
+
 // Parse decodes and validates a configuration. file names the source in
 // messages. The Config is nil when the report has errors.
 func Parse(data []byte, file string) (*Config, *Report) {

@@ -462,9 +462,27 @@ func TestAtomicWriteDirSync(t *testing.T) {
 	if left, _ := filepath.Glob(filepath.Join(dir, ".config.toml.tmp-*")); len(left) != 0 {
 		t.Errorf("temporary files left: %v", left)
 	}
-	// Every other failure still means that the file is unchanged.
+	// Every other failure still means that the file is unchanged
+	// (OI-0006 Z-R2): a conflict, and a directory with mode 0500, where
+	// the temporary file for .bak cannot be created, before any rename.
 	if err := WriteAtomic(path, []byte("newer"), WriteOptions{ExpectSHA256: Digest([]byte("old"))}); !errors.Is(err, ErrConflict) || errors.Is(err, ErrNotSynced) {
 		t.Errorf("conflict: %v", err)
+	}
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	err = WriteAtomic(path, []byte("newer"), WriteOptions{ExpectSHA256: Digest([]byte("new")), Backup: true})
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err == nil || errors.Is(err, ErrNotSynced) {
+		t.Errorf("write into a 0500 directory: %v, want an error other than ErrNotSynced", err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != "new" {
+		t.Errorf("after the failed write the file holds %q", got)
+	}
+	if got, _ := os.ReadFile(path + ".bak"); string(got) != "old" {
+		t.Errorf("after the failed write .bak holds %q", got)
 	}
 }
 

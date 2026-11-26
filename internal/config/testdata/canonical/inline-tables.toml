@@ -1,0 +1,13 @@
+# Every array of tables written as an inline array of inline tables, which
+# a form save must keep (OI-0006 Z-R1).
+name = "cuttle-inline"
+proxy = { listen = ["127.0.0.1:18080"], default = "direct", interfaces = ["eth-a"] }
+interface = [{ name = "eth-a", mac = "00:00:5e:00:53:0b", note = "Dock" }]
+upstream = [
+  { name = "gw", address = "192.0.2.7:3128", disclosure = "none" },
+]
+rule = [
+  { name = "ads", domains = ["ads.example.net"], action = "block" },
+  { domains = ["build.example"], action = "upstream:gw" },
+  { hosts = ["printer.example"], ports = [631], action = "direct", allow_private = true },
+]

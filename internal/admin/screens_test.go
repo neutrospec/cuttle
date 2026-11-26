@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -120,18 +121,54 @@ func TestAdminScreens(t *testing.T) {
 		t.Fatalf("after sign-in: %+v", s)
 	}
 
-	// Every page at both widths in both appearances.
+	// Every page at both widths in both appearances. A previous version
+	// exists, so the Advanced page offers it and /settings/backup shows
+	// its diff.
 	f.be.mu.Lock()
 	f.be.restart = []string{"proxy.listen"}
 	f.be.mu.Unlock()
+	if err := os.WriteFile(f.be.path+".bak", []byte(strings.Replace(exampleConfig, `name = "ads"`, "name = \"ads\"\nnote = \"Before the last save\"", 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	pages := []struct{ path, h1, name string }{
 		{"/", "Overview", "overview"},
 		{"/domains", "Domains", "domains"},
 		{"/live", "Live", "live"},
 		{"/settings", "Advanced", "advanced"},
+		{"/settings/backup", "Previous version", "backup"},
 		{"/gallery", "Components", "gallery"},
 	}
-	listen := []string{`"127.0.0.1:41728"`, `"127.0.0.1:41730"`}
+	listenRE := regexp.MustCompile(`listen = \["127\.0\.0\.1:\d+"\]`)
+	// dialog reports the open review dialog: whether it shows a diff with
+	// added lines, its summary, and whether it or its body scrolls
+	// sideways.
+	type dialogState struct {
+		Open    bool   `json:"open"`
+		Adds    int    `json:"adds"`
+		Summary string `json:"summary"`
+		Notices string `json:"notices"`
+		Wide    bool   `json:"wide"`
+		Focus   string `json:"focus"`
+	}
+	readDialog := `(() => { const d = document.getElementById("review-dialog"); const b = d && d.querySelector(".dlg-body");
+		return {open: !!d && d.open, adds: d ? d.querySelectorAll(".diff .dl.add").length : 0,
+			summary: d && d.querySelector(".summary") ? d.querySelector(".summary").textContent : "",
+			notices: d && d.querySelector(".notices") ? d.querySelector(".notices").textContent : "",
+			wide: !!d && (d.scrollWidth > d.clientWidth || (!!b && b.scrollWidth > b.clientWidth)),
+			focus: document.activeElement ? document.activeElement.textContent.trim() : ""}; })()`
+	// openReview presses the element that sel names and waits until the
+	// review dialog is open with its content.
+	openReview := func(sel string) dialogState {
+		t.Helper()
+		var ds dialogState
+		eval(`(() => { document.querySelector(`+fmt.Sprintf("%q", sel)+`).click();
+			return new Promise((r) => { const t0 = Date.now(); (function poll() {
+				const d = document.getElementById("review-dialog");
+				if ((d && d.open && d.querySelector("[data-block]")) || Date.now() - t0 > 5000) r(true); else setTimeout(poll, 50); })(); }); })()`, nil)
+		eval(`Promise.all(document.getAnimations().map((a) => a.finished)).then(() => true)`, nil)
+		eval(readDialog, &ds)
+		return ds
+	}
 	for _, scheme := range []string{"light", "dark"} {
 		p.ColorScheme(scheme)
 		for _, w := range []struct {
@@ -183,12 +220,29 @@ func TestAdminScreens(t *testing.T) {
 				}
 				check(pg.name, pg.h1)
 			}
-			// A save that needs a restart: a toast and the shell's banner.
+			// A change that needs a restart, through the review dialog
+			// (design 0009 D3.11): the editor with the pending change and
+			// the save bar, the review with its summary, notices, and
+			// diff, then Apply changes, the toast, and the banner. Each
+			// save moves proxy.listen to a port other than the start one.
 			p.Navigate(base + "/settings")
-			text := strings.Replace(readFile(t, f.be.path), listen[0], listen[1], 1)
-			listen[0], listen[1] = listen[1], listen[0]
-			eval(`(() => { document.getElementById("text").value = `+fmt.Sprintf("%q", text)+
-				`; document.querySelector("[data-primary]").click(); return true })()`, nil)
+			cur := readFile(t, f.be.path)
+			port := "41730"
+			if strings.Contains(cur, "127.0.0.1:41730") {
+				port = "41731"
+			}
+			text := listenRE.ReplaceAllString(cur, `listen = ["127.0.0.1:`+port+`"]`)
+			eval(`(() => { const a = document.getElementById("text"); a.value = `+fmt.Sprintf("%q", text)+
+				`; a.dispatchEvent(new Event("input", {bubbles: true})); return true })()`, nil)
+			check("advanced-pending", "Advanced")
+			ds := openReview(`.editor-form [data-primary]`)
+			if !ds.Open || ds.Adds != 1 || !strings.Contains(ds.Summary, "Edited as text: 1 line added, 1 removed") ||
+				!strings.Contains(ds.Notices, "proxy.listen changes apply at the next start.") || ds.Wide || ds.Focus != "Apply changes" {
+				t.Errorf("review dialog%s: %+v", suffix, ds)
+			}
+			clean("review dialog" + suffix)
+			shoot("review-dialog" + suffix)
+			eval(`(() => { document.querySelector("#review-dialog .dlg-foot .btn.primary").click(); return true })()`, nil)
 			p.WaitLoad()
 			var shown struct {
 				Toast  string `json:"toast"`
@@ -201,6 +255,48 @@ func TestAdminScreens(t *testing.T) {
 				t.Errorf("save%s: toast %q, banner %q", suffix, shown.Toast, shown.Banner)
 			}
 			check("advanced-saved", "Advanced")
+			if got := readFile(t, f.be.path); got != text {
+				t.Errorf("apply%s wrote %q", suffix, got)
+			}
+
+			// The restore dialog from the previous version's page.
+			p.Navigate(base + "/settings/backup")
+			if ds := openReview(`.page-head form [value="review"]`); !ds.Open || !strings.Contains(ds.Summary, "Restores the previous version saved") || ds.Wide {
+				t.Errorf("restore dialog%s: %+v", suffix, ds)
+			}
+			clean("restore dialog" + suffix)
+			shoot("restore-dialog" + suffix)
+			p.Key("Escape", 27)
+
+			// The four file banners, in their order: the file has errors
+			// (with the previous version to restore), or differs from the
+			// running configuration; the last reload failed; restart
+			// required.
+			f.be.mu.Lock()
+			f.be.lastErr = "line 31: rule[3].action: \"sideways\" is not \"direct\", \"block\", or \"upstream:<name>\""
+			f.be.mu.Unlock()
+			for _, b := range []struct{ name, file, first string }{
+				{"banners-errors", strings.Replace(text, `action = "block"`, `action = "sideways"`, 1), "The configuration file has errors"},
+				{"banners-differs", strings.Replace(text, `default = "direct"`, `default = "block"`, 1), "The file changed since cuttle loaded it."},
+			} {
+				if err := os.WriteFile(f.be.path, []byte(b.file), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				p.Navigate(base + "/live")
+				var titles []string
+				eval(`[...document.querySelectorAll(".banners .banner strong")].map((s) => s.textContent)`, &titles)
+				if len(titles) != 3 || !strings.HasPrefix(titles[0], b.first) || !strings.HasPrefix(titles[1], "The last reload refused the file") ||
+					!strings.Contains(titles[2], "changes apply at the next start.") {
+					t.Errorf("%s%s: %q", b.name, suffix, titles)
+				}
+				check(b.name, "Live")
+			}
+			if err := os.WriteFile(f.be.path, []byte(text), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			f.be.mu.Lock()
+			f.be.lastErr = ""
+			f.be.mu.Unlock()
 		}
 	}
 	f.be.mu.Lock()
@@ -301,7 +397,7 @@ func TestAdminScreens(t *testing.T) {
 		errors: (document.querySelector("#settings-result") || {}).textContent || "",
 		bar: !document.getElementById("savebar").hidden, action: document.getElementById("savebar-submit").textContent})`, &v)
 	if !v.Stay || v.Path != "/settings" || v.Text != "name = 1\n" || !strings.Contains(v.Errors, "The configuration has errors; nothing was saved.") ||
-		!v.Bar || v.Action != "Save and reload" {
+		!v.Bar || v.Action != "Review changes" {
 		t.Errorf("Validate as a fragment: %+v", v)
 	}
 	clean("validate fragment")
@@ -312,6 +408,101 @@ func TestAdminScreens(t *testing.T) {
 	eval(`document.getElementById("text").value`, &reloaded)
 	if reloaded != file {
 		t.Errorf("Discard did not reload the file: %q", reloaded)
+	}
+
+	// The review with the script (OI-0006 T-R3, design 0009 D3.10):
+	// Command-Enter in the editor opens the review dialog without leaving
+	// the page; Back to editing closes it, keeps the text, and returns the
+	// focus; text with errors puts them in the result block and opens no
+	// dialog; a review after the file changed warns that applying replaces
+	// that change; Apply changes writes and the next page shows the toast
+	// once.
+	p.Navigate(base + "/settings")
+	file = readFile(t, f.be.path)
+	edited := strings.Replace(file, `default = "direct"`, `default = "block"`, 1)
+	setText := func(s string) {
+		t.Helper()
+		eval(`(() => { window.__stay = true; const a = document.getElementById("text"); a.value = `+fmt.Sprintf("%q", s)+
+			`; a.dispatchEvent(new Event("input", {bubbles: true})); a.focus(); return true })()`, nil)
+	}
+	setText(edited)
+	for _, typ := range []string{"rawKeyDown", "keyUp"} {
+		chrome.Call(p.Session, "Input.dispatchKeyEvent", map[string]any{"type": typ, "key": "Enter", "code": "Enter",
+			"windowsVirtualKeyCode": 13, "modifiers": 4}, nil)
+	}
+	eval(`new Promise((r) => { const t0 = Date.now(); (function poll() { const d = document.getElementById("review-dialog");
+		if ((d.open && d.querySelector("[data-block]")) || Date.now() - t0 > 5000) r(true); else setTimeout(poll, 50); })(); })`, nil)
+	var ds dialogState
+	eval(readDialog, &ds)
+	var stay bool
+	eval(`window.__stay === true`, &stay)
+	if !ds.Open || ds.Adds != 1 || !stay || readFile(t, f.be.path) != file {
+		t.Errorf("Command-Enter: dialog %+v, stayed %v", ds, stay)
+	}
+	shoot("review-cmd-enter-1280-light")
+	var backTo struct {
+		Open  bool   `json:"open"`
+		Text  string `json:"text"`
+		Focus string `json:"focus"`
+	}
+	eval(`(() => { document.querySelector("#review-dialog .dlg-foot [data-close]").click();
+		return new Promise((r) => setTimeout(() => { const d = document.getElementById("review-dialog");
+			r({open: d.open, text: document.getElementById("text").value, focus: document.activeElement.textContent.trim()}); }, 100)); })()`, &backTo)
+	if backTo.Open || backTo.Text != edited || backTo.Focus != "Review changes" {
+		t.Errorf("Back to editing: %+v", backTo)
+	}
+	setText(strings.Replace(edited, `action = "block"`, `action = "sideways"`, 1))
+	var refusedReview struct {
+		Open   bool   `json:"open"`
+		Errors string `json:"errors"`
+	}
+	eval(`(() => { const old = document.querySelector("#settings-result > [data-block]");
+		document.querySelector(".editor-form [data-primary]").click();
+		return new Promise((r) => { const t0 = Date.now(); (function poll() {
+			const now = document.querySelector("#settings-result > [data-block]");
+			if (now !== old || Date.now() - t0 > 5000) r({open: document.getElementById("review-dialog").open,
+				errors: now ? now.textContent : ""}); else setTimeout(poll, 50); })(); }); })()`, &refusedReview)
+	if refusedReview.Open || !strings.Contains(refusedReview.Errors, "fix them, then review again") || !strings.Contains(refusedReview.Errors, "sideways") {
+		t.Errorf("review of text with errors: %+v", refusedReview)
+	}
+	clean("refused review")
+	setText(edited)
+	if err := os.WriteFile(f.be.path, []byte(strings.Replace(file, `name = "cuttle-edge"`, `name = "cuttle-other"`, 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ds = openReview(`.editor-form [data-primary]`)
+	if !strings.Contains(ds.Notices, "The file changed after you opened this page. Applying replaces that change with this text") {
+		t.Errorf("review after a change: %+v", ds)
+	}
+	shoot("review-conflict-1280-light")
+	for _, w := range []struct {
+		px     int
+		mobile bool
+	}{{390, true}} {
+		p.Viewport(w.px, 844, w.mobile)
+		eval(`Promise.all(document.getAnimations().map((a) => a.finished)).then(() => true)`, nil)
+		eval(readDialog, &ds)
+		if ds.Wide {
+			t.Errorf("review dialog at %d px scrolls sideways", w.px)
+		}
+		shoot("review-conflict-390-light")
+	}
+	p.Viewport(1280, 900, false)
+	eval(`(() => { document.querySelector("#review-dialog .dlg-foot .btn.primary").click(); return true })()`, nil)
+	p.WaitLoad()
+	var after struct {
+		Path  string `json:"path"`
+		Toast string `json:"toast"`
+	}
+	eval(`({path: location.pathname, toast: (document.querySelector(".toast") || {}).textContent || ""})`, &after)
+	if after.Path != "/settings" || !strings.Contains(after.Toast, "Saved and reloaded") || readFile(t, f.be.path) != edited {
+		t.Errorf("Apply changes: %+v, file %q", after, readFile(t, f.be.path))
+	}
+	clean("review flow")
+	p.Navigate(base + "/settings")
+	eval(`document.querySelectorAll(".toast").length`, &left)
+	if left != 0 {
+		t.Errorf("the toast showed again: %d", left)
 	}
 
 	// The phone menu is a <details>: it opens, shows the navigation with
@@ -411,6 +602,30 @@ func TestAdminScreens(t *testing.T) {
 	p.WaitLoad()
 	if s := state(); s.Path != "/settings/validate" || s.H1 != "Advanced" {
 		t.Errorf("Validate without the script: %+v", s)
+	}
+	// Review changes without the script is a page; Apply changes returns
+	// to Advanced with the toast in the page.
+	p.Navigate(base + "/settings")
+	file = readFile(t, f.be.path)
+	noscript := strings.Replace(file, `default = "block"`, `default = "direct"`, 1)
+	eval(`(() => { document.getElementById("text").value = `+fmt.Sprintf("%q", noscript)+`;
+		document.querySelector(".editor-form [data-primary]").click(); return true; })()`, nil)
+	p.WaitLoad()
+	var page struct {
+		H1   string `json:"h1"`
+		Adds int    `json:"adds"`
+	}
+	eval(`({h1: document.querySelector("h1").textContent, adds: document.querySelectorAll(".diff .dl.add").length})`, &page)
+	if s := state(); s.Path != "/config/draft" || page.H1 != "Review: edit the configuration as text" || page.Adds != 1 {
+		t.Errorf("review without the script: %+v %+v", s, page)
+	}
+	shoot("review-page-noscript-1280-light")
+	eval(`(() => { document.querySelector(".review-form .btn.primary").click(); return true; })()`, nil)
+	p.WaitLoad()
+	var plainToast string
+	eval(`(document.querySelector(".toast") || {}).textContent || ""`, &plainToast)
+	if s := state(); s.Path != "/settings" || !strings.Contains(plainToast, "Saved and reloaded") || readFile(t, f.be.path) != noscript {
+		t.Errorf("apply without the script: %+v, toast %q", s, plainToast)
 	}
 	p.Viewport(390, 844, true)
 	p.Navigate(base + "/live")

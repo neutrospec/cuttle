@@ -59,6 +59,7 @@ func (s *Server) funcs() template.FuncMap {
 		},
 		"join":       strings.Join,
 		"bannerIcon": bannerIcon,
+		"plural":     plural,
 		"rowIndex": func(first, i int) int64 {
 			return int64(first + i)
 		},

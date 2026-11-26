@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -50,6 +51,10 @@ type Backend interface {
 	Status() control.Status
 	// Config returns the running configuration.
 	Config() *config.Config
+	// StartConfig returns the configuration the instance started with,
+	// whose restart-only keys are in force until the next start; the
+	// review lists the keys a candidate changes from it (design 0009 D7).
+	StartConfig() *config.Config
 	// ConfigPath returns the configuration file the instance reloads.
 	ConfigPath() string
 	// Stats returns the statistics service, or nil while statistics are
@@ -118,6 +123,17 @@ type Server struct {
 	// argonRuns counts Argon2id verifications, for tests.
 	argonRuns atomic.Int64
 
+	// ops are the form ops of design 0009 D7 that the pages register.
+	ops map[string]*formOp
+	// validations counts the validator runs on candidates, for tests.
+	validations atomic.Int64
+	// uid is this user's ID, which the previous version's owner must
+	// have; tests replace it.
+	uid func() int
+	// routes lists the patterns of the mux, so that a test can check
+	// that every POST is protected.
+	routes []string
+
 	handler http.Handler
 }
 
@@ -131,6 +147,8 @@ func New(opt Options) *Server {
 		login:   newLoginTokens(),
 		pages:   map[string]*template.Template{},
 		backend: opt.Backend,
+		ops:     map[string]*formOp{},
+		uid:     os.Getuid,
 	}
 	if s.log == nil {
 		s.log = slog.New(slog.DiscardHandler)
@@ -146,24 +164,33 @@ func New(opt Options) *Server {
 	if own := strings.ToLower(opt.Listen.String()); !slices.Contains(s.hosts, own) {
 		s.hosts = append(s.hosts, own)
 	}
-	s.base = template.Must(template.New("").Funcs(s.funcs()).ParseFS(assets, "templates/layout.html", "templates/icons.html"))
-	for _, name := range []string{"login", "overview", "domains", "live", "settings"} {
+	s.base = template.Must(template.New("").Funcs(s.funcs()).ParseFS(assets, "templates/layout.html", "templates/icons.html",
+		"templates/pipeline.html"))
+	for _, name := range []string{"login", "overview", "domains", "live", "settings", "review", "backup"} {
 		s.pages[name] = template.Must(template.Must(s.base.Clone()).ParseFS(assets, "templates/"+name+".html"))
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /login", s.getLogin)
-	mux.HandleFunc("POST /login", s.postLogin)
-	mux.HandleFunc("POST /logout", s.authed(maxFormBytes, s.postLogout))
-	mux.HandleFunc("GET /{$}", s.authed(0, s.getOverview))
-	mux.HandleFunc("GET /domains", s.authed(0, s.getDomains))
-	mux.HandleFunc("GET /live", s.authed(0, s.getLive))
-	mux.HandleFunc("GET /settings", s.authed(0, s.getSettings))
-	mux.HandleFunc("POST /settings/validate", s.authed(maxSettingsFormBytes, s.postValidate))
-	mux.HandleFunc("POST /settings", s.authed(maxSettingsFormBytes, s.postSettings))
+	handle := func(pattern string, h http.HandlerFunc) {
+		s.routes = append(s.routes, pattern)
+		mux.HandleFunc(pattern, h)
+	}
+	handle("GET /login", s.getLogin)
+	handle("POST /login", s.postLogin)
+	handle("POST /logout", s.authed(maxFormBytes, s.postLogout))
+	handle("GET /{$}", s.authed(0, s.getOverview))
+	handle("GET /domains", s.authed(0, s.getDomains))
+	handle("GET /live", s.authed(0, s.getLive))
+	handle("GET /settings", s.authed(0, s.getSettings))
+	handle("GET /settings/backup", s.authed(0, s.getBackup))
+	handle("POST /settings/validate", s.authed(maxSettingsFormBytes, s.postValidate))
+	handle("POST /settings", s.authed(maxSettingsFormBytes, s.postSettings))
+	handle("POST /config/draft", s.authed(maxSettingsFormBytes, s.postDraft))
+	handle("POST /config/apply", s.authed(maxSettingsFormBytes, s.postApply))
+	handle("POST /config/reload", s.authed(maxFormBytes, s.postReload))
 	static, _ := fs.Sub(assets, "static")
 	files := http.StripPrefix("/static/", http.FileServerFS(static))
-	mux.HandleFunc("GET /static/", func(w http.ResponseWriter, r *http.Request) {
+	handle("GET /static/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/") {
 			http.NotFound(w, r) // no directory listings
 			return

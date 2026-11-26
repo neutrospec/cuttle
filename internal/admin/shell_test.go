@@ -367,7 +367,7 @@ func TestAdminSaveToast(t *testing.T) {
 	// Two warnings: the example's upstreams have no interface list.
 	body := save(strings.Replace(exampleConfig, `default = "direct"`, `default = "block"`, 1))
 	if got := toastOf(body); !strings.HasPrefix(got, `<div class="toast ok" role="status" data-toast="ok">`) ||
-		!strings.Contains(got, "<strong>Saved and reloaded.</strong>") || !strings.Contains(got, "The file has 2 warnings; this page lists them.") {
+		!strings.Contains(got, "<strong>Saved and reloaded with 2 warnings.</strong>") || !strings.Contains(got, "The file has 2 warnings; this page lists them.") {
 		t.Errorf("save with warnings: toast %s", got)
 	}
 	if !strings.Contains(body, `<h2 id="warnings-h">Warnings <span class="count">2</span></h2>`) {

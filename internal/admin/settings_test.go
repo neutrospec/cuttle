@@ -135,7 +135,7 @@ func TestAdminSettingsForm(t *testing.T) {
 	// textarea tag so that a leading newline survives.
 	res := b.get("/settings")
 	body := bodyOf(t, res)
-	if !strings.Contains(body, "<textarea id=\"text\" name=\"text\" rows=\"32\" spellcheck=\"false\" autocomplete=\"off\" wrap=\"off\">\nname = &#34;cuttle-test&#34;") ||
+	if !strings.Contains(body, "<textarea id=\"text\" name=\"text\" rows=\"32\" spellcheck=\"false\" autocomplete=\"off\" wrap=\"off\" aria-describedby=\"text-hint\">\nname = &#34;cuttle-test&#34;") ||
 		!strings.Contains(body, f.be.path) || !strings.Contains(body, "succeeded") {
 		t.Errorf("settings page:\n%s", body)
 	}

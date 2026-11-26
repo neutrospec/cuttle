@@ -1,7 +1,6 @@
 package admin
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,7 +11,6 @@ import (
 	"time"
 
 	"github.com/neutrospec/cuttle/internal/config"
-	"github.com/neutrospec/cuttle/internal/control"
 )
 
 var sha256Hex = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -38,6 +36,8 @@ type settingsPage struct {
 	// Conflict holds the file's current content after a 409.
 	Conflict bool
 	DiskText string
+	// Backup is the previous version (design 0009 D3.10).
+	Backup *backupFile
 	// The running configuration's state.
 	LoadedAt        time.Time
 	Running         string
@@ -86,7 +86,7 @@ func readConfigFile(path string) ([]byte, error) {
 func (s *Server) settingsBase() *settingsPage {
 	st := s.backend.Status()
 	d := &settingsPage{Path: s.backend.ConfigPath(), LoadedAt: st.Config.LoadedAt, Running: st.Config.SHA256,
-		StartRestart: st.Config.RestartRequired}
+		StartRestart: st.Config.RestartRequired, Backup: s.readBackup()}
 	if st.Config.LastReloadError != "" {
 		d.LastReloadError = strings.Split(st.Config.LastReloadError, "\n")
 	}
@@ -181,19 +181,9 @@ func (s *Server) postSettings(w http.ResponseWriter, r *http.Request, _ string, 
 		s.renderSettings(w, r, http.StatusUnprocessableEntity, v, d)
 		return
 	}
-	s.settingsMu.Lock()
-	defer s.settingsMu.Unlock()
-	err := config.WriteAtomic(d.Path, []byte(d.Text), config.WriteOptions{ExpectSHA256: d.Base, Backup: true})
-	// The file holds the new text even when the directory sync after the
-	// rename failed, so that counts as saved and the reload runs (OI-0006
-	// U-R1).
-	unsynced := errors.Is(err, config.ErrNotSynced)
-	if unsynced {
-		s.log.Warn("admin settings saved, but the directory could not be synced", "config", d.Path, "error", err.Error())
-		err = nil
-	}
-	if errors.Is(err, config.ErrConflict) {
-		s.log.Warn("admin settings conflict; the file changed since the page loaded", "config", d.Path)
+	res := s.save([]byte(d.Text), d.Base, opText)
+	switch {
+	case res.conflict:
 		d.Conflict = true
 		d.Notice = "The file changed since this page loaded, so nothing was saved. Compare it with your text below; saving again replaces it with your text."
 		if disk, rerr := readConfigFile(d.Path); rerr == nil {
@@ -203,46 +193,23 @@ func (s *Server) postSettings(w http.ResponseWriter, r *http.Request, _ string, 
 		}
 		s.renderSettings(w, r, http.StatusConflict, v, d)
 		return
-	}
-	if err != nil {
-		s.log.Error("admin settings write failed", "config", d.Path, "error", err.Error())
-		d.Notice = "The file could not be written and is unchanged: " + err.Error()
+	case res.writeErr != nil:
+		d.Notice = "The file could not be written and is unchanged: " + res.writeErr.Error()
 		s.renderSettings(w, r, http.StatusInternalServerError, v, d)
 		return
 	}
-	d.Base = config.Digest([]byte(d.Text))
-	s.log.Info("admin settings saved", "config", d.Path, "sha256", d.Base)
-	res, ok := s.backend.Reload()
+	d.Base = res.digest
 	running := s.settingsBase()
-	d.LoadedAt, d.Running, d.StartRestart, d.LastReloadError = running.LoadedAt, running.Running, running.StartRestart, running.LastReloadError
+	d.LoadedAt, d.Running, d.StartRestart, d.LastReloadError, d.Backup = running.LoadedAt, running.Running, running.StartRestart, running.LastReloadError, running.Backup
 	d.Dirty = false
-	if !ok {
-		d.Notice = "Saved, but the reload refused the file; the running configuration is unchanged: " + strings.Join(res.Errors, "; ")
+	if !res.reloaded {
+		d.Notice = "Saved, but the reload refused the file; the running configuration is unchanged: " + strings.Join(res.reload.Errors, "; ")
+		if res.unsynced {
+			// Both problems stay visible (OI-0006 Z-R8).
+			d.Notice += ". The directory could not be synced either, so a power loss soon after the save could undo it."
+		}
 		s.renderSettings(w, r, http.StatusUnprocessableEntity, v, d)
 		return
 	}
-	s.renderSettings(w, r, http.StatusOK, v, d, savedToast(res, unsynced))
-}
-
-// savedToast reports a save that the reload accepted (design 0009 D7).
-// Restart-only keys and a directory that could not be synced make it a
-// toast that stays; validator warnings, which a file may keep for good,
-// leave it an ok toast that names their count, and the page lists them.
-func savedToast(res control.ReloadResult, unsynced bool) toast {
-	t := toast{Kind: "ok", Title: "Saved and reloaded."}
-	if unsynced {
-		t.Kind, t.Title = "warn", "Saved and reloaded; the directory could not be synced."
-		t.Lines = append(t.Lines, plain("The file holds the new text, but a power loss soon after the save could undo it."))
-	}
-	if keys := res.RestartRequired; len(keys) > 0 {
-		t.Kind = "warn"
-		if !unsynced {
-			t.Title = "Saved and reloaded. Restart required."
-		}
-		t.Lines = append(t.Lines, append(append(restartTitle(keys), seg{Text: " "}), restartLine()...))
-	}
-	if n := len(res.Warnings); n > 0 {
-		t.Lines = append(t.Lines, plain("The file has "+plural(n, "warning")+"; this page lists them."))
-	}
-	return t
+	s.renderSettings(w, r, http.StatusOK, v, d, saveToast(res, nil, 0, true))
 }
