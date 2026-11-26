@@ -41,21 +41,31 @@ A closed task becomes one line under Closed:
 
 ## Active
 
-### TASK-0020 — M4.1 B1: save pipeline, review, and Advanced restore
+### TASK-0022 — M4.3 D: interfaces, proxy, remote clients, general, account
 
-- Milestone: M4.1
-- Status: review
+- Milestone: M4.3
+- Status: implement
 - Iteration: 1/3
-- Workers: implementer done on branch `t3/admin-save-review-pipeline`;
-  fresh reviewer running
-- Base: `59a7b3d`
-- Candidate: `690dce9` (tree `c5004d2`)
-- Evidence: implementer ran `scripts/gate t0`, `t1`, and
-  `scripts/admin-check` on `c5004d2`, all pass; W5–W12 and W14 tests, the
-  binding items, 22 mutation proofs, and review-flow screenshots at 1280
-  and 390 px in light and dark
-- Findings: none yet
-- Next action: reviewer — risk-based review of `59a7b3d..690dce9`
+- Workers: implementer on a T3 worktree branch, alongside TASK-0021
+- Base: this board update
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: implementer — build task D of design 0009 (W20–W23) with
+  Z-R4, AA-R7, U-R2, and T-R1 and return the candidate
+
+### TASK-0021 — M4.2 C: rules and upstreams
+
+- Milestone: M4.2
+- Status: implement
+- Iteration: 1/3
+- Workers: implementer on a T3 worktree branch, alongside TASK-0022
+- Base: this board update
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: implementer — build task C of design 0009 (W15–W19) with
+  AA-R1–AA-R3, AA-R5, AA-R6, and Z-R3 and return the candidate
 
 ## Closed
 
@@ -65,6 +75,10 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0020 — M4.1 B1: save pipeline, review, and Advanced restore —
+  landed `e99f703`, gates: T0 T1 T2 @ `c5004d2` (landed tree differs only
+  in tracking records); iteration 1 of 3; follow-ups AA-R1–AA-R8 in
+  OI-0006
 - TASK-0019 — M4.1 B2: admin shell, visual system, and script core —
   landed `8cba20a`, gates: T0 T1 T2 @ `afc5a18` (landed tree differs only in
   tracking records); iteration 2 of 3; follow-ups T-R1–T-R3 in OI-0006
