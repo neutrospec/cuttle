@@ -44,16 +44,17 @@ A closed task becomes one line under Closed:
 ### TASK-0024 — v0.2.0 release preparation
 
 - Milestone: M4 close
-- Status: implement
+- Status: review
 - Iteration: 1/3
-- Workers: implementer on a T3 worktree branch
-- Base: this board update
-- Candidate: none
-- Evidence: none
-- Findings: none
-- Next action: implementer — fix AD-R1–AD-R3 and AD-R5, add the
-  changelog with the v0.2.0 notes (Z-R5, AC-R3), update the README status
-  and admin sections, and return the candidate
+- Workers: implementer done on branch `t3/prepare-v020-release`; fresh
+  reviewer running
+- Base: `87df62b`
+- Candidate: `d9e0072` (tree `dc09c81`)
+- Evidence: implementer ran `scripts/gate t0`, `t1`, and
+  `scripts/admin-check` on `dc09c81`, all pass; AD-R1–AD-R3 and AD-R5
+  with 4 mutation proofs; `CHANGELOG.md` and README updates
+- Findings: none yet
+- Next action: reviewer — review `87df62b..d9e0072`
 
 Decisions for TASK-0024 (2026-11-26):
 
