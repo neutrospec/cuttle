@@ -44,15 +44,18 @@ A closed task becomes one line under Closed:
 ### TASK-0023 — M4.4 E: dashboard integration and the M4 browser check
 
 - Milestone: M4.4
-- Status: implement
+- Status: review
 - Iteration: 1/3
-- Workers: implementer on a T3 worktree branch
-- Base: this board update
-- Candidate: none
-- Evidence: none
-- Findings: none
-- Next action: implementer — build task E of design 0009 (W24–W26) with
-  the M4 follow-ups listed in the brief and return the candidate
+- Workers: implementer done on branch `t3/admin-dashboard-route-host`;
+  fresh reviewer running
+- Base: `6be51e7`
+- Candidate: `3f1cad3` (tree `3ad5d43`)
+- Evidence: implementer ran `scripts/gate t0`, `t1`, and
+  `scripts/admin-check` on `3ad5d43`, all pass; W24–W26 tests, the M4
+  follow-ups settled, mutation proofs, and screenshots at 1280 and 390 px
+  in light and dark
+- Findings: none yet
+- Next action: reviewer — risk-based review of `6be51e7..3f1cad3`
 
 ## Closed
 

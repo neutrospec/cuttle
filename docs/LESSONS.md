@@ -364,3 +364,16 @@ removes entries. Append new entries at the end, oldest first.
   or `sed -n`), and in the script check all patterns of all files before
   writing any file; after a failure, run `git diff --stat` to see what
   was written.
+
+### 2026-11-26 — implementer — html/template and `data-*action*` attributes
+
+- Task: TASK-0023, a Route… button carrying the chosen route in
+  `data-action="upstream:gateway"`.
+- Attempts: 1, recorded because the failure is silent.
+- What failed: `html/template` treats any attribute whose name contains
+  `action` (also `src`, `href`, `uri`, `url`) as a URL, so a value such as
+  `upstream:gateway` reads as an unsafe scheme and is replaced with
+  `#ZgotmplZ`; nothing fails at build or render time.
+- What to do instead: name such attributes without those words (here
+  `data-route`), and assert the rendered attribute value in a test.
+
