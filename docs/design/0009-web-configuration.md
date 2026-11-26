@@ -1,6 +1,7 @@
 # 0009 — Full configuration in the web admin
 
-**Status** — Proposed (TASK-0017, 2026-11-26; revised in iteration 2).
+**Status** — Proposed (TASK-0017, 2026-11-26; revised in iterations 2
+and 3).
 
 ## Context
 
@@ -461,11 +462,26 @@ changes, and Apply changes. The match and the place have defaults.
 Every key of [0004 D3][d4-3] has exactly one form field. The T0 test
 `TestFormCoverage` (W17, W22) compares this table with the schema.
 
-**Field-state rule.** Each field carries, in a hidden input, the value
-it was rendered with. A set key renders its value; an unset key renders
+**Field-state rule.** It applies to the fields of an existing entity
+and of a settings page. A new entity (Add, Duplicate, Define…, Route a
+host) has no key in the file yet, so its save writes every field that
+holds a value, prefilled values included; Define… keeps the `kind` it
+prefilled, and an empty field stays unset.
+
+Each field carries, in a hidden input, its rendered value. Only a `GET`
+takes it from the file: a set key renders its value, and an unset key
 its default, as an empty text field with the default as placeholder, or
 as the default choice of a checkbox, segmented control, or explicit
-choice. On a save:
+choice. Every later render of the same form (Back to editing, `check`,
+a `422` review, Review again after a `409`, the normal submit when the
+script fails) and the review page carry the posted rendered values
+forward unchanged; they never recompute them from the controls or from
+the current file. So a change made before a re-render still counts as a
+change at the next save, and a key that another writer changed while
+the form was open is not mistaken for the operator's edit. Rendered and
+posted values are compared parsed, not as raw text: list inputs after
+splitting on newlines, commas, and spaces, text after turning CRLF into
+LF, and integers as numbers. On a save:
 
 - a field posted with its rendered value leaves its key as the current
   file has it, set or unset, so untouched checkboxes and segmented
@@ -533,7 +549,7 @@ Included, with the reason each pays for itself:
 | Restart-required and file-differs banners, reload result toasts | The operator must know when a saved change is not yet in force. |
 | Restore the previous version | `.bak` already exists; offering it makes every form save one click from undone. |
 | Notes on rules, upstreams, and interfaces | Hand comments no longer survive a form save; a one-line note gives back the annotation in a form the writer keeps (D6). |
-| Defaults as placeholders, clearing restores the default | The operator sees the value in force without the file writing every default. |
+| Defaults as placeholders, clearing restores the default | The operator sees the value in force without the file writing every default. `proxy.remote.ports` and `admin.listen` have Default as an explicit choice instead, because their empty value means something else (D4). |
 | Unsaved-changes guard | Losing an edit to a navigation is the commonest form failure. |
 | `/` focuses the filter or the test field; Command-Enter reviews | Two shortcuts for the two most frequent actions; no others. |
 
@@ -575,8 +591,8 @@ explicitly, so that a later reorder does not rename it.
   with no set key is left out.
 - Strings as TOML basic strings: `"` and `\` escaped, control characters
   (U+0000–U+001F and U+007F, which TOML forbids raw in basic strings) as
-  `\b`, `\t`, `\n`, `\f`, `\r`, or `\uXXXX`, other characters as UTF-8. No literal or multi-line strings, no inline tables, no dotted
-  keys.
+  `\b`, `\t`, `\n`, `\f`, `\r`, or `\uXXXX`, other characters as UTF-8.
+  No literal or multi-line strings, no inline tables, no dotted keys.
 - Integers in decimal without separators; booleans as `true` and
   `false`.
 - An array on one line when the whole line fits in 80 columns, otherwise
@@ -620,15 +636,17 @@ or group is present:
 ```
 
 The header names no path or file name, so it reads the same for every
-configuration path. No comment holds a time, a host name, or anything else that changes from
-save to save, so writing the same model twice gives the same bytes.
+configuration path. No comment holds a time, a host name, or anything
+else that changes from save to save, so writing the same model twice
+gives the same bytes.
 
 **`note`**, a new optional key of `[[rule]]`, `[[upstream]]`, and
 `[[interface]]`, added by the user's decision of 2026-11-26: a string of
 at most 120 characters, counted as Unicode code points (so at most 480
 bytes of UTF-8), with no control characters (U+0000–U+001F and U+007F),
-shown in lists and editors and never in logs, status, or statistics. The validator rejects a longer note or one with a control
-character, and its message does not repeat the value. It applies on
+shown in lists and editors and never in logs, status, or statistics.
+The validator rejects a longer note or one with a control character,
+and its message does not repeat the value. It applies on
 reload and changes no behavior; a changed note alone keeps an upstream's
 transport (the comparison of [0004 D6][d4-6] step 3 ignores it). A
 binary older than the one that adds `note`, such as v0.1.0, refuses a
@@ -677,10 +695,11 @@ and passes `http.CrossOriginProtection` ([0005 D8][d5-8]).
 A path name in `{name}` must match its schema pattern; another value gets
 `404`.
 
-**Edits.** Each form posts the whole state of what it edits, with the
-rendered value of each field (D4), the `op` that names the edit, the file's `base` (SHA-256 of the file the page was
-rendered from), and for an existing entity `orig`, the SHA-256 of that
-entity's canonical text at render time. The ops:
+**Edits.** Each form posts the whole state of what it edits, the
+rendered value of each field (D4), the `op` that names the edit, and the
+file's `base`, the SHA-256 of the file that the `GET` rendered the form
+from. Re-renders and the review page carry the rendered values and
+`base` forward unchanged. The ops:
 
 | `op` | Edit of the `Doc` |
 | --- | --- |
@@ -717,13 +736,16 @@ and their review shows the plain-text diff.
    kept and "Rule `x` no longer exists; it was changed outside this
    page", and a link that reloads the page.
 3. *Form ops:* apply the D4 field-state rule, and parse integer fields
-   and the two explicit choices of D4. A value that is not an integer, or
-   an explicit choice without its value, becomes an issue with the
-   validator's key path and wording ("must be an integer"), without a
-   write or a call to the validator.
+   and the two explicit choices of D4. A value that is not an integer
+   becomes an issue with the validator's key path and wording ("must be
+   an integer"); an explicit choice without its value becomes an issue
+   with that key path and the form's own message of D4. Neither writes
+   or calls the validator.
 4. Build the candidate, `Encode` of the edited `Doc` for a form op, the
    posted text with CRLF turned into LF for `text`, or the `.bak` content
-   for `restore`, and run `config.Parse` on it. That report is the only
+   with CRLF turned into LF for `restore`, and run `config.Parse` on it.
+   The review shows this normalized text, the same bytes that apply
+   writes. That report is the only
    judgment.
 5. Map each issue to the form (below), or, for `text` and `restore`, list
    the issues with their lines as the Advanced page does, and render.
@@ -750,17 +772,19 @@ stale copy, and the review always compares against the current file.
 | Situation | Behavior |
 | --- | --- |
 | `base` equals the current file | Normal review |
-| `base` differs, and the edited entity's canonical text still has the digest `orig`, or, on a settings page, every changed field's key still has the value the field was rendered with | The review shows the notice "The file changed after you opened this page. The changes below are yours; the other change stays." Untouched fields keep the other change (D4) |
-| `base` differs, and the edited entity, or the key of a changed field, changed too | The review shows the warning "`restricted` was also changed elsewhere. Applying replaces that change with yours; the diff shows what is lost." |
+| `base` differs, and every changed field's key, of the existing entity or of the settings page, still has its rendered value in the current file | The review shows the notice "The file changed after you opened this page. The changes below are yours; the other change stays." Untouched fields keep the other change (D4) |
+| `base` differs, and the key of a changed field also changed elsewhere | The review shows the warning "`restricted`: domains was also changed elsewhere. Applying replaces that change with yours; the diff shows what is lost." For a new entity the other change always stays |
 | `text` or `restore`, and `base` differs | The review shows the warning "The file changed after you opened this page. Applying replaces that change with this text; the diff shows what is lost." |
 | The edited entity no longer exists | `409` at the draft step (step 2) |
-| The file changes between review and apply | `POST /config/apply` answers `409` as `/settings` does, and shows a "Review again" button that rebuilds the review from the posted fields |
+| The file changes between review and apply | `POST /config/apply` answers `409` as `/settings` does, and shows a "Review again" button that rebuilds the review from the posted fields and their rendered values |
 
 **Apply.** The review's form posts `text` (the candidate exactly as
-reviewed), `base` (the digest of the file the review compared against),
-`op` and its fields, and `return`. `POST /config/apply` and
-`POST /settings` share one function that runs the [0005 D10][d5-10]
-steps: size limit, validation, `WriteAtomic` with `ExpectSHA256` and the
+reviewed), `reviewed` (the digest of the file the review compared
+against, which the write checks as `ExpectSHA256`, as `/settings` checks
+its `base`), the form's `op`, fields, rendered values, and `base`, so
+that Review again can rebuild the review, and `return`.
+`POST /config/apply` and `POST /settings` share one function that runs
+the [0005 D10][d5-10] steps: size limit, validation, `WriteAtomic` with `ExpectSHA256` and the
 backup, and reload, under the settings mutex, one save at a time. It
 first turns CRLF line ends into LF, as `submitted()` does for
 `/settings` today, because the review's hidden `text` field arrives with
@@ -1028,13 +1052,15 @@ image file is fetched. The prototype shows each one.
   escaping, in pages and fragments alike. Prefills from a query string
   are re-validated before they fill a field: `?host=` as a host name or
   IP literal, and `?device=` as a BSD name (`^[a-z]+[0-9]+$`, at most 15
-  bytes) that the detected table holds; another value fills nothing. The script inserts only parsed fragments (D10).
-  Long values wrap and never widen the page.
+  bytes) that the detected table holds; another value fills nothing.
+  The script inserts only parsed fragments (D10). Long values wrap and
+  never widen the page.
 - **Password change** (`POST /account/password`): fields `current`,
   `new`, and `confirm`.
   - It shares `loginMu`, the backoff, and the failure count of
-    [0005 D8][d5-8] with the login, as the user decided on 2026-11-26: during a backoff wait it answers `429`
-    with `Retry-After` and runs no Argon2id; a wrong current password
+    [0005 D8][d5-8] with the login, as the user decided on 2026-11-26:
+    during a backoff wait it answers `429` with `Retry-After` and runs no
+    Argon2id; a wrong current password
     answers `401` with "Invalid password." and counts as a failed login.
     So the form is no faster a guessing oracle than the login.
   - The new password must be 12–128 bytes and equal its confirmation;
@@ -1107,7 +1133,7 @@ unless marked otherwise. "Review" means `POST /config/draft` with
 | W2 | Canonical fixed point and model fidelity hold for the same inputs; a golden test fixes the order, the formatting, the 80-column array rule, and the generated comments of D6. | T0 `TestCanonicalFixedPoint`, `TestCanonicalGolden` |
 | W3 | Strings with `"`, `\`, tab, U+007F, and non-ASCII characters survive the round trip, and U+007F is written escaped; a `note` of 120 non-ASCII characters is accepted, and one of 121 characters or with a control character is an error whose message does not contain the value; a note change keeps an upstream's transport on reload. | T0 `TestCanonicalEscaping`, `TestNoteValidation`; T1 `TestReloadNoteOnly` |
 | W4 | Each op of D7 gives the expected `Doc`: insert at first, before, and last; replace; delete; reorder; upstream and interface renames rewrite every reference; deleting a used upstream or interface is refused with its users; `rules.order` with a missing or repeated name is refused. | T0 `TestDocEdits` |
-| W5 | Every key-path form the validator emits maps to its form, field, and entry, and issues of other entities go to the summary list. The D4 field-state rule holds for each control kind: a field posted with its rendered value keeps its key set or unset, also when another writer changed that key; a changed field sets it; an emptied text field, list, or cleared checkbox unsets it. | T0 `TestIssueFieldMap`, `TestFieldState` |
+| W5 | Every key-path form the validator emits maps to its form, field, and entry, and issues of other entities go to the summary list. The D4 field-state rule holds for each control kind: a field posted with its rendered value keeps its key set or unset, also when another writer changed that key; a changed field sets it; an emptied text field, list, or cleared checkbox unsets it. A re-render from posted values carries the rendered values unchanged, and a list posted with CRLF line ends or commas that parses to its rendered list counts as untouched. A new entity writes its untouched prefilled fields. | T0 `TestIssueFieldMap`, `TestFieldState` |
 | W6 | Review of a valid edit answers `200` with the change summary and a diff whose hunks rebuild the candidate from the file; the file and `.bak` are unchanged afterwards. An invalid edit answers `422` with each error inside its field's element, and the file is unchanged. A non-integer port answers `422` without running the validator. A `text` review shows the plain-text diff and the one-line summary. | T1 `TestAdminDraftReview`; T0 `TestTextDiff` |
 | W7 | Apply writes the reviewed text (mode 0600, `.bak` holding the previous content), reloads, and answers `303` to `return`; the next page shows the toast with the reload result; an open tunnel survives; a `proxy.listen` change shows restart required in the review, the toast, and the banner, and after that save a review that changes `proxy.listen` back to its start value lists no restart key. A reviewed `text` posted with CRLF line ends is written with LF. A `return` outside the page list gets `400`. | T1 `TestAdminApply` |
 | W8 | Concurrency: each row of the D7 table, including `409` at apply after the file changed between review and apply, which leaves the file unchanged. | T1 `TestAdminDraftConflict` |
@@ -1132,9 +1158,9 @@ unless marked otherwise. "Review" means `POST /config/draft` with
 
 | ID | Criterion | Check |
 | --- | --- | --- |
-| W20 | With an injected interface table, the interfaces page lists the detected rows with their matches and the definitions with their states and users; "Define…" prefills the D3.6 identity (device and kind for Wi-Fi, the hardware address otherwise); a rename updates every list; a used definition has no delete; no log line written by these flows contains a MAC. | T1 `TestAdminInterfaces` |
+| W20 | With an injected interface table, the interfaces page lists the detected rows with their matches and the definitions with their states and users; "Define…" prefills the D3.6 identity (device and kind for Wi-Fi, the hardware address otherwise); a rename updates every list; a used definition has no delete; saving an untouched Define… form for a Wi-Fi row writes `device` and `kind`; no log line written by these flows contains a MAC. | T1 `TestAdminInterfaces` |
 | W21 | The interface list editor adds, removes, and reorders entries for `proxy.interfaces`, a rule, and an upstream, with and without the script's controls, and "default list" and "system routing" unset the key. | T1 `TestAdminInterfaceLists` |
-| W22 | Proxy, remote-client, and general forms save each of their keys; clearing a text field removes the key and the default applies; restart-only keys carry the badge. A file with `proxy.remote.ports = []` renders "No ports", and one with `admin.listen = ""` renders "Disabled"; saving their pages with another field changed keeps `ports = []` and `admin.listen = ""`. Choosing "Default" removes either key, "No ports" writes `ports = []`, "Disabled" writes `admin.listen = ""` and gives the review warning, and "These ports" or "On at" without a value gets the D4 form error. An unset `proxy.remote.default`, `allow_direct`, and `log.level` stay unset after a save of their pages that changes another field. `TestFormCoverage` now covers every key of the 0004 D3 schema. | T1 `TestAdminSettingsForms`; T0 `TestFormCoverage` |
+| W22 | Proxy, remote-client, and general forms save each of their keys; clearing a text field removes the key and the default applies; restart-only keys carry the badge. A file with `proxy.remote.ports = []` renders "No ports", and one with `admin.listen = ""` renders "Disabled"; saving their pages with another field changed keeps `ports = []` and `admin.listen = ""`. Choosing "Default" removes either key, "No ports" writes `ports = []`, "Disabled" writes `admin.listen = ""` and gives the review warning, and "These ports" or "On at" without a value gets the D4 form error. An unset `proxy.remote.default`, `allow_direct`, and `log.level` stay unset after a save of their pages that changes another field. Choosing "No ports", and separately removing one of two sources, then Back to editing, changing another field, and reviewing gives a candidate that still has `ports = []`, or lacks the removed source; the same holds through `check`, a `422` review, and Review again after a `409`. A `ports = []` that another writer saved while the Remote clients form was open survives a review in which the ports field was untouched. `TestFormCoverage` now covers every key of the 0004 D3 schema. | T1 `TestAdminSettingsForms`; T0 `TestFormCoverage` |
 | W23 | Password change: a wrong current password gets `401` and counts toward the shared backoff; during a wait `429` with `Retry-After` and no Argon2id run; a short or unconfirmed new password gets `422` without hashing; success writes a 0600 Argon2id file, resets the shared failure count, ends every other session, keeps this browser signed in with a new session ID and CSRF token, and logs no password. "Sign out other sessions" ends the others only. | T1 `TestAdminPasswordChange` |
 
 ### M4.4 — Dashboard integration and browser check
@@ -1181,7 +1207,7 @@ close.
 | [0005 D6][d5-6] | `cuttle admin passwd` remains the only way to set the first password; a signed-in operator can change it with the current password (D12). |
 | [0005 D9][d5-9] | The page table gains the D7 routes; "there is no JSON API" still holds, since fragments are HTML; `/domains` gains the `rule` filter. |
 | [0005 D10][d5-10] | `/settings` gains Review changes and the previous version; `POST /settings` shares its save function with `POST /config/apply`. |
-| [0006 D3][d6-3] | `cuttle explain` uses `config.Explain` and gains the `address` line of D8 for IP-literal targets of direct routes; its other lines do not change. |
+| [0006 D3][d6-3] | `cuttle explain` uses `config.Explain` and gains the `address` line of D8 on direct routes: the verdict for an IP-literal target, and for a name the note that its addresses are checked after resolution; its other lines do not change. |
 | [0007 D7][d7-7] | `scripts/admin-check` covers W26. |
 | [0008 D6][d8-6], [D15][d8-15] | MACs and interface-table addresses also appear on the admin interfaces page and in the configuration views (editor, review, `.bak` diff), which settles the wording of [OI-0006][oi-6] U-R2; validator messages, summaries, status, logs, counters, and statistics still never show a MAC. |
 
