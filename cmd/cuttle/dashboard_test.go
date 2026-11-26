@@ -168,6 +168,15 @@ func hasRow(body string, cells ...string) bool {
 	return false
 }
 
+// listedHosts returns the hosts of the overview's top-host lists.
+func listedHosts(body string) string {
+	var out []string
+	for _, m := range regexp.MustCompile(`<li><span class="h">([^<]+)</span>`).FindAllStringSubmatch(body, -1) {
+		out = append(out, m[1])
+	}
+	return strings.Join(out, ",")
+}
+
 func hostCells(body string) string {
 	var out []string
 	for _, m := range hostCellRE.FindAllStringSubmatch(body, -1) {
@@ -222,8 +231,9 @@ func trafficMocks(t *testing.T, n *testenv.Net) {
 // TestAdminPages checks the page half of A8 in a running instance: after
 // direct tunnels, plain HTTP through upstream gateway, and blocked
 // requests, /domains renders the rows of each route over 24h, the
-// overview shows the routes and their top hosts with the upstream state,
-// and /live lists an open tunnel. A failed statistics write shows in the
+// overview shows the route sentence and bar, the routes and their top
+// hosts with Route…, the upstream state, and the configuration summary
+// (design 0009 W24), and /live lists an open tunnel. A failed statistics write shows in the
 // overview and in cuttle status (OI-0006 Q-R5), and status shows the
 // admin listener (OI-0006 P-R2).
 func TestAdminPages(t *testing.T) {
@@ -282,7 +292,7 @@ func TestAdminPages(t *testing.T) {
 
 	res, body, _ := adminGet(t, c, base+"/")
 	for _, want := range []string{
-		"<h3>Sent direct</h3>", "<h3>Sent to upstream gateway</h3>", "<h3>Blocked</h3>",
+		"<h3>Sent direct</h3>", "<h3>Sent to gateway</h3>", "<h3>Blocked</h3>",
 		"Last statistics write error at ", "context canceled",
 		"<dt>Admin listener</dt><dd>" + adminAddr + ` <span class="state listening">listening</span></dd>`,
 	} {
@@ -290,12 +300,26 @@ func TestAdminPages(t *testing.T) {
 			t.Errorf("overview lacks %q", want)
 		}
 	}
-	for _, want := range [][]string{{"upstream gateway", "1", "3"}, {"gateway", "10.8.0.6:3128", "up"}} {
-		if !hasRow(body, want...) {
-			t.Errorf("overview lacks the row %q", want)
+	// W24 of design 0009 (D3.1): the route sentence and the stacked bar
+	// from the route totals, the route totals of each top-host list, the
+	// upstream state as a compact row, and the configuration summary.
+	sentence := regexp.MustCompile(`In the last 24 hours, \d+% of traffic went <span class="rt c-direct">direct</span>, \d+% through <span class="rt c-upstream">gateway</span>, and 2 requests were <span class="rt c-block">blocked</span>\.`)
+	if !sentence.MatchString(body) {
+		t.Errorf("overview lacks the route sentence:\n%s", body)
+	}
+	for _, want := range []string{
+		`<div class="routebar" role="img" aria-label="Bytes by route: direct `, `<i class="c-direct g`, `<i class="c-upstream g`,
+		`<p class="route-totals"><span>1 host</span><span>3 requests</span>`,
+		`<dt><a class="name-code" href="/upstreams/gateway">gateway</a></dt><dd><span class="state up">Up`,
+		`<dt>Rules</dt><dd><a class="num" href="/rules">2</a></dd>`, `<dt>Upstreams</dt><dd><a class="num" href="/upstreams">1</a></dd>`,
+		`<dt>Interfaces</dt><dd><a class="num" href="/interfaces">0</a></dd>`, `<dt>Saved</dt><dd>`,
+		`href="/rules/new?host=gw.cuttle.test&amp;return=%2F" data-fragment="route-editor"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("overview lacks %q", want)
 		}
 	}
-	if got := hostCells(body); got != "bulk.cuttle.test,files.cuttle.test,gw.cuttle.test,blocked.cuttle.test,x.blocked.cuttle.test" {
+	if got := listedHosts(body); got != "bulk.cuttle.test,files.cuttle.test,gw.cuttle.test,blocked.cuttle.test,x.blocked.cuttle.test" {
 		t.Errorf("overview hosts %s", got)
 	}
 

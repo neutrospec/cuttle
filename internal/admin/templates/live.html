@@ -1,17 +1,17 @@
 {{define "content"}}{{with .Data}}
 <header class="page-head">
 <div><h1>Live</h1>
-<p class="lead">Open tunnels and the live counters. This page reloads every 5 s.</p></div>
+<p class="lead">Open tunnels and the live counters. This page reloads every 5 s, but not while a dialog is open.</p></div>
 </header>
 <dl class="panel tiles" aria-label="Live counters">{{range .Counters}}<div><dt>{{.Name}}</dt><dd>{{num .Value}}</dd></div>{{end}}</dl>
 <section class="section" aria-labelledby="tunnels-h">
 <div class="section-head"><h2 id="tunnels-h">Active tunnels ({{len .Status.Tunnels}})</h2><p>Tunnels and upgraded connections, at most 500.</p></div>
 {{if .Status.Tunnels}}<div class="panel tablewrap"><table class="data resp">
-<thead><tr><th>Target</th><th>Kind</th><th>Route</th><th>Source</th><th>Interface</th><th class="n">Age</th><th class="n">Up</th><th class="n">Down</th></tr></thead>
+<thead><tr><th>Target</th><th>Kind</th><th>Route</th><th>Source</th><th>Interface</th><th class="n">Age</th><th class="n">Up</th><th class="n">Down</th><th class="act"><span class="sr">Actions</span></th></tr></thead>
 <tbody>
-{{range .Status.Tunnels}}<tr><td class="host lead-cell">{{.Target}}</td><td class="opt" data-label="Kind">{{.Kind}}</td><td class="route">{{template "route" .}}</td><td data-label="Source">{{.Source}}</td><td class="opt" data-label="Interface">{{dash .Interface}}</td><td class="n" data-label="Age">{{secs .AgeS}}</td><td class="n" data-label="Up">{{bytes .Up}}</td><td class="n" data-label="Down">{{bytes .Down}}</td></tr>
+{{range .Status.Tunnels}}<tr><td class="host lead-cell">{{.Target}}</td><td class="opt" data-label="Kind">{{.Kind}}</td><td class="route">{{template "route" .}}</td><td data-label="Source">{{.Source}}</td><td class="opt" data-label="Interface">{{dash .Interface}}</td><td class="n" data-label="Age">{{secs .AgeS}}</td><td class="n" data-label="Up">{{bytes .Up}}</td><td class="n" data-label="Down">{{bytes .Down}}</td><td class="act">{{$h := hostOf .Target}}{{with routeHref $h $.Data.Ret}}<a class="btn quiet icon-btn sm route-btn" href="{{.}}" data-fragment="route-editor" aria-label="Route {{$h}}…" title="Route…">{{template "icon" "route"}}<span class="ph-lab">Route…</span></a>{{end}}</td></tr>
 {{end}}</tbody>
 </table></div>
 {{else}}<div class="empty"><h3>No active tunnels</h3><p>Open tunnels and upgraded connections appear here while they carry traffic.</p></div>
 {{end}}</section>
-{{end}}{{end}}
+{{template "route-dialog"}}{{end}}{{end}}

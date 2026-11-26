@@ -618,14 +618,54 @@ Move resolved items to Closed with their resolving commit or evidence.
     cuttle`, together with Z-R5. AC-R4 (nit, design): 0009 D3.13 says every
     form asks before leaving with unsaved changes, but the interface and
     upstream editor dialogs are deliberately unguarded; add the exception.
+    The W25 case of Y-R3, T-R2, AA-R4, AA-R8, AB-R2–AB-R4, AB-R6–AB-R8,
+    AC-R1, AC-R2, and AC-R4 are settled in TASK-0023: the `route.host` op
+    answers `409` when the rule of "Add to rule" no longer has the chosen
+    action, now has `ports`, or is gone (`TestAdminRouteHost`); every
+    Chrome of the browser checks gets `--disable-updater-scheduler`, and
+    `Chrome.Close` fails when Chrome started the updater (T-R2);
+    `textdiff.Apply` starts each hunk at its old line, so hunks of any
+    context rebuild the text (`TestTextDiff`, AA-R4); the info banner is
+    tinted, and a review's Apply leaves without asking only when it posts
+    the edit of every watched form with unsaved changes, so a restore over
+    unsaved editor text asks first (`TestAdminScreens`, AA-R8); the
+    Account page and every form on a full page show an error summary that
+    links to the fields and takes the focus
+    (`TestAdminAccountErrorSummary`, `TestAdminScreensRoute`, AB-R2);
+    `TestServeStarterNotSynced` (AB-R3); `scripts/admin-check` runs with
+    its own `TMPDIR` and checks only processes that name it (AB-R4); the
+    password change reads the password file under `loginMu`
+    (`TestAdminPasswordChangeUnderLock`, AB-R6); "Ended N sessions" counts
+    live sessions (`TestAdminSessionsEndedCount`, AB-R7); the interface
+    editor's title follows the rendered values (`TestAdminInterfaceAddTitle`,
+    AB-R8); the interface list hint sits in the part that hides with the
+    choice and speaks of connections to the upstream in the upstream
+    editor (`TestAdminInterfaceListHint`, AC-R1); Discard on a duplicate
+    loads the copy again (`TestAdminDuplicateDiscard`, AC-R2); and 0009
+    D3.13 names the unguarded editor dialogs (AC-R4).
+  - AD-R1–AD-R5 (from the TASK-0023 review): AD-R1 (minor, UI): when
+    every request in the window failed and moved no bytes, the Overview
+    says "No traffic in this window" while the top-host panels list the
+    failed hosts; show the empty state only when there are no routes, and
+    give requests-only routes their own sentence. AD-R2 (nit): rounding
+    can show "100%" next to "<1%"; cap a share at 99% when another route
+    has a non-zero share. AD-R3 (nit, test gap): no test covers
+    `cleanReturn` in `getRouteHost`; add `return=https://evil.example/`
+    expecting Cancel to point at `/rules`. AD-R4 (accepted deviation):
+    Route… is an icon-only button with `aria-label` and `title` on Domains
+    and Live at desktop width, unlike the prototype's labelled button,
+    because the labelled button made the Domains table overflow at 1280
+    px; the orchestrator accepted it on 2026-11-26. AD-R5 (nit): the W26
+    interface flow's failure message should name its cause (no
+    non-loopback interface with a six-byte hardware address).
 - Next action: orchestrator — include the open items (V5, V8, V11, V12, P1,
   W1–W3, Z2, Z4, G1–G2, P-R3–P-R7, Q-R1–Q-R4, Q-R6–Q-R8, S-R1–S-R2,
-  X-R1–X-R5, the W25 case of Y-R3, Z-R5–Z-R7, Z-R9, T-R2, AA-R4, AA-R8,
-  AB-R2–AB-R4, AB-R6–AB-R8, and AC-R1–AC-R4) in the briefs of the stages
-  they affect; the producer closes each item with the commit that
-  settles it. TASK-0022 settled Z-R4, AA-R7, U-R2, and T-R1; TASK-0021
-  settled AA-R1–AA-R3, AA-R5, AA-R6, Z-R3, AB-R1, AB-R5, AB-R9, and
-  AB-R10.
+  X-R1–X-R5, Z-R5–Z-R7, Z-R9, AC-R3, AD-R1–AD-R3, and AD-R5) in the
+  briefs of the stages they affect; the producer closes each item with
+  the commit that settles it. TASK-0023 settled the W25 case of Y-R3, T-R2, AA-R4, AA-R8,
+  AB-R2–AB-R4, AB-R6–AB-R8, AC-R1, AC-R2, and AC-R4; TASK-0022 settled
+  Z-R4, AA-R7, U-R2, and T-R1; TASK-0021 settled AA-R1–AA-R3, AA-R5,
+  AA-R6, Z-R3, AB-R1, AB-R5, AB-R9, and AB-R10.
   The M1.4 items, R5 with the C13 remainder, the per-request source
   recheck of 0003 D10 with N5, the bind retry of V1, Z3, W-R1, and W-R2,
   are settled in TASK-0007.

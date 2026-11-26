@@ -95,6 +95,11 @@ func StartChrome(t testing.TB, opt ChromeOptions) *Chrome {
 		"--no-default-browser-check",
 		"--disable-background-networking",
 		"--disable-component-update",
+		// Without it Chrome installs and wakes the user's own Google
+		// updater (GoogleUpdater --install and --wake under the real home
+		// directory, whatever HOME says) shortly after it starts (OI-0006
+		// T-R2).
+		"--disable-updater-scheduler",
 		"--disable-default-apps",
 		"--disable-extensions",
 		"--disable-sync",
@@ -289,6 +294,10 @@ func (c *Chrome) Close() {
 	}
 	if out, err := exec.Command("/usr/bin/pgrep", "-f", c.profile).Output(); err == nil {
 		c.t.Errorf("Chrome processes left with the throwaway profile: %s", out)
+	}
+	// The updater, when Chrome starts it, logs to the stderr it inherits.
+	if strings.Contains(c.stderr.String(), "chrome/updater/") {
+		c.t.Error("Chrome started the Google updater (OI-0006 T-R2)")
 	}
 }
 

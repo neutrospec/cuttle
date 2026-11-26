@@ -60,8 +60,8 @@
 {{end}}<li class="ifl-empty"{{if .Entries}} hidden{{end}}><span class="hint">{{.Empty}}</span></li>
 </ol>
 <div class="iflist-add"{{if not .Available}} hidden{{end}}><select class="input" name="add:{{.Name}}" aria-label="Add an interface to the list" data-ifl-add><option value="">Add interface…</option>{{range .Available}}<option value="{{.Name}}" data-state="{{.State}}" data-text="{{.Text}}">{{.Name}}</option>{{end}}</select><button class="btn sm ifl-add" type="submit" name="intent" value="edit" formaction="{{.AddAction}}">{{template "icon" "plus"}}Add</button></div>
+<div class="hint ifl-hint">{{.ListHint}}</div>
 </div>
-<div class="hint">Requests use only these interfaces, in this order; the first one that is online carries the connection.</div>
 {{end}}{{template "field-msgs" .}}</div>
 {{end}}
 

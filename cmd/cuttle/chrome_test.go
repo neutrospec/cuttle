@@ -71,7 +71,7 @@ func TestAdminChrome(t *testing.T) {
 	sb := testenv.NewSandbox(t, testenv.BuildCuttle(t))
 	proxyAddr := testenv.Port(sb.FreePort())
 	adminAddr := testenv.Port(sb.FreePort())
-	writeConfig(t, sb, strings.Replace(serveConfig([]string{proxyAddr}, ""), `[admin]
+	writeConfig(t, sb, strings.Replace(serveConfig([]string{proxyAddr}, chromeRules), `[admin]
 listen = ""`, fmt.Sprintf("[admin]\nlisten = %q", adminAddr), 1))
 	if r := sb.RunInput(10*time.Second, adminTestPassword+"\n", "admin", "passwd", "--stdin"); r.Code != 0 {
 		t.Fatalf("admin passwd: %d %s", r.Code, r.Stderr)
@@ -94,9 +94,18 @@ listen = ""`, fmt.Sprintf("[admin]\nlisten = %q", adminAddr), 1))
 			p.Screenshot(filepath.Join(dir, name+".png"))
 		}
 	}
+	// Chrome logs every 4xx answer to a fetch as a network error; 422 is
+	// the answer the live check expects for a draft with an invalid entry,
+	// and it shows it, so only that line is not a problem.
 	clean := func(where string) {
 		t.Helper()
-		if probs := p.Problems(); len(probs) > 0 {
+		var probs []string
+		for _, pr := range p.Problems() {
+			if !strings.HasPrefix(pr, "log network: Failed to load resource: the server responded with a status of 422 ") {
+				probs = append(probs, pr)
+			}
+		}
+		if len(probs) > 0 {
 			t.Errorf("%s: console errors or policy violations: %q", where, probs)
 		}
 	}
@@ -115,7 +124,7 @@ listen = ""`, fmt.Sprintf("[admin]\nlisten = %q", adminAddr), 1))
 	s = readState(t, p)
 	t.Logf("overview: path %s, title %q, sections %q", s.Path, s.Title, s.H2)
 	if s.Path != "/" || s.Title != "Overview · cuttle" || s.H1 != "Overview" || !s.Styled || !s.Script ||
-		!strings.Contains(s.H2, "Routes") || !strings.Contains(s.H2, "Status") || !strings.Contains(s.Text, "Sign out") {
+		!strings.Contains(s.H2, "Configuration") || !strings.Contains(s.H2, "Status") || !strings.Contains(s.Text, "Sign out") {
 		t.Fatalf("overview after sign-in: %+v", s)
 	}
 	clean("overview")
@@ -149,6 +158,14 @@ listen = ""`, fmt.Sprintf("[admin]\nlisten = %q", adminAddr), 1))
 		{"/", "Overview", "overview"},
 		{"/domains?route=block&window=1h", "Domains", "domains"},
 		{"/live", "Live", "live"},
+		{"/rules", "Rules", "rules"},
+		{"/rules/new", "Add rule", "rule-new"},
+		{"/upstreams", "Upstreams", "upstreams"},
+		{"/interfaces", "Interfaces", "interfaces"},
+		{"/proxy", "Proxy", "proxy"},
+		{"/remote", "Remote clients", "remote"},
+		{"/general", "General", "general"},
+		{"/account", "Account", "account"},
 		{"/settings", "Advanced", "advanced"},
 	}
 	for _, pg := range pages[1:] {
@@ -163,6 +180,8 @@ listen = ""`, fmt.Sprintf("[admin]\nlisten = %q", adminAddr), 1))
 	if !strings.Contains(s.Text, "name = \"cuttle-test\"") && !strings.Contains(s.Text, "Configuration") {
 		t.Errorf("Advanced page text: %q", s.Text)
 	}
+
+	formFlows(t, chrome, p, base, proxyAddr, sb.ConfigPath(), shoot, clean)
 
 	// Phone width, in both appearances: no page scrolls sideways.
 	p.Viewport(390, 844, true)
@@ -195,8 +214,8 @@ listen = ""`, fmt.Sprintf("[admin]\nlisten = %q", adminAddr), 1))
 			t.Errorf("a request left through the proxy: %s", l)
 		}
 	}
-	if strings.Contains(string(log), adminTestPassword) {
-		t.Error("the log holds the password")
+	if strings.Contains(string(log), adminTestPassword) || strings.Contains(string(log), chromeNewPassword) {
+		t.Error("the log holds a password")
 	}
 }
 

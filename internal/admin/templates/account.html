@@ -5,6 +5,9 @@
 <header class="page-head"><div><h1>Account</h1>
 <p class="lead">The admin password and the browsers signed in with it.</p></div></header>
 {{if .Message}}<div class="banners"><div class="banner error" role="alert">{{template "icon" "alert"}}<div class="b-body"><strong>{{.Message}}</strong></div></div></div>
+{{end}}{{with .Summary}}<div class="error-summary" role="alert" tabindex="-1" autofocus><h2>{{plural (len .) "error"}}</h2><ul>
+{{range .}}<li><a href="#{{.ID}}">{{.Label}}: {{.Msg}}</a></li>
+{{end}}</ul></div>
 {{end}}<form method="post" action="/account/password" class="account-form">
 <input type="hidden" name="csrf" value="{{$.Token}}">
 <section class="fsec" aria-labelledby="pw-h"><header><h2 id="pw-h">Password</h2><p>Changing it signs out every other browser; this one stays signed in. The first password is set with <code>cuttle admin passwd</code>.</p></header><div class="fields">

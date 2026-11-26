@@ -29,6 +29,27 @@ type accountView struct {
 	Message                        string
 }
 
+// accountIssue is one entry of the error summary: the field's label, its
+// control, and the message.
+type accountIssue struct{ Label, ID, Msg string }
+
+// Summary lists the field errors for the error summary at the top of the
+// form, which links to each field and takes the focus (design 0009
+// D3.13, OI-0006 AB-R2).
+func (v *accountView) Summary() []accountIssue {
+	var out []accountIssue
+	for _, i := range []accountIssue{
+		{"Current password", "pw-current", v.CurrentErr},
+		{"New password", "pw-new", v.NewErr},
+		{"Confirm new password", "pw-confirm", v.ConfirmErr},
+	} {
+		if i.Msg != "" {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
 // Invalid reports whether the password form has an issue.
 func (v *accountView) Invalid() bool {
 	return v.CurrentErr != "" || v.NewErr != "" || v.ConfirmErr != "" || v.Message != ""
@@ -47,16 +68,21 @@ func (s *sessions) others(id string, now time.Time, pw passwordState) int {
 	return n
 }
 
-// removeOthers ends every session but id and reports how many it ended.
-func (s *sessions) removeOthers(id string) int {
+// removeOthers ends every session but id and reports how many of them
+// were live, as others counts them; expired ones go too, uncounted
+// (OI-0006 AB-R7).
+func (s *sessions) removeOthers(id string, now time.Time, pw passwordState) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	n := 0
-	for k := range s.m {
-		if k != id {
-			delete(s.m, k)
+	for k, v := range s.m {
+		if k == id {
+			continue
+		}
+		if !v.expired(now) && pw.usable() && v.digest == pw.digest {
 			n++
 		}
+		delete(s.m, k)
 	}
 	return n
 }
@@ -122,14 +148,6 @@ func (s *Server) postPassword(w http.ResponseWriter, r *http.Request, id string,
 		s.renderAccount(w, http.StatusUnprocessableEntity, id, v, av)
 		return
 	}
-	pw := s.pw.load()
-	if !pw.usable() {
-		// The session ended with the file; currentSession refuses such a
-		// request before it gets here.
-		http.Error(w, "403 Forbidden: login is disabled", http.StatusForbidden)
-		return
-	}
-
 	s.loginMu.Lock()
 	if wait := s.backoff.wait(s.now()); wait > 0 {
 		s.loginMu.Unlock()
@@ -137,6 +155,17 @@ func (s *Server) postPassword(w http.ResponseWriter, r *http.Request, id string,
 		w.Header().Set("Retry-After", strconv.Itoa(secs))
 		av.Message = "Too many failed attempts. Try again in " + strconv.Itoa(secs) + " s."
 		s.renderAccount(w, http.StatusTooManyRequests, id, v, av)
+		return
+	}
+	// The password file is read under loginMu, so that of two changes at
+	// once the second checks its current password against the hash the
+	// first one wrote (OI-0006 AB-R6).
+	pw := s.pw.load()
+	if !pw.usable() {
+		// The session ended with the file; currentSession refuses such a
+		// request before it gets here.
+		s.loginMu.Unlock()
+		http.Error(w, "403 Forbidden: login is disabled", http.StatusForbidden)
 		return
 	}
 	s.argonRuns.Add(1)
@@ -185,7 +214,7 @@ func (s *Server) postPassword(w http.ResponseWriter, r *http.Request, id string,
 // postSessions serves POST /account/sessions: it ends every session but
 // this one (design 0009 D12).
 func (s *Server) postSessions(w http.ResponseWriter, r *http.Request, id string, v session) {
-	n := s.sessions.removeOthers(id)
+	n := s.sessions.removeOthers(id, s.now(), s.pw.load())
 	s.log.Info("admin sessions ended", "count", n)
 	t := toast{Kind: "ok", Title: "Other sessions signed out."}
 	if n == 0 {

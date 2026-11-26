@@ -377,3 +377,18 @@ removes entries. Append new entries at the end, oldest first.
 - What to do instead: name such attributes without those words (here
   `data-route`), and assert the rendered attribute value in a test.
 
+### 2026-11-26 — reviewer — planting a process for a leftover-process control
+
+- Task: TASK-0023, a positive control for the `pgrep -f "$run_tmp"` check
+  in `scripts/admin-check`.
+- Attempts: 2.
+- What failed: `cp /bin/sleep "$run_tmp/planted"; "$run_tmp/planted" 30 &`
+  died at once with `Killed: 9`, because macOS kills a copied platform
+  binary, so the control printed `matched=[]` and looked like a miss.
+  `set -e` then stopped the script at `kill`, before `rm -rf`, and left two
+  `/tmp/cuttle-ac.*` directories.
+- What to do instead: plant a shell script and run it as `sh
+  "$run_tmp/planted.sh" &`, so the process's command line names the path;
+  check that the planted PID is alive before reading the result; put
+  cleanup in a `trap … EXIT`, or use `|| true` on `kill`.
+

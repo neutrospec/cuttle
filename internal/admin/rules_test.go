@@ -596,8 +596,9 @@ func TestFormCoverage(t *testing.T) {
 		body := bodyOf(t, b.get(c.path))
 		for _, fd := range op.Fields {
 			// A list of the interface list editor is its Add select while
-			// it holds no entry.
-			if !regexp.MustCompile(`<(input|textarea|select)\b[^>]* name="(add:)?`+fd.Name+`"`).MatchString(body) && fd.Name != "upstream" {
+			// it holds no entry; from, the rule a new rule copies, has
+			// only a rendered value.
+			if !regexp.MustCompile(`<(input|textarea|select)\b[^>]* name="(add:)?`+fd.Name+`"`).MatchString(body) && fd.Name != "upstream" && fd.Name != "from" {
 				t.Errorf("%s: no control for field %s", c.path, fd.Name)
 			}
 		}

@@ -1,3 +1,8 @@
+{{/* overview is the overview of design 0009 D3.1: the route sentence
+   with the stacked bar and its legend, the top hosts of each route with
+   Route…, the bytes by interface, the upstream and interface states and
+   the configuration summary, then the live counters and the status. Its
+   Data is an overview. */}}
 {{define "content"}}{{with .Data}}
 <header class="page-head">
 <div><h1>Overview</h1>
@@ -7,29 +12,24 @@
 </header>
 {{template "stats" .Stats}}
 
-{{if and .Stats.OK .Window.Range}}<section class="section" aria-labelledby="routes-h">
-<div class="section-head"><h2 id="routes-h">Routes</h2><p>Bytes in both directions in this window.</p></div>
-{{if .Routes}}<div class="panel tablewrap"><table class="data resp">
-<thead><tr><th>Route</th><th class="n">Hosts</th><th class="n">Requests</th><th class="n">Failures</th><th class="n">Up</th><th class="n">Down</th><th class="barcol"><span class="sr">Share of bytes</span></th></tr></thead>
-<tbody>
-{{range .Routes}}<tr class="c-{{.Action}}"><td class="route lead-cell">{{template "route" .}}</td><td class="n" data-label="Hosts">{{num .Hosts}}</td><td class="n" data-label="Requests">{{num .Requests}}</td><td class="n opt" data-label="Failures">{{num .Failures}}</td><td class="n" data-label="Up">{{bytes .BytesUp}}</td><td class="n" data-label="Down">{{bytes .BytesDown}}</td><td class="barcol"><span class="bar"><i class="{{bar .Bytes $.Data.MaxRouteBytes}}"></i></span></td></tr>
-{{end}}</tbody>
-</table></div>
+{{if and .Stats.OK .Window.Range}}{{with .Hero}}<section class="panel hero" aria-labelledby="routes-h">
+<h2 id="routes-h" class="sr">Routes</h2>
+<p class="hero-sentence">{{range .Sentence}}{{if .Class}}<span class="rt c-{{.Class}}{{with .Shade}} {{.}}{{end}}">{{.Text}}</span>{{else}}{{.Text}}{{end}}{{end}}</p>
+{{if .Bar}}<div class="routebar" role="img" aria-label="{{.BarLabel}}">{{range .Bar}}<i class="c-{{.Class}} {{.Grow}}{{with .Shade}} {{.}}{{end}}"></i>{{end}}</div>
+{{end}}<ul class="legend">{{range .Bar}}<li><span class="lg c-{{.Class}}{{with .Shade}} {{.}}{{end}}">{{.Name}}</span><span class="num">{{bytes .Bytes}}</span><span class="muted num">{{.Share}}</span></li>{{end}}{{if .Blocked}}<li><span class="lg c-block">block</span><span class="num">{{num .Blocked}} {{if eq .Blocked 1}}request{{else}}requests{{end}}</span></li>{{end}}</ul>
+</section>
 {{else}}<div class="empty"><h3>No traffic in this window</h3><p>No request was recorded from {{.Window.Range}}.</p>{{range .Window.Presets}}{{if and (eq .Label "7d") (not .Current)}}<a class="btn" href="{{.Href}}">Show the last 7 days</a>{{end}}{{end}}</div>
-{{end}}</section>
-{{end}}
+{{end}}{{end}}
 {{if .Routes}}<section class="section" aria-labelledby="top-h">
-<div class="section-head"><h2 id="top-h">Top hosts by route</h2><p>Ten hosts per route by bytes, or by requests when blocked.</p></div>
-<div class="stack">
+<div class="section-head"><h2 id="top-h">Top hosts by route</h2><p>Ten hosts per route by bytes, or by requests when blocked. Route… adds a rule for a host.</p></div>
+<div class="grid3 top-hosts">
 {{range .Routes}}<section class="panel c-{{.Action}}">
-<div class="panel-head"><h3>{{if eq .Action "direct"}}Sent direct{{else if eq .Action "block"}}Blocked{{else}}Sent to upstream {{.Upstream}}{{end}}</h3>{{template "route" .}}</div>
-<div class="tablewrap"><table class="data resp">
-<thead><tr><th>Host</th><th class="n">Requests</th><th class="n">Failures</th><th class="n">Up</th><th class="n">Down</th><th class="barcol">{{if .ByRequests}}Requests{{else}}Bytes{{end}}</th></tr></thead>
-<tbody>
-{{$b := .}}{{range .Top}}<tr><td class="host lead-cell">{{.Host}}</td><td class="n" data-label="Requests">{{num .Requests}}</td><td class="n opt" data-label="Failures">{{num .Failures}}</td><td class="n" data-label="Up">{{bytes .BytesUp}}</td><td class="n" data-label="Down">{{bytes .BytesDown}}</td><td class="barcol"><span class="bar"><i class="{{if $b.ByRequests}}{{bar .Requests $b.MaxTop}}{{else}}{{bar .Bytes $b.MaxTop}}{{end}}"></i></span></td></tr>
-{{end}}</tbody>
-</table></div>
-<div class="panel-foot"><a href="{{.AllHref}}">All {{num .Hosts}} hosts on {{template "routename" .}}</a></div>
+<div class="panel-head"><h3>{{if eq .Action "direct"}}Sent direct{{else if eq .Action "block"}}Blocked{{else}}Sent to {{.Upstream}}{{end}}</h3>{{template "route" .}}</div>
+<p class="route-totals"><span>{{num .Hosts}} {{if eq .Hosts 1}}host{{else}}hosts{{end}}</span><span>{{num .Requests}} {{if eq .Requests 1}}request{{else}}requests{{end}}</span>{{if .Failures}}<span>{{num .Failures}} failed</span>{{end}}</p>
+<ul class="hosts" aria-label="Top hosts">
+{{$b := .}}{{range .Top}}{{$h := .Host}}<li><span class="h">{{$h}}</span><span class="v num">{{if $b.ByRequests}}{{num .Requests}} req{{else}}{{bytes .Bytes}}{{end}}</span><span class="hb"><i class="{{if $b.ByRequests}}{{bar .Requests $b.MaxTop}}{{else}}{{bar .Bytes $b.MaxTop}}{{end}}"></i></span>{{with routeHref $h $.Data.Ret}}<a class="btn quiet icon-btn sm act" href="{{.}}" data-fragment="route-editor" aria-label="Route {{$h}}…" title="Route…">{{template "icon" "route"}}</a>{{end}}</li>
+{{end}}</ul>
+<div class="panel-foot"><a href="{{.AllHref}}">{{if eq .Hosts 1}}The host{{else}}All {{num .Hosts}} hosts{{end}} on {{template "routename" .}} in the domain table</a></div>
 </section>
 {{end}}</div>
 </section>
@@ -44,31 +44,25 @@
 </table></div>
 </section>
 {{end}}
+<div class="section grid3 states" role="group" aria-label="States and configuration">
+<section class="panel" aria-labelledby="ups-h"><div class="panel-head"><h2 id="ups-h">Upstreams</h2><a class="hint" href="/upstreams">Manage</a></div>
+<dl class="kv">{{range .UpRows}}<dt><a class="name-code" href="{{.Href}}">{{.Name}}</a></dt><dd><span class="state {{.State}}">{{.Text}}</span></dd>
+{{else}}<dt class="sr">Upstreams</dt><dd class="muted">None configured. <a href="/upstreams/new">Add an upstream</a></dd>{{end}}</dl></section>
+<section class="panel" aria-labelledby="ifstate-h"><div class="panel-head"><h2 id="ifstate-h">Interface states</h2><a class="hint" href="/interfaces">Manage</a></div>
+<dl class="kv">{{range .IfRows}}<dt><a class="name-code" href="{{.Href}}">{{.Name}}</a></dt><dd><span class="state {{.State}}">{{.Text}}</span></dd>
+{{else}}<dt class="sr">Interfaces</dt><dd class="muted">None defined; direct connections follow macOS routing.</dd>{{end}}</dl></section>
+<section class="panel" aria-labelledby="conf-h"><div class="panel-head"><h2 id="conf-h">Configuration</h2><a class="hint" href="/settings">Advanced</a></div>
+<dl class="kv"><dt>Rules</dt><dd><a class="num" href="/rules">{{.Conf.Rules}}</a></dd>
+<dt>Upstreams</dt><dd><a class="num" href="/upstreams">{{.Conf.Upstreams}}</a></dd>
+<dt>Interfaces</dt><dd><a class="num" href="/interfaces">{{.Conf.Interfaces}}</a></dd>
+{{with .Conf.Saved}}<dt>Saved</dt><dd>{{.}}</dd>
+{{end}}{{with .Conf.Restart}}<dt>Restart required</dt><dd>{{range $i, $k := .}}{{if $i}}, {{end}}<a href="{{$k.Href}}"><code>{{$k.Key}}</code></a>{{end}}</dd>
+{{end}}</dl></section>
+</div>
 <section class="section" aria-labelledby="live-h">
 <div class="section-head"><h2 id="live-h">Live</h2><p><a href="/live">Active tunnels</a></p></div>
 <dl class="panel tiles">{{range .Counters}}<div><dt>{{.Name}}</dt><dd>{{num .Value}}</dd></div>{{end}}</dl>
 </section>
-
-{{if .Status.Upstreams}}<section class="section" aria-labelledby="ups-h">
-<div class="section-head"><h2 id="ups-h">Upstreams</h2></div>
-<div class="panel tablewrap"><table class="data resp">
-<thead><tr><th>Name</th><th>Address</th><th>State</th><th>Since</th><th class="n">Failed fast</th><th>Last error</th></tr></thead>
-<tbody>
-{{range .Status.Upstreams}}<tr><td class="lead-cell"><span class="name-code">{{.Name}}</span></td><td class="host" data-label="Address">{{.Address}}</td><td><span class="state {{.State}}">{{.State}}</span></td><td class="when opt" data-label="Since">{{time .Since}}</td><td class="n" data-label="Failed fast">{{num .FailedFast}}</td><td data-label="Last error">{{dash .LastError}}</td></tr>
-{{end}}</tbody>
-</table></div>
-</section>
-{{end}}
-{{if .Status.Interfaces}}<section class="section" aria-labelledby="ifstate-h">
-<div class="section-head"><h2 id="ifstate-h">Interface states</h2></div>
-<div class="panel tablewrap"><table class="data resp">
-<thead><tr><th>Name</th><th>Device</th><th>State</th><th>Families</th><th>Since</th><th>Demoted until</th></tr></thead>
-<tbody>
-{{range .Status.Interfaces}}<tr><td class="lead-cell"><span class="name-code">{{.Name}}</span></td><td class="host" data-label="Device">{{dash .Device}}</td><td><span class="state {{.State}}">{{.State}}</span>{{if .Reason}} <span class="muted">({{.Reason}})</span>{{end}}</td><td data-label="Families">{{dash (join .Families ", ")}}</td><td class="when opt" data-label="Since">{{time .Since}}</td><td class="opt" data-label="Demoted until">{{dash .DemotedUntil}}</td></tr>
-{{end}}</tbody>
-</table></div>
-</section>
-{{end}}
 <section class="section" aria-labelledby="status-h">
 <div class="section-head"><h2 id="status-h">Status</h2></div>
 <div class="panel"><dl class="kv status">
@@ -81,4 +75,4 @@
 <dt>Log</dt><dd><span class="mono">{{.Status.Log.Path}}</span> · rotation failures {{.Status.Log.RotationFailures}}</dd>
 </dl></div>
 </section>
-{{end}}{{end}}
+{{template "route-dialog"}}{{end}}{{end}}

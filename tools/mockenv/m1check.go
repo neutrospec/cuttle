@@ -298,6 +298,8 @@ func (k *clientRun) chrome(proxy, target string) fetchOut {
 	}
 	args := []string{
 		"--headless=new", "--use-mock-keychain", "--user-data-dir=" + profile, "--no-first-run",
+		// Keeps Chrome from waking the user's Google updater (OI-0006 T-R2).
+		"--disable-updater-scheduler",
 		"--proxy-server=http://" + proxy, "--proxy-bypass-list=<-loopback>",
 		"--ignore-certificate-errors-spki-list=" + strings.Join(k.sess.SPKI, ","),
 		"--virtual-time-budget=5000", "--dump-dom", target,

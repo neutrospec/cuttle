@@ -1,7 +1,7 @@
 {{define "content"}}{{with .Data}}
 <header class="page-head">
 <div><h1>Domains</h1>
-<p class="lead">Hosts by route, source, and interface, ordered by bytes.</p>
+<p class="lead">Hosts by route, rule, source, and interface, ordered by bytes.</p>
 {{if .Window.Range}}<p class="meta">{{.Window.Range}}</p>{{end}}
 {{with .Rule}}<p class="meta">Decided by rule <code>{{.}}</code> only. <a href="{{$.Data.AllRules}}">Show every rule</a></p>{{end}}</div>
 <div class="actions">{{template "presets" .Window}}</div>
@@ -12,21 +12,21 @@
    it. Clearing both dates returns to the 24h default (OI-0006 U-R3). */}}
 <form method="get" action="/domains" class="panel filters" aria-label="Filters">
 <div class="field"><label for="f-route">Route</label><select class="input" id="f-route" name="route">{{range .Route}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></div>
+<div class="field"><label for="f-rule">Rule</label><select class="input" id="f-rule" name="rule">{{range .Rules}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></div>
 <div class="field"><label for="f-source">Source</label><select class="input" id="f-source" name="source">{{range .Source}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></div>
 <div class="field"><label for="f-interface">Interface</label><select class="input" id="f-interface" name="interface">{{range .Interface}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></div>
 <div class="field date"><label for="f-from">From</label><input class="input" type="date" id="f-from" name="from" value="{{.Window.FromDate}}" aria-describedby="f-dates-h"></div>
 <div class="field date"><label for="f-to">To</label><input class="input" type="date" id="f-to" name="to" value="{{.Window.ToDate}}" aria-describedby="f-dates-h"></div>
-{{with .Rule}}<input type="hidden" name="rule" value="{{.}}">
-{{end}}{{if .Window.Preset}}<input type="hidden" name="window" value="{{.Window.Preset}}">
+{{if .Window.Preset}}<input type="hidden" name="window" value="{{.Window.Preset}}">
 {{end}}<div class="go"><button class="btn primary" type="submit">Show</button></div>
 <p class="hint" id="f-dates-h">Dates are local and inclusive, and replace the window; clear both to return to the last 24 hours.</p>
 </form>
 {{if .Rows}}<div class="panel tablewrap"><table class="data dense resp">
-<thead><tr><th class="opt"><span class="sr">Rank</span></th><th>Host</th><th>Route</th><th>Rules</th><th class="n">Requests</th><th class="n">Failures</th><th class="n">Up</th><th class="n">Down</th><th>Seen</th><th class="barcol">Bytes</th></tr></thead>
+<thead><tr><th class="opt"><span class="sr">Rank</span></th><th>Host</th><th>Route</th><th>Rules</th><th class="n">Requests</th><th class="n">Failures</th><th class="n">Up</th><th class="n">Down</th><th>Seen</th><th class="barcol">Bytes</th><th class="act"><span class="sr">Actions</span></th></tr></thead>
 <tbody>
-{{$first := .First}}{{$max := .MaxBytes}}{{range $i, $r := .Rows}}<tr class="c-{{$r.Action}}"><td class="n rank opt">{{num (rowIndex $first $i)}}</td><td class="host lead-cell">{{$r.Host}}</td><td class="route">{{template "route" $r}}</td><td class="opt" data-label="Rules">{{join $r.Rules ", "}}</td><td class="n" data-label="Requests">{{num $r.Requests}}</td><td class="n opt" data-label="Failures">{{num $r.Failures}}</td><td class="n" data-label="Up">{{bytes $r.BytesUp}}</td><td class="n" data-label="Down">{{bytes $r.BytesDown}}</td><td class="when opt"><span class="nb">{{unix $r.FirstSeen}}</span> <span class="nb muted">to {{unix $r.LastSeen}}</span></td><td class="barcol"><span class="bar"><i class="{{bar $r.Bytes $max}}"></i></span></td></tr>
+{{$first := .First}}{{$max := .MaxBytes}}{{range $i, $r := .Rows}}<tr class="c-{{$r.Action}}"><td class="n rank opt">{{num (rowIndex $first $i)}}</td><td class="host lead-cell">{{$r.Host}}</td><td class="route">{{template "route" $r}}</td><td class="opt rules" data-label="Rules">{{range $k, $n := $r.Rules}}{{if $k}}, {{end}}{{with index $.Data.RuleLinks $n}}<a href="{{.}}">{{$n}}</a>{{else}}{{$n}}{{end}}{{end}}</td><td class="n" data-label="Requests">{{num $r.Requests}}</td><td class="n opt" data-label="Failures">{{num $r.Failures}}</td><td class="n" data-label="Up">{{bytes $r.BytesUp}}</td><td class="n" data-label="Down">{{bytes $r.BytesDown}}</td><td class="when opt"><span class="nb">{{unix $r.FirstSeen}}</span> <span class="nb muted">to {{unix $r.LastSeen}}</span></td><td class="barcol"><span class="bar"><i class="{{bar $r.Bytes $max}}"></i></span></td><td class="act">{{with routeHref $r.Host $.Data.Ret}}<a class="btn quiet icon-btn sm route-btn" href="{{.}}" data-fragment="route-editor" aria-label="Route {{$r.Host}}…" title="Route…">{{template "icon" "route"}}<span class="ph-lab">Route…</span></a>{{end}}</td></tr>
 {{end}}</tbody>
 </table></div>
 {{else if and .Stats.OK (not $.Message)}}<div class="empty"><h3>No hosts match</h3><p>No host took this route in this window with these filters. Choose a longer window or another filter.</p></div>
 {{end}}{{if or .Prev .Next}}<nav class="pages" aria-label="Pages of hosts">{{if .Prev}}<a class="btn" href="{{.Prev}}">Previous 500</a>{{end}}{{if .Next}}<a class="btn" href="{{.Next}}">Next 500</a>{{end}}</nav>
-{{end}}{{end}}{{end}}
+{{end}}{{template "route-dialog"}}{{end}}{{end}}

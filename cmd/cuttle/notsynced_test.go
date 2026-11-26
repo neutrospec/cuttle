@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,4 +43,37 @@ func TestWritesNotSynced(t *testing.T) {
 	}
 	checkPasswordFile(t, filepath.Join(pwDir, "admin-password"))
 	checkStarterFile(t, filepath.Join(cfgDir, "config.toml"))
+}
+
+// TestServeStarterNotSynced checks OI-0006 AB-R3: when the directory sync
+// after writing the starter file fails, the first-run steps of cuttle
+// serve treat the file as written, log the warning, and go on to load it,
+// as init does (OI-0006 Z-R4).
+func TestServeStarterNotSynced(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root opens any directory")
+	}
+	lookup, vars := tempEnv(t)
+	cfgDir := filepath.Join(vars["XDG_CONFIG_HOME"], "cuttle")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(cfgDir, 0o300); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(cfgDir, 0o700)
+	s, err := prepareServe(lookup, "", io.Discard)
+	if err != nil {
+		t.Fatalf("prepareServe with an unsynced starter file: %v", err)
+	}
+	s.close()
+	os.Chmod(cfgDir, 0o700)
+	if s.cfg == nil {
+		t.Fatal("no configuration loaded")
+	}
+	checkStarterFile(t, filepath.Join(cfgDir, "config.toml"))
+	log, _ := os.ReadFile(filepath.Join(vars["XDG_STATE_HOME"], "cuttle", "cuttle.log"))
+	if !strings.Contains(string(log), `msg="wrote starter configuration, but the directory could not be synced"`) {
+		t.Errorf("log %q", log)
+	}
 }
