@@ -44,18 +44,22 @@ A closed task becomes one line under Closed:
 ### TASK-0021 — M4.2 C: rules and upstreams
 
 - Milestone: M4.2
-- Status: review
-- Iteration: 1/3
-- Workers: implementer done on branch `t3/rules-upstreams-pages`; fresh
-  reviewer running
+- Status: implement
+- Iteration: 2/3
+- Workers: implementer on branch `t3/rules-upstreams-pages` (fix round,
+  merge of `main` with task D, and AB-R10)
 - Base: `e5ff391`
-- Candidate: `ecf1585` (tree `ba2d923`)
+- Candidate: `ecf1585` (tree `ba2d923`), returned for F1
 - Evidence: implementer ran `scripts/gate t0`, `t1`, and
   `scripts/admin-check` on `ba2d923`, all pass; W15–W19 tests, AA-R1–AA-R3,
   AA-R5, AA-R6, and Z-R3 settled, 16 mutation proofs, and screenshots at
   1280 and 390 px in light and dark
-- Findings: none yet
-- Next action: reviewer — risk-based review of `e5ff391..ecf1585`
+- Findings: F1 (major): without the script, moving a rule down lands one
+  position higher than typed (W16); F2 (medium, UI): the no-script rules
+  layout shifts when the drag handle is hidden; N1–N4 and AB-R5 folded in
+- Next action: implementer — fix F1 and F2 with the folded items, merge
+  `main` at `89243f3`, swap in the interface list editor (AB-R10), rerun
+  the gates and `scripts/admin-check`, and return the candidate
 
 ## Closed
 
