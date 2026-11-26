@@ -3,6 +3,7 @@ package stats
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -72,6 +73,7 @@ func TestStatsFilterCheck(t *testing.T) {
 		{Window: w}, {Window: w, Route: "all", Source: "all", Interface: "all"},
 		{Window: w, Route: "upstream:gateway", Source: "remote", Interface: "eth-a"},
 		{Window: w, Route: "block", Interface: "none"}, {Window: w, Route: "upstream", Interface: "other"},
+		{Window: w, Rule: "all"}, {Window: w, Rule: "restricted"}, {Window: w, Rule: "default"}, {Window: w, Rule: "lab.v2_x-1"},
 	} {
 		if err := f.Check(); err != nil {
 			t.Errorf("%+v: %v", f, err)
@@ -80,6 +82,7 @@ func TestStatsFilterCheck(t *testing.T) {
 	for _, f := range []Filter{
 		{Window: w, Route: "upstream:"}, {Window: w, Route: "upstream:Gateway"}, {Window: w, Route: "none"},
 		{Window: w, Source: "both"}, {Window: w, Interface: "en0 "}, {Window: w, Interface: "Wi-Fi"}, {},
+		{Window: w, Rule: "Ads"}, {Window: w, Rule: "-x"}, {Window: w, Rule: "x'; DROP"}, {Window: w, Rule: strings.Repeat("a", 65)},
 	} {
 		if err := f.Check(); err == nil {
 			t.Errorf("%+v accepted", f)
@@ -186,5 +189,69 @@ func TestStatsQueryDuringBlockedFlush(t *testing.T) {
 	rows, _ = st.Domains(context.Background(), Filter{Window: w}, MaxDomainRows, 0)
 	if len(rows) != 2 {
 		t.Errorf("rows after the flush: %+v", rows)
+	}
+}
+
+// TestStatsRuleTotals checks the totals per rule of design 0009 D9 and the
+// rule filter: each rule's requests, failures, bytes, and distinct hosts
+// in the window, ordered by name; the filter narrows the totals and the
+// host table to one rule.
+func TestStatsRuleTotals(t *testing.T) {
+	clock := newClock(time.Date(2026, 11, 25, 10, 0, 0, 0, time.UTC))
+	st, err := Open(context.Background(), Options{Path: filepath.Join(t.TempDir(), "stats.db"), RetentionDays: 30,
+		MaxHostsPerHour: 1000, Clock: clock.Now, Interval: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close(context.Background())
+	rec := func(host, action, upstream, rule string, n int, up, down int64, failed bool) {
+		for range n {
+			st.Recorder().Complete(&flow{key: RowKey{Host: host, Action: action, Upstream: upstream, Rule: rule, Source: "local"}, up: up, down: down}, true, failed)
+		}
+	}
+	rec("wiki.internal.example", "upstream", "gateway", "restricted", 3, 10, 100, false)
+	rec("git.internal.example", "upstream", "gateway", "restricted", 2, 5, 50, true)
+	rec("ads.example", "block", "", "ads", 4, 0, 0, false)
+	rec("example.com", "direct", "", "default", 1, 1, 2, false)
+	if err := st.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// An hour earlier than the 1h window, inside the 24h window.
+	clock.Set(clock.Now().Add(-2 * time.Hour))
+	rec("old.internal.example", "upstream", "gateway", "restricted", 1, 1, 1, false)
+	if err := st.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	clock.Set(clock.Now().Add(2 * time.Hour))
+
+	day, _ := PresetWindow("24h", clock.Now())
+	got, err := st.RuleTotals(context.Background(), Filter{Window: day})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Total{
+		{Rule: "ads", Hosts: 1, Requests: 4},
+		{Rule: "default", Hosts: 1, Requests: 1, BytesUp: 1, BytesDown: 2},
+		{Rule: "restricted", Hosts: 3, Requests: 6, Failures: 2, BytesUp: 41, BytesDown: 401},
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("rule totals:\n got %+v\nwant %+v", got, want)
+	}
+	hour, _ := PresetWindow("1h", clock.Now())
+	got, _ = st.RuleTotals(context.Background(), Filter{Window: hour, Rule: "restricted"})
+	if len(got) != 1 || got[0].Rule != "restricted" || got[0].Requests != 5 || got[0].Hosts != 2 {
+		t.Errorf("restricted in the last hour: %+v", got)
+	}
+	rows, err := st.Domains(context.Background(), Filter{Window: day, Rule: "restricted"}, 10, 0)
+	if err != nil || len(rows) != 3 || rows[0].Host != "wiki.internal.example" {
+		t.Errorf("hosts of restricted: %+v %v", rows, err)
+	}
+	for _, r := range rows {
+		if len(r.Rules) != 1 || r.Rules[0] != "restricted" {
+			t.Errorf("a row of another rule: %+v", r)
+		}
+	}
+	if _, err := st.RuleTotals(context.Background(), Filter{Window: day, Rule: "Bad Name"}); err == nil {
+		t.Error("an invalid rule filter was accepted")
 	}
 }

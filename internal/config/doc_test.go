@@ -296,3 +296,32 @@ func TestNoteValidation(t *testing.T) {
 		t.Errorf("proxy.note: %v", r.Err())
 	}
 }
+
+// TestNoteSyntaxError checks that a TOML syntax error inside a note gives
+// a fixed message that repeats none of it (OI-0006 Z-R3, design 0009 D6),
+// while another syntax error keeps the parser's message.
+func TestNoteSyntaxError(t *testing.T) {
+	const head = "name = \"cuttle-test\"\n[proxy]\ndefault = \"direct\"\n"
+	for _, c := range []struct{ name, text string }{
+		{"rule, unquoted", head + "[[rule]]\nname = \"x\"\nhosts = [\"x.example\"]\naction = \"block\"\nnote = secretword here\n"},
+		{"rule, unterminated", head + "[[rule]]\nname = \"x\"\nnote = \"secretword here\naction = \"block\"\n"},
+		{"upstream, unquoted", head + "[[upstream]]\nname = \"u\"\nnote = secretword\naddress = \"192.0.2.1:3128\"\n"},
+		{"upstream, bad escape", head + "[[upstream]]\nname = \"u\"\nnote = \"secretword \\q\"\n"},
+		{"interface, unquoted", head + "[[interface]]\nname = \"eth-a\"\nnote = secretword\n"},
+		{"inline rule", head + "rule = [{name = \"x\", note = secretword}]\n"},
+	} {
+		_, r := Parse([]byte(c.text), "note.toml")
+		// Under [[interface]] the interface hint, as fixed, comes first.
+		want := noteSyntaxHint
+		if strings.HasPrefix(c.name, "interface") {
+			want = interfaceSyntaxHint
+		}
+		if len(r.Errors) != 1 || r.Errors[0].Msg != want || strings.Contains(r.Errors[0].String(), "secret") {
+			t.Errorf("%s: %s", c.name, issues(r.Errors))
+		}
+	}
+	_, r := Parse([]byte(head+"[[rule]]\nname = secretword\n"), "x.toml")
+	if len(r.Errors) != 1 || r.Errors[0].Msg == noteSyntaxHint || !strings.HasPrefix(r.Errors[0].Msg, "TOML syntax: ") {
+		t.Errorf("a syntax error outside a note: %s", issues(r.Errors))
+	}
+}

@@ -217,19 +217,19 @@ func TestShellNavigation(t *testing.T) {
 	nav := body[strings.Index(body, `<nav class="nav"`):]
 	nav = nav[:strings.Index(nav, "</nav>")]
 	text := strings.Join(strings.Fields(tagRE.ReplaceAllString(nav, " ")), " ")
-	want := "Traffic Overview Domains Live Configuration Rules (not available yet) 4 Upstreams (not available yet) 2 " +
+	want := "Traffic Overview Domains Live Configuration Rules 4 Upstreams 2 " +
 		"Interfaces (not available yet) 2 Proxy (not available yet) Remote clients (not available yet) General (not available yet) " +
 		"Admin Account (not available yet) Advanced"
 	if text != want {
 		t.Errorf("navigation:\n got %q\nwant %q", text, want)
 	}
-	for _, href := range []string{"/", "/domains", "/live", "/settings"} {
+	for _, href := range []string{"/", "/domains", "/live", "/rules", "/upstreams", "/settings"} {
 		if !strings.Contains(nav, `<a href="`+href+`"`) {
 			t.Errorf("navigation lacks a link to %s", href)
 		}
 	}
-	if n := strings.Count(nav, "<a "); n != 4 {
-		t.Errorf("navigation has %d links, want 4", n)
+	if n := strings.Count(nav, "<a "); n != 6 {
+		t.Errorf("navigation has %d links, want 6", n)
 	}
 	for _, s := range []string{"<b>cuttle</b><span>cuttle-edge</span>", "Version 0.2.0, up 3 days", "Configuration loaded at 09:42"} {
 		if !strings.Contains(body, s) {

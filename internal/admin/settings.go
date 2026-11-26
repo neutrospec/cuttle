@@ -185,7 +185,7 @@ func (s *Server) postSettings(w http.ResponseWriter, r *http.Request, _ string, 
 	switch {
 	case res.conflict:
 		d.Conflict = true
-		d.Notice = "The file changed since this page loaded, so nothing was saved. Compare it with your text below; saving again replaces it with your text."
+		d.Notice = "The file changed since this page loaded, so nothing was saved. Compare it with your text below. Review changes shows your text against the file as it is now; applying it replaces that change."
 		if disk, rerr := readConfigFile(d.Path); rerr == nil {
 			d.DiskText, d.Base = string(disk), config.Digest(disk)
 		} else {

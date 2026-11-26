@@ -273,7 +273,8 @@ func TestCheckCommand(t *testing.T) {
 }
 
 // TestExplainCommand checks P7: cuttle explain prints the D3 fields for
-// direct, upstream, block, and --remote targets.
+// direct, upstream, block, and --remote targets, and the address line of
+// design 0009 D8 on direct routes.
 func TestExplainCommand(t *testing.T) {
 	if testing.Short() {
 		t.Skip("binary test")
@@ -314,11 +315,20 @@ action = "block"
 		{[]string{"https://wiki.internal.example/"},
 			"target      wiki.internal.example:443 (connect, local client)\nrule        restricted (#2)\naction      upstream:gateway -> 10.8.0.6:3128 (disclosure via)\ninterfaces  system routing\n"},
 		{[]string{"http://localhost:3000/x?y"},
-			"target      localhost:3000 (http, local client)\nrule        loopback (#1)\naction      direct (allow_loopback)\ninterfaces  system routing\n"},
+			"target      localhost:3000 (http, local client)\nrule        loopback (#1)\naction      direct (allow_loopback)\ninterfaces  system routing\n" +
+				"address     checked after resolution; allows public, self, and loopback addresses\n"},
 		{[]string{"ads.example.net:443"},
 			"target      ads.example.net:443 (connect, local client)\nrule        ads (#3)\naction      block (403)\ninterfaces  system routing\n"},
 		{[]string{"Example.COM:8443"},
-			"target      example.com:8443 (connect, local client)\nrule        default (proxy.default)\naction      direct\ninterfaces  system routing\n"},
+			"target      example.com:8443 (connect, local client)\nrule        default (proxy.default)\naction      direct\ninterfaces  system routing\n" +
+				"address     checked after resolution; allows public addresses\n"},
+		// IP literals get the verdict of the dial (design 0009 D8).
+		{[]string{"http://169.254.169.254/latest"},
+			"target      169.254.169.254:80 (http, local client)\nrule        default (proxy.default)\naction      direct\ninterfaces  system routing\n" +
+				"address     refused: unusable address, 502 destination_ip_prohibited\n"},
+		{[]string{"127.0.0.1:8080"},
+			"target      127.0.0.1:8080 (connect, local client)\nrule        loopback (#1)\naction      direct (allow_loopback)\ninterfaces  system routing\n" +
+				"address     allowed: loopback address\n"},
 		{[]string{"--remote", "https://wiki.internal.example/"},
 			"target      wiki.internal.example:443 (connect, remote client)\nrule        restricted (#2)\naction      upstream:gateway -> 10.8.0.6:3128 (disclosure via)\ninterfaces  system routing\n"},
 		{[]string{"--remote", "example.com:443"},

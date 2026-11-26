@@ -188,6 +188,8 @@ func New(opt Options) *Server {
 	handle("POST /config/draft", s.authed(maxSettingsFormBytes, s.postDraft))
 	handle("POST /config/apply", s.authed(maxSettingsFormBytes, s.postApply))
 	handle("POST /config/reload", s.authed(maxFormBytes, s.postReload))
+	// The rules and upstreams pages (design 0009 task C).
+	s.addConfigPages(handle)
 	static, _ := fs.Sub(assets, "static")
 	files := http.StripPrefix("/static/", http.FileServerFS(static))
 	handle("GET /static/", func(w http.ResponseWriter, r *http.Request) {

@@ -37,6 +37,11 @@ var (
 // of a hardware address (design 0008 D6, 0004 D4).
 const interfaceSyntaxHint = "TOML syntax: invalid value; put it in double quotes"
 
+// noteSyntaxHint replaces a TOML syntax message about a note, which could
+// quote part of it; a note never reaches a message (design 0009 D6,
+// OI-0006 Z-R3).
+const noteSyntaxHint = "TOML syntax: invalid note; write it as one line in double quotes"
+
 var reservedRuleNames = []string{policy.RuleDefault, policy.RuleRemoteDefault, policy.RulePort, policy.RuleRemoteDirect}
 
 // Defaults from design 0004 D3.
@@ -99,14 +104,18 @@ func parse(data []byte, file string) (*Config, map[string]any, *Report) {
 // syntaxIssue reports a TOML syntax error with its position and the
 // parser's message. The parser quotes the start of an unquoted value, so
 // under an [[interface]] key or an interfaces list, where that value may
-// be a MAC, the message is a fixed hint instead (design 0008 D6). Other
+// be a MAC, and under a note, which no message repeats, the message is a
+// fixed hint instead (design 0008 D6, 0009 D6). Other
 // messages quote what the operator wrote, as every other message does:
 // the operator is trusted, and a pattern that hid MAC-shaped text would
 // also hide names and IPv6 addresses that the settings page must show.
 func syntaxIssue(pe toml.ParseError, file string) Issue {
 	msg := "TOML syntax: " + pe.Message
-	if interfaceKey(pe.LastKey) {
+	switch {
+	case interfaceKey(pe.LastKey):
 		msg = interfaceSyntaxHint
+	case pe.LastKey == "note" || strings.HasSuffix(pe.LastKey, ".note"):
+		msg = noteSyntaxHint
 	}
 	return Issue{File: file, Line: pe.Position.Line, Key: pe.LastKey, Msg: msg}
 }

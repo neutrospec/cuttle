@@ -129,7 +129,7 @@ func navOf(path string) string {
 			}
 			continue
 		}
-		if p.path == path {
+		if p.path == path || (p.path != "/" && strings.HasPrefix(path, p.path+"/")) {
 			return p.id
 		}
 	}
@@ -188,7 +188,7 @@ func (s *Server) postDraft(w http.ResponseWriter, r *http.Request, _ string, v s
 			return
 		}
 		d.op, d.form = op, postedForm(op, r)
-		d.form.Base, d.form.Return = d.base, d.ret
+		d.form.Base, d.form.Return, d.form.intent = d.base, d.ret, d.intent
 		s.draftForm(w, r, v, d)
 	}
 }
@@ -248,7 +248,10 @@ func (s *Server) draftText(w http.ResponseWriter, r *http.Request, v session, d 
 	added, removed := rv.Diff.Added, rv.Diff.Removed
 	rv.Summary = [][]seg{plain("Edited as text: " + plural(added, "line") + " added, " + strconv.Itoa(removed) + " removed")}
 	if added == 0 && removed == 0 {
+		// Nothing to write: applying would only replace the previous
+		// version in .bak with the file itself (OI-0006 AA-R2).
 		rv.Summary = [][]seg{plain("No change to the configuration.")}
+		rv.CanApply = false
 	}
 	rv.Back = true
 	s.textNotices(d, rv, "this text")
@@ -283,6 +286,10 @@ func (s *Server) draftRestore(w http.ResponseWriter, r *http.Request, v session,
 	}
 	rv := s.newReview(d, title)
 	rv.Summary = [][]seg{plain("Restores the previous version saved " + s.when(d.bak.ModTime, s.now()) + ".")}
+	if bytes.Equal(d.cand, d.file.Data) {
+		rv.Summary = [][]seg{plain("No change to the configuration: the previous version is the same as the current file.")}
+		rv.CanApply = false
+	}
 	s.textNotices(d, rv, "the previous version")
 	s.renderReview(w, r, http.StatusOK, v, rv, d.ret)
 }
@@ -349,7 +356,9 @@ func (s *Server) draftForm(w http.ResponseWriter, r *http.Request, v session, d 
 	// Steps 4 and 5: the candidate, its validation, and the issues in the
 	// form.
 	d.cand = d.doc.Encode()
-	if op.Entity != nil {
+	if f.entity > 0 {
+		d.entity = f.entity
+	} else if op.Entity != nil {
 		d.entity = entityIndex(op.Kind, op.Entity(f), d.doc)
 	}
 	if len(d.cand) > config.MaxFileSize {
@@ -367,6 +376,7 @@ func (s *Server) draftForm(w http.ResponseWriter, r *http.Request, v session, d 
 	}
 	valid := s.validate(d)
 	f.mapIssues(d.candRep, d.doc, d.entity)
+	f.dropKnownWarnings(d.file.Report, d.file.Doc)
 	switch d.intent {
 	case intentEdit:
 		s.renderForm(w, r, http.StatusOK, v, d, false)
@@ -400,9 +410,19 @@ func (s *Server) draftForm(w http.ResponseWriter, r *http.Request, v session, d 
 	}
 	if len(rv.Summary) == 0 {
 		rv.Summary = [][]seg{plain("No change to the configuration.")}
+		if !bytes.Equal(d.cand, d.file.Data) {
+			// The model is the same, but the file is not in canonical form.
+			rv.Summary = [][]seg{plain("No change to the configuration; applying rewrites the file in canonical form.")}
+		}
 	}
-	rv.Back = true
+	// A candidate equal to the file has nothing to write (OI-0006 AA-R2).
+	rv.CanApply = !bytes.Equal(d.cand, d.file.Data)
+	// A delete has no form to go back to; Cancel returns to the page.
+	rv.Back = !op.Delete
 	s.formNotices(d, rv)
+	if op.Notices != nil {
+		rv.Notices = append(rv.Notices, op.Notices(d)...)
+	}
 	s.renderReview(w, r, http.StatusOK, v, rv, d.ret)
 }
 
@@ -936,6 +956,16 @@ func (s *Server) postApply(w http.ResponseWriter, r *http.Request, _ string, v s
 		rv.Errors = issueLines(d.candRep.Errors)
 		s.renderReview(w, r, http.StatusUnprocessableEntity, v, rv, ret)
 		return
+	}
+	if config.Digest(text) == reviewed {
+		// The candidate is the file the review compared against: nothing
+		// to write, and the previous version in .bak stays (OI-0006
+		// AA-R2).
+		if cur, err := readConfigFile(s.backend.ConfigPath()); err == nil && config.Digest(cur) == reviewed {
+			s.sessions.setFlash(v.csrf, toast{Kind: "ok", Title: "No change; the file was not written."})
+			http.Redirect(w, r, ret, http.StatusSeeOther)
+			return
+		}
 	}
 	res := s.save(text, reviewed, opName)
 	switch {

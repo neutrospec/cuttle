@@ -9,7 +9,9 @@
 # TestAdminScreens serves the admin pages with example traffic and state
 # and checks each page at 1280 and 390 px in both appearances, the
 # script's controls, the review dialog and apply, the file banners, the
-# previous version, and the pages without the script. Both use a
+# previous version, and the pages without the script; the
+# TestAdminScreens<Page> tests, such as TestAdminScreensRules, do the same
+# for the configuration pages and their flows. All use a
 # throwaway profile and the mock keychain; Chrome opens no window and no
 # debugging port, and its only proxy is a listener that refuses every
 # request.
@@ -23,7 +25,7 @@ set -eu
 cd "$(dirname "$0")/.."
 set -x
 CUTTLE_ADMIN_CHROME=1 go test -count=1 -v -run '^TestAdminChrome$' ./cmd/cuttle
-CUTTLE_ADMIN_CHROME=1 go test -count=1 -v -run '^TestAdminScreens$' ./internal/admin
+CUTTLE_ADMIN_CHROME=1 go test -count=1 -v -run '^TestAdminScreens' ./internal/admin
 { set +x; } 2>/dev/null
 # Only this check's processes: the binary under cuttle-bin-* and Chrome
 # with a throwaway profile under a test's temporary directory.

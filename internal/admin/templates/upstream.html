@@ -1,0 +1,62 @@
+{{/* upstream is the upstream editor of design 0009 D3.5 as a page,
+   without the script; with it, the upstreams page loads the
+   upstream-editor block into its dialog. Its Data is a formPage with the
+   upstream.save form and an upstreamEditView. */}}
+{{define "content"}}{{$f := .Data.Form}}{{with .Data.View}}{{if .Missing}}
+<header class="page-head"><div><p class="crumbs"><a href="/upstreams">Upstreams</a> /</p><h1>Upstream not found</h1>
+<p class="lead">There is no upstream named <code>{{.Missing}}</code>. It may have been renamed or deleted.</p></div></header>
+<a class="btn" href="/upstreams">Back to upstreams</a>
+{{else}}<header class="page-head"><div><p class="crumbs"><a href="/upstreams">Upstreams</a> /</p>
+<h1>{{if .New}}Add upstream{{else}}Edit upstream <span class="name-code">{{$f.Target}}</span>{{end}}</h1>
+<p class="lead">{{if .New}}A plain-HTTP proxy that rules can send requests to.{{else}}Renaming also updates every rule and default that uses it.{{end}}</p></div></header>
+<div class="panel up-page">{{template "upstream-editor" $}}</div>
+{{template "review-dialog"}}{{end}}{{end}}{{end}}
+
+{{/* upstream-editor is the editor's form: name, address, note, the
+   disclosure as two cards with nothing chosen for a new upstream, the
+   timeouts in a collapsed group, and the interface list. */}}
+{{define "upstream-editor"}}{{$f := .Data.Form}}{{with .Data.View}}<div class="up-editor" data-block="upstream-editor">
+<form id="upstream-form" method="post" action="/config/draft" class="upstream-form" novalidate{{if not .ReadOnly}} data-guard="{{if .New}}Unsaved new upstream{{else}}Unsaved changes to upstream {{$f.Target}}{{end}}"{{end}}>
+<input type="hidden" name="csrf" value="{{$.Token}}">
+{{range $f.Hidden}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">
+{{end}}{{if .Fragment}}<div class="dlg-head"><div><h2 id="editor-h">{{if .New}}Add upstream{{else}}Edit upstream <span class="name-code">{{$f.Target}}</span>{{end}}</h2>
+<p>{{if .New}}A plain-HTTP proxy that rules can send requests to.{{else}}Renaming also updates every rule and default that uses it.{{end}}</p></div>
+<button class="btn quiet icon-btn" type="button" data-close aria-label="Close">{{template "icon" "x"}}</button></div>
+{{end}}<div class="dlg-body">
+<div id="form-issues">{{template "form-issues" $}}</div>
+<fieldset class="fields"{{if .ReadOnly}} disabled{{end}}>
+<div class="row2">
+{{with $f.Field "name"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-name">Name</label><input class="input mono" id="f-name" name="name" value="{{$f.Value "name"}}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="f-name-hint f-name-issues"{{if .Invalid}} aria-invalid="true"{{end}}><div class="hint" id="f-name-hint">Lowercase letters, digits, and hyphens; actions name it as <code>upstream:&lt;name&gt;</code>.</div>{{template "fissues" .}}</div>
+{{end}}{{with $f.Field "address"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-address">Address</label><input class="input mono" id="f-address" name="address" value="{{$f.Value "address"}}" placeholder="192.0.2.6:3128" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="f-address-hint f-address-issues"{{if .Invalid}} aria-invalid="true"{{end}}><div class="hint" id="f-address-hint"><code>host:port</code> of a plain-HTTP proxy.</div>{{template "fissues" .}}</div>
+{{end}}</div>
+{{with $f.Field "note"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-note">Note <span class="hint">optional</span></label><input class="input" id="f-note" name="note" value="{{$f.Value "note"}}" autocomplete="off" aria-describedby="f-note-hint f-note-issues"{{if .Invalid}} aria-invalid="true"{{end}}><div class="hint" id="f-note-hint">One line, up to 120 characters.</div>{{template "fissues" .}}</div>
+{{end}}{{with $f.Field "disclosure"}}<div class="field{{if .Invalid}} invalid{{end}}"><span class="label" id="f-disclosure-l">Disclosure</span>
+<div class="rcards" role="radiogroup" id="f-disclosure" tabindex="-1" aria-labelledby="f-disclosure-l" aria-describedby="f-disclosure-hint f-disclosure-issues"><label class="rcard"><input type="radio" name="disclosure" value="via"{{if eq ($f.Value "disclosure") "via"}} checked{{end}}><b>via</b><span class="hint">Another cuttle instance. Adds one Via entry, so that a loop is detected.</span></label><label class="rcard"><input type="radio" name="disclosure" value="none"{{if eq ($f.Value "disclosure") "none"}} checked{{end}}><b>none</b><span class="hint">An egress proxy, or any proxy that must not see an intermediary.</span></label></div>
+<div class="hint" id="f-disclosure-hint">There is no default: either wrong choice fails.</div>{{template "fissues" .}}</div>
+{{end}}<details class="disclosure"{{if or ($f.Invalid "connect_timeout") ($f.Invalid "response_timeout") ($f.Invalid "unreachable_hold")}} open{{end}}><summary>Timeouts: {{.Timeouts}}</summary>
+<div class="row2">
+{{with $f.Field "connect_timeout"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-connect_timeout">Connect</label><input class="input mono" id="f-connect_timeout" name="connect_timeout" value="{{$f.Value "connect_timeout"}}" placeholder="{{$.Data.View.DefConnect}}, the default" autocomplete="off" spellcheck="false" aria-describedby="f-connect_timeout-issues"{{if .Invalid}} aria-invalid="true"{{end}}>{{template "fissues" .}}</div>
+{{end}}{{with $f.Field "response_timeout"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-response_timeout">Response</label><input class="input mono" id="f-response_timeout" name="response_timeout" value="{{$f.Value "response_timeout"}}" placeholder="{{$.Data.View.DefResp}}, the default" autocomplete="off" spellcheck="false" aria-describedby="f-response_timeout-issues"{{if .Invalid}} aria-invalid="true"{{end}}>{{template "fissues" .}}</div>
+{{end}}{{with $f.Field "unreachable_hold"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-unreachable_hold">Unreachable hold</label><input class="input mono" id="f-unreachable_hold" name="unreachable_hold" value="{{$f.Value "unreachable_hold"}}" placeholder="{{$.Data.View.DefHold}}, the default" autocomplete="off" spellcheck="false" aria-describedby="f-unreachable_hold-hint f-unreachable_hold-issues"{{if .Invalid}} aria-invalid="true"{{end}}><div class="hint" id="f-unreachable_hold-hint"><code>0s</code> turns the hold off.</div>{{template "fissues" .}}</div>
+{{end}}</div>
+<p class="hint">Go durations such as <code>10s</code> or <code>1m30s</code>. An empty field uses the default.</p>
+</details>
+{{with $f.Field "ifaces"}}<div class="field{{if .Invalid}} invalid{{end}}" id="f-ifaces" tabindex="-1"><span class="label" id="f-ifaces-l">Interfaces</span>
+{{if $.Data.View.Defined}}<div class="seg sm wrap" role="radiogroup" aria-labelledby="f-ifaces-l" aria-describedby="f-ifaces-issues"><label><input type="radio" name="ifaces" value="system"{{if ne $.Data.View.Ifaces "only"}} checked{{end}}><span>System routing</span></label><label><input type="radio" name="ifaces" value="only"{{if eq $.Data.View.Ifaces "only"}} checked{{end}}><span>Only these interfaces, in this order</span></label></div>
+<div class="if-only fields">{{with $f.Field "ifaces_list"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-ifaces_list" class="sr">Interfaces, in order</label><textarea class="input list" id="f-ifaces_list" name="ifaces_list" rows="2" data-list data-bad="{{.Bad}}" autocomplete="off" spellcheck="false" aria-describedby="f-ifaces_list-hint f-ifaces_list-issues"{{if .Invalid}} aria-invalid="true"{{end}}>{{$f.Value "ifaces_list"}}</textarea><div class="hint" id="f-ifaces_list-hint">Connections to the upstream use only these interfaces, in this order. Defined: {{join $.Data.View.Defined ", "}}.</div>{{template "fissues" .}}</div>{{end}}</div>
+{{else}}<input type="hidden" name="ifaces" value="system"><p class="hint">No interfaces are defined, so connections to the upstream follow macOS routing.{{with $.Data.View.InterfacesHref}} <a href="{{.}}">Define interfaces</a> to choose which ones it uses.{{end}}</p>
+{{end}}{{template "fissues" .}}</div>
+{{end}}</fieldset>
+</div>
+<div class="dlg-foot">{{if not .ReadOnly}}<button class="btn primary" type="submit" name="intent" value="review" data-primary data-fragment="review" data-alt="form-issues">Review changes</button>
+{{end}}<a class="btn" href="/upstreams" data-close>{{if .ReadOnly}}Back to upstreams{{else}}Cancel{{end}}</a>
+<span class="spacer"></span>
+{{if .Delete}}<button class="btn danger" type="submit" form="upstream-delete" name="intent" value="review" data-fragment="review">{{template "icon" "trash"}}Delete upstream</button>
+{{else if .Users}}<span class="hint used-by">Used by {{.UsersText}}, so it cannot be deleted.</span>
+{{end}}</div>
+</form>
+{{with .Delete}}<form id="upstream-delete" method="post" action="/config/draft" class="inline-form">
+<input type="hidden" name="csrf" value="{{$.Token}}">
+{{range .Hidden}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">
+{{end}}</form>
+{{end}}</div>{{end}}{{end}}

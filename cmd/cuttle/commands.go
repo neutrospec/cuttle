@@ -2,13 +2,11 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
 	"text/tabwriter"
 
-	"github.com/neutrospec/cuttle/internal/authority"
 	"github.com/neutrospec/cuttle/internal/config"
 	"github.com/neutrospec/cuttle/internal/paths"
 	"github.com/neutrospec/cuttle/internal/policy"
@@ -91,8 +89,7 @@ func cmdExplain(args []string, lookup env, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "usage: cuttle explain [--config PATH] [--remote] TARGET")
 		return exitUsage
 	}
-	target, kind, err := parseExplainTarget(fl.Arg(0))
-	if err != nil {
+	if _, _, err := config.ParseTarget(fl.Arg(0)); err != nil {
 		fmt.Fprintf(stderr, "cuttle: %v\n", err)
 		return exitUsage
 	}
@@ -116,104 +113,22 @@ func cmdExplain(args []string, lookup env, stdout, stderr io.Writer) int {
 	if *remote {
 		src = policy.SourceRemote
 	}
-	d := policy.New(cfg.PolicySettings()).Decide(target, kind, src)
-
+	// The same explanation as the admin's Test a URL (design 0009 D8).
+	e, err := config.Explain(cfg, fl.Arg(0), src)
+	if err != nil {
+		fmt.Fprintf(stderr, "cuttle: %v\n", err)
+		return exitUsage
+	}
 	w := tabwriter.NewWriter(stdout, 0, 8, 2, ' ', 0)
-	fmt.Fprintf(w, "target\t%s (%s, %s client)\n", d.Target, d.Kind, d.Source)
-	rule := d.Rule
-	switch d.Rule {
-	case policy.RuleDefault:
-		rule += " (proxy.default)"
-	case policy.RuleRemoteDefault:
-		rule += " (proxy.remote.default)"
-	case policy.RulePort:
-		rule += fmt.Sprintf(" (port %d is not in proxy.remote.ports)", d.Target.Port)
-	case policy.RuleRemoteDirect:
-		rule += " (direct needs proxy.remote.allow_direct)"
-	default:
-		rule += fmt.Sprintf(" (#%d)", d.RuleIndex)
+	fmt.Fprintf(w, "target\t%s\n", e.TargetText())
+	fmt.Fprintf(w, "rule\t%s\n", e.RuleText())
+	fmt.Fprintf(w, "action\t%s\n", e.ActionText())
+	fmt.Fprintf(w, "interfaces\t%s\n", e.InterfacesText())
+	if a := e.AddressText(); a != "" {
+		fmt.Fprintf(w, "address\t%s\n", a)
 	}
-	fmt.Fprintf(w, "rule\t%s\n", rule)
-	action := d.Route().String()
-	switch d.Action {
-	case policy.ActionUpstream:
-		if u, ok := cfg.Upstream(d.Upstream); ok {
-			action += fmt.Sprintf(" -> %s (disclosure %s)", u.Address, u.Disclosure)
-		}
-	case policy.ActionDirect:
-		var flags []string
-		if d.AllowLoopback {
-			flags = append(flags, "allow_loopback")
-		}
-		if d.AllowPrivate {
-			flags = append(flags, "allow_private")
-		}
-		if len(flags) > 0 {
-			action += " (" + strings.Join(flags, ", ") + ")"
-		}
-	case policy.ActionBlock:
-		action += " (403)"
-	}
-	fmt.Fprintf(w, "action\t%s\n", action)
-	fmt.Fprintf(w, "interfaces\t%s\n", explainInterfaces(cfg, d))
 	w.Flush()
 	return exitOK
-}
-
-// explainInterfaces names the interface list in force and its source: a
-// rule, proxy.interfaces, or an upstream's own list, or system routing
-// when no list applies (design 0008 D15). It reads only the file.
-func explainInterfaces(cfg *config.Config, d policy.Decision) string {
-	const public = "; public addresses only"
-	switch d.Action {
-	case policy.ActionDirect:
-		if len(d.Interfaces) == 0 {
-			break
-		}
-		src := "proxy.interfaces"
-		if d.RuleIndex > 0 && len(cfg.Rules[d.RuleIndex-1].Interfaces) > 0 {
-			src = "rule " + d.Rule
-		}
-		return strings.Join(d.Interfaces, ", ") + " (" + src + ")" + public
-	case policy.ActionUpstream:
-		if u, ok := cfg.Upstream(d.Upstream); ok && len(u.Interfaces) > 0 {
-			return strings.Join(u.Interfaces, ", ") + " (upstream " + u.Name + ")" + public
-		}
-	}
-	return "system routing"
-}
-
-// parseExplainTarget maps host:port to a tunnel, an http:// URL to a
-// plain-HTTP request, and an https:// URL to a tunnel to its port, 443 by
-// default (design 0006 D3).
-func parseExplainTarget(s string) (authority.Authority, policy.Kind, error) {
-	lower := strings.ToLower(s)
-	switch {
-	case strings.HasPrefix(lower, "http://"):
-		t, err := authority.ParseHTTP(s)
-		if err != nil {
-			return authority.Authority{}, 0, err
-		}
-		return t.Authority, policy.KindHTTP, nil
-	case strings.HasPrefix(lower, "https://"):
-		rest := s[len("https://"):]
-		if i := strings.IndexAny(rest, "/?#"); i >= 0 {
-			rest = rest[:i]
-		}
-		hasPort := strings.Contains(rest, ":")
-		if strings.HasPrefix(rest, "[") {
-			hasPort = strings.Contains(rest, "]:")
-		}
-		if !hasPort {
-			rest += ":443"
-		}
-		a, err := authority.ParseConnect(rest)
-		return a, policy.KindConnect, err
-	case strings.Contains(s, "://"):
-		return authority.Authority{}, 0, errors.New("TARGET must be host:port, an http:// URL, or an https:// URL")
-	}
-	a, err := authority.ParseConnect(s)
-	return a, policy.KindConnect, err
 }
 
 func cmdPaths(args []string, lookup env, stdout, stderr io.Writer) int {

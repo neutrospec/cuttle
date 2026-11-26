@@ -323,6 +323,8 @@ type domainsPage struct {
 	MaxBytes   int64
 	First      int // 1-based index of the first row
 	Prev, Next string
+	// Rule is the rule filter, and AllRules the page without it.
+	Rule, AllRules string
 }
 
 // getDomains shows the host table filtered by route, source, interface,
@@ -338,6 +340,16 @@ func (s *Server) getDomains(w http.ResponseWriter, r *http.Request, _ string, v 
 	keep := url.Values{"route": {f.Route}, "source": {f.Source}, "interface": {f.Interface}}
 	st := s.backend.Status()
 	d := domainsPage{Stats: s.statsState(st)}
+	if rule := q.Get("rule"); rule != "" && rule != "all" {
+		all := url.Values{}
+		for k, vs := range r.URL.Query() {
+			if k != "rule" && k != "offset" {
+				all[k] = vs
+			}
+		}
+		f.Rule, d.Rule, d.AllRules = rule, rule, "/domains?"+all.Encode()
+		keep.Set("rule", rule)
+	}
 	d.Route, d.Source, d.Interface = s.filterOptions(f)
 	win, err := s.window(r, "/domains", keep)
 	offset := 0

@@ -1,0 +1,37 @@
+{{/* upstreams is the upstreams page of design 0009 D3.5: each upstream
+   with its note, address, disclosure in words, live state and last
+   error, the rules and defaults that use it, and its last 24 hours. The
+   editor opens in the page's dialog with the script and as a page
+   without it. An upstream in use has no Delete; its menu names its
+   users. Its Data is a formPage whose View is an upstreamsView. */}}
+{{define "content"}}{{with .Data.View}}
+<header class="page-head">
+<div><h1>Upstreams</h1>
+<p class="lead">Proxies that carry the requests of <code>upstream:&lt;name&gt;</code> routes. A failed upstream never falls back to direct.</p></div>
+{{if not .ReadOnly}}<div class="actions"><a class="btn primary" href="/upstreams/new" data-fragment="upstream-editor">{{template "icon" "plus"}}Add upstream</a></div>
+{{end}}</header>
+{{if .Rows}}<div class="toolbar"><span class="meta">{{plural (len .Rows) "upstream"}}</span><span class="meta">{{.TrafficLine}}</span></div>
+<div class="panel"><div class="ent-head" aria-hidden="true"><span>Upstream</span><span>Address and disclosure</span><span>State</span><span>Used by</span><span>Last 24 hours</span><span></span></div>
+<ul class="ents" aria-label="Upstreams">
+{{range $i, $r := .Rows}}<li class="ent">
+<div class="e-col"><a class="e-name" href="/upstreams/{{$r.Name}}" data-fragment="upstream-editor">{{$r.Name}}</a>{{with $r.Note}}<span class="e-note">{{.}}</span>{{end}}{{if $r.Warnings}}<span class="sr">Warnings: {{join $r.Warnings "; "}}</span>{{end}}</div>
+<div class="e-col"><code>{{$r.Address}}</code><span class="badge">disclosure {{$r.Disclosure}}</span><span class="hint">{{if eq $r.Disclosure "via"}}Another cuttle instance; adds one Via entry{{else}}Discloses no intermediary{{end}}</span></div>
+<div class="e-col">{{if $r.Known}}<span class="state {{$r.State.State}}">{{$r.State.Text}}</span>{{with $r.State.LastError}}<span class="hint">Last error: {{.}}</span>{{end}}{{else}}<span class="state">Not running yet</span><span class="hint">The running configuration does not have it.</span>{{end}}</div>
+<div class="e-col e-use">{{if $r.Users}}<span><span class="ph-lab">Used by </span>{{range $k, $u := $r.Users}}{{if $k}}, {{end}}{{if $u.Href}}<a href="{{$u.Href}}">{{template "rich" $u.Label}}</a>{{else}}{{template "rich" $u.Label}}{{end}}{{end}}</span>{{else}}<span class="badge warn">{{template "icon" "alert"}}Not used by any action</span>{{end}}</div>
+<div class="r-traffic">{{if $.Data.View.Traffic}}<div><b>{{num $r.Requests}}</b> req</div><div>{{bytes $r.Bytes}}</div>{{end}}</div>
+<details class="r-menu menu-details"><summary class="btn quiet icon-btn" aria-label="Actions for upstream {{$r.Name}}">{{template "icon" "more"}}</summary>
+<div class="menu" role="menu">
+<a role="menuitem" href="/upstreams/{{$r.Name}}" data-fragment="upstream-editor">{{template "icon" "edit"}}{{if $.Data.View.ReadOnly}}View{{else}}Edit{{end}}</a>
+{{if $.Data.View.Traffic}}<a role="menuitem" href="{{$r.TrafficHref}}">{{template "icon" "domains"}}Hosts in the last 24 hours</a>
+{{end}}{{if not $.Data.View.ReadOnly}}<hr>{{if $r.Delete}}<button type="submit" role="menuitem" class="danger" form="updel-{{$i}}" name="intent" value="review" data-fragment="review">{{template "icon" "trash"}}Delete…</button>
+{{else}}<button type="button" role="menuitem" class="danger" disabled>{{template "icon" "trash"}}Delete</button><p class="m-note">Used by {{$r.UsersText}}. Change those first.</p>
+{{end}}{{end}}</div></details>
+</li>
+{{end}}</ul></div>
+{{range $i, $r := .Rows}}{{with $r.Delete}}<form id="updel-{{$i}}" method="post" action="/config/draft" class="inline-form">
+<input type="hidden" name="csrf" value="{{$.Token}}">
+{{range .Hidden}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">
+{{end}}</form>
+{{end}}{{end}}{{else}}<div class="empty"><h3>No upstreams</h3><p>Add one to send some destinations through another cuttle instance or an egress proxy. Until then, rules can route only direct or block.</p>{{if not .ReadOnly}}<a class="btn primary" href="/upstreams/new" data-fragment="upstream-editor">{{template "icon" "plus"}}Add upstream</a>{{end}}</div>
+{{end}}<dialog id="editor-dialog" class="editor-dialog" aria-labelledby="editor-h"><div id="upstream-editor" class="editor-slot"></div></dialog>
+{{template "review-dialog"}}{{end}}{{end}}

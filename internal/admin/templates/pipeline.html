@@ -57,10 +57,11 @@
 
 {{/* form-issues is the issue block of a form op (design 0009 D7): the
    reason a draft was refused, the error summary with a link to each
-   field, the issues of the edited entity without a field, and the issues
-   of other entities with links to them. A check and a refused review
-   answer it to a script request. Its argument is the pageData with a
-   formPage. */}}
+   field, the issues of the edited entity without a field, the issues of
+   other entities with links to them, and hidden holders of each field's
+   issues, which the script moves under the fields. A check and a refused
+   review answer it to a script request. Its argument is the pageData with
+   a formPage. */}}
 {{define "form-issues"}}{{with .Data}}<div class="stack" data-block="form-issues">
 {{if .Message}}<div class="banner error" role="alert">{{template "icon" "alert"}}<div class="b-body"><strong>{{template "rich" .Message}}</strong>
 {{if .Reload}}<div class="b-actions"><a class="btn sm" href="{{.Reload}}">Reload the page</a></div>
@@ -73,7 +74,15 @@
 {{end}}{{if .Others}}<section class="others" aria-labelledby="others-h"><h3 id="others-h">Other entries</h3><ul>
 {{range .Others}}<li class="{{if .Warn}}wrn{{else}}err{{end}}"><a href="{{.Href}}">{{template "rich" .Label}}</a>: {{.Msg}}</li>
 {{end}}</ul></section>
-{{end}}{{end}}</div>{{end}}{{end}}
+{{end}}<div hidden>{{range .Fields}}<div data-issues-for="{{.ID}}" data-bad="{{.Bad}}"{{if .Invalid}} data-invalid{{end}}>{{template "fissue-list" .}}</div>{{end}}</div>
+{{end}}</div>{{end}}{{end}}
+
+{{/* fissues is the slot under a field for its issues, with id
+   <field id>-issues; the script fills it from the hidden holders of the
+   form-issues block after a check or a refused review. Its argument is a
+   fieldState. */}}
+{{define "fissues"}}<div class="f-issues" id="{{.ID}}-issues">{{template "fissue-list" .}}</div>{{end}}
+{{define "fissue-list"}}{{range .Errors}}<p class="err">{{.}}</p>{{end}}{{range .Warnings}}<p class="wrn">{{.}}</p>{{end}}{{end}}
 
 {{/* restore is the Restore button: a review of the restore op. Its
    argument is the pageData of a page whose Data has Base. */}}

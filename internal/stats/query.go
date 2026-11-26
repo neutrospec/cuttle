@@ -84,6 +84,11 @@ func ceilHour(s int64) int64 {
 
 var filterNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
 
+// filterRuleRe is the schema pattern of a rule name, which also matches
+// the names of the decisions that no rule made, such as default (design
+// 0004 D3, 0002 D4).
+var filterRuleRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
+
 // Filter selects the rows of a query (design 0005 D9).
 type Filter struct {
 	Window
@@ -95,6 +100,10 @@ type Filter struct {
 	// Interface is all, none for rows without an interface, other, or a
 	// configured interface name; "" means all.
 	Interface string
+	// Rule is all or the name of the rule that decided, which may be a
+	// decision that no rule made, such as default; "" means all (design
+	// 0009 D9).
+	Rule string
 }
 
 // Check reports a value the filter does not accept.
@@ -112,6 +121,9 @@ func (f Filter) Check() error {
 	}
 	if i := f.Interface; i != "" && i != "all" && i != "none" && !filterNameRe.MatchString(i) {
 		return fmt.Errorf("unknown interface %q; use all, none, other, or an interface name", i)
+	}
+	if r := f.Rule; r != "" && r != "all" && !filterRuleRe.MatchString(r) {
+		return fmt.Errorf("unknown rule %q; use all or a rule name", r)
 	}
 	if f.From >= f.To {
 		return errors.New("empty window")
@@ -143,6 +155,10 @@ func (f Filter) where() (string, []any) {
 	default:
 		b.WriteString(" AND interface = ?")
 		args = append(args, i)
+	}
+	if r := f.Rule; r != "" && r != "all" {
+		b.WriteString(" AND rule = ?")
+		args = append(args, r)
 	}
 	return b.String(), args
 }
@@ -217,16 +233,18 @@ LIMIT ? OFFSET ?`
 	return out, rs.Err()
 }
 
-// Total sums the rows of one route or one interface (design 0005 D9).
+// Total sums the rows of one route, one interface, or one rule (design
+// 0005 D9, 0009 D9).
 type Total struct {
 	// Action and Upstream are set for a route total; Interface for an
-	// interface total, "" for rows without an interface.
-	Action, Upstream, Interface string
-	Hosts                       int64 // distinct hosts, * included
-	Requests                    int64
-	Failures                    int64
-	BytesUp                     int64
-	BytesDown                   int64
+	// interface total, "" for rows without an interface; Rule for a rule
+	// total.
+	Action, Upstream, Interface, Rule string
+	Hosts                             int64 // distinct hosts, * included
+	Requests                          int64
+	Failures                          int64
+	BytesUp                           int64
+	BytesDown                         int64
 }
 
 // Route returns a route total's label.
@@ -248,6 +266,13 @@ func (s *Store) RouteTotals(ctx context.Context, f Filter) ([]Total, error) {
 func (s *Store) InterfaceTotals(ctx context.Context, f Filter) ([]Total, error) {
 	return s.totals(ctx, f, "interface", "interface = '', interface",
 		func(t *Total) []any { return []any{&t.Interface} })
+}
+
+// RuleTotals sums the filter's rows per rule that decided them, ordered by
+// rule name (design 0009 D9). A rule renamed later keeps its old name in
+// the rows written before.
+func (s *Store) RuleTotals(ctx context.Context, f Filter) ([]Total, error) {
+	return s.totals(ctx, f, "rule", "rule", func(t *Total) []any { return []any{&t.Rule} })
 }
 
 func (s *Store) totals(ctx context.Context, f Filter, group, order string, keys func(*Total) []any) ([]Total, error) {
@@ -274,8 +299,9 @@ FROM host_hour WHERE ` + where + ` GROUP BY ` + group + ` ORDER BY ` + order
 	return out, rs.Err()
 }
 
-// Domains, RouteTotals, and InterfaceTotals query the written rows over a
-// read-only connection, so a dashboard query never waits for a flush.
+// Domains, RouteTotals, InterfaceTotals, and RuleTotals query the written
+// rows over a read-only connection, so a dashboard query never waits for
+// a flush.
 func (s *Stats) Domains(ctx context.Context, f Filter, limit, offset int) ([]HostRow, error) {
 	return s.store.Domains(ctx, f, limit, offset)
 }
@@ -286,4 +312,8 @@ func (s *Stats) RouteTotals(ctx context.Context, f Filter) ([]Total, error) {
 
 func (s *Stats) InterfaceTotals(ctx context.Context, f Filter) ([]Total, error) {
 	return s.store.InterfaceTotals(ctx, f)
+}
+
+func (s *Stats) RuleTotals(ctx context.Context, f Filter) ([]Total, error) {
+	return s.store.RuleTotals(ctx, f)
 }

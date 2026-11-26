@@ -2,7 +2,8 @@
 <header class="page-head">
 <div><h1>Domains</h1>
 <p class="lead">Hosts by route, source, and interface, ordered by bytes.</p>
-{{if .Window.Range}}<p class="meta">{{.Window.Range}}</p>{{end}}</div>
+{{if .Window.Range}}<p class="meta">{{.Window.Range}}</p>{{end}}
+{{with .Rule}}<p class="meta">Decided by rule <code>{{.}}</code> only. <a href="{{$.Data.AllRules}}">Show every rule</a></p>{{end}}</div>
 <div class="actions">{{template "presets" .Window}}</div>
 </header>
 {{template "stats" .Stats}}
@@ -15,7 +16,8 @@
 <div class="field"><label for="f-interface">Interface</label><select class="input" id="f-interface" name="interface">{{range .Interface}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></div>
 <div class="field date"><label for="f-from">From</label><input class="input" type="date" id="f-from" name="from" value="{{.Window.FromDate}}" aria-describedby="f-dates-h"></div>
 <div class="field date"><label for="f-to">To</label><input class="input" type="date" id="f-to" name="to" value="{{.Window.ToDate}}" aria-describedby="f-dates-h"></div>
-{{if .Window.Preset}}<input type="hidden" name="window" value="{{.Window.Preset}}">
+{{with .Rule}}<input type="hidden" name="rule" value="{{.}}">
+{{end}}{{if .Window.Preset}}<input type="hidden" name="window" value="{{.Window.Preset}}">
 {{end}}<div class="go"><button class="btn primary" type="submit">Show</button></div>
 <p class="hint" id="f-dates-h">Dates are local and inclusive, and replace the window; clear both to return to the last 24 hours.</p>
 </form>

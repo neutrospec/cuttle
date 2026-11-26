@@ -509,6 +509,8 @@ Move resolved items to Closed with their resolving commit or evidence.
     the settings notice drops the sync warning. Z-R9 (nit): the canonical
     fixtures use `nas.lan`; prefer a reserved name. B1 also carries
     `TestAdminSettingsDirSync` over to `/config/apply` (W14).
+    Z-R3 is settled in TASK-0021: a syntax error under a key that ends in
+    `note` gives a fixed message (`TestNoteSyntaxError`).
     Z-R1, Z-R2, Z-R8, and the W14 carry-over are settled in TASK-0020:
     `testdata/canonical/inline-tables.toml`; `TestAtomicWriteDirSync`
     (0500 directory) and `TestAtomicWriteFinalRename` (immutable target)
@@ -550,6 +552,14 @@ Move resolved items to Closed with their resolving commit or evidence.
     (nit, UI): the info banner is an untinted card unlike the others, and
     applying a restore from Advanced leaves without the unsaved-changes
     prompt, losing unsaved editor text.
+    AA-R1–AA-R3, AA-R5, and AA-R6 are settled in TASK-0021: an answer to
+    the request's own target puts back what a refused review replaced in
+    the `data-alt` target (`TestAdminScreensRules`); a candidate equal to
+    the file offers no Apply, and an apply of it writes nothing, so `.bak`
+    stays (`TestAdminNoChange`); `TestAdminApplyAfterReviewAgain` applies
+    after Review again; `addOp` panics on a reserved field name
+    (`TestAddOpReservedNames`); and the 409 notice of `/settings` names
+    Review changes (`TestAdminSettingsConflictNotice`).
 - Next action: orchestrator — include the open items (V5, V8, V11, V12, P1,
   W1–W3, Z2, Z4, G1–G2, P-R3–P-R7, Q-R1–Q-R4, Q-R6–Q-R8, S-R1–S-R2, U-R2,
   X-R1–X-R5, the W25 case of Y-R3, Z-R3–Z-R7, Z-R9, T-R1–T-R2, and
