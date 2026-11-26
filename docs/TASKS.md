@@ -41,28 +41,6 @@ A closed task becomes one line under Closed:
 
 ## Active
 
-### TASK-0026 — Prebuilt bottles from the tap's CI
-
-- Milestone: none (packaging follow-up to M3.1)
-- Status: blocked — user approval for the tap pushes and dispatches
-- Iteration: 2/3
-- Workers: infra on `t3/homebrew-bottle-workflows` and tap branches
-  `bottle-workflows` and `bump-cuttle-0.2.0`
-- Base: `fd5f615`; tap `bcec56d`
-- Candidate: `18d2396` (tree `0abe6a1`) on `3a1cffb` and `03db298`; tap
-  `c9e0b51` (workflows) and `48e6583` (formula header)
-- Evidence: `gates: none` (docs and formula comment only); actionlint
-  1.7.12 with `brew style`'s ignores, a YAML parse, `brew style` on both
-  formula copies, a link check, 17 stubbed precheck cases, and the tap
-  pre-push check on synthetic repositories pass; the re-check approved;
-  the tap pre-push check passes for both tap branches; CI evidence
-  follows the approved pushes
-- Findings: re-check R2-1 (merge commits pass the tap check) and R2-2
-  (xcode-27 date wording) fixed by the orchestrator in `18d2396`
-- Next action: orchestrator — on approval, push the tap workflows, open
-  the `bump-cuttle-0.2.0` pull request, dispatch `publish.yml` and
-  `install-check.yml`, then land the cuttle branch
-
 ## Closed
 
 The history was rewritten on 2026-11-25 (TASK-0003) to remove local
@@ -71,6 +49,12 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0026 — Prebuilt bottles from the tap's CI — landed `25532f7`,
+  gates: none @ `fc01320`; tap `main` `855bebe` with the `cuttle-0.2.0`
+  release (`arm64_sequoia`, `arm64_tahoe`, attested); `install-check.yml`
+  poured them on macOS 15.8.2, 26.7.2, and 27.0.1; the user's service
+  runs 0.2.0 reinstalled from the `arm64_tahoe` bottle after `cuttle
+  check`; iteration 2 of 3, AE-R1 open in OI-0006
 - TASK-0025 — Publish v0.2.0 — landed: `main` and `v0.2.0` (`e61543e`)
   pushed to `neutrospec/cuttle`, tap `bcec56d`, gates: none @ `6d08a01`;
   the pre-push and remote scans show only the two matches OI-0004
