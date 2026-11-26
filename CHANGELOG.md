@@ -23,6 +23,8 @@ opening `config.toml` (roadmap milestone M4,
   tunnels.
 - Restore: the Advanced page shows the previous version and restores it
   through the same review.
+- The domains page filters by rule as well as by route, source, and
+  interface, and each rule name links to its page.
 - Route a host: "Route…" on the overview, domains, and live pages sends a
   host direct, through an upstream, or to block with a new rule or by
   adding it to an existing rule.
@@ -44,11 +46,12 @@ opening `config.toml` (roadmap milestone M4,
 - The admin UI has one visual system with light and dark themes and
   layouts for phone widths. A small same-origin script adds dialogs and
   other conveniences; every page also works without it.
-- A save from the admin UI rewrites the whole file in cuttle's canonical
-  form with short generated comments. Comments written by hand are not
-  kept; the previous file stays in `config.toml.bak`.
+- A save from a settings form rewrites the whole file in cuttle's
+  canonical form with short generated comments. Comments written by hand
+  are not kept; the previous file stays in `config.toml.bak`.
 - The settings page is now the Advanced page. It still edits the file as
-  TOML text, and a save goes through the review.
+  TOML text, a save goes through the review, and the text is written as
+  typed, so comments written there are kept.
 - `new` is reserved as a rule, upstream, and interface name, because
   `/rules/new`, `/upstreams/new`, and `/interfaces/new` add one.
 
@@ -80,10 +83,11 @@ The first release.
   plain `http://` requests, and WebSocket upgrades. Tunnels stay
   end-to-end TLS; cuttle never decrypts traffic and caches nothing.
 - Routing by ordered rules on host name, domain, IP prefix, and port, to
-  `direct`, `upstream:<name>`, or `block`. Direct routes refuse loopback
-  and private addresses reached by name unless a rule allows them, always
-  refuse link-local addresses, and a failed upstream never falls back to
-  `direct`.
+  `direct`, `upstream:<name>`, or `block`. Direct routes reach loopback
+  addresses, and private addresses reached by name, only through a rule
+  that allows them; they always refuse link-local addresses; remote
+  clients reach only public addresses; and a failed upstream never falls
+  back to `direct`.
 - Upstream chaining through plain HTTP proxies, such as an edge instance,
   a gateway instance, and an egress proxy. `disclosure = "via"` adds one
   cuttle `Via` entry, which stops loops between instances;
