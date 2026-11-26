@@ -3,9 +3,11 @@ package admin
 import (
 	"context"
 	"fmt"
+	"html"
 	"net/http"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -56,7 +58,37 @@ func flush(t *testing.T, st *stats.Stats) {
 	}
 }
 
-var hostCell = regexp.MustCompile(`<td class="host">([^<]+)</td>`)
+var (
+	hostCell = regexp.MustCompile(`<td class="host[^"]*">([^<]+)</td>`)
+	rowRE    = regexp.MustCompile(`(?s)<tr[^>]*>(.*?)</tr>`)
+	cellRE   = regexp.MustCompile(`(?s)<t[dh][^>]*>(.*?)</t[dh]>`)
+	tagRE    = regexp.MustCompile(`<[^>]*>`)
+)
+
+// rows returns the text of each table cell of a page, row by row, with
+// tags removed and spaces collapsed, so that checks of table content do
+// not depend on the markup of the visual system.
+func rows(body string) [][]string {
+	var out [][]string
+	for _, r := range rowRE.FindAllStringSubmatch(body, -1) {
+		var cells []string
+		for _, c := range cellRE.FindAllStringSubmatch(r[1], -1) {
+			cells = append(cells, strings.Join(strings.Fields(html.UnescapeString(tagRE.ReplaceAllString(c[1], " "))), " "))
+		}
+		out = append(out, cells)
+	}
+	return out
+}
+
+// hasRow reports whether a table row of the page starts with the cells.
+func hasRow(body string, cells ...string) bool {
+	for _, r := range rows(body) {
+		if len(r) >= len(cells) && slices.Equal(r[:len(cells)], cells) {
+			return true
+		}
+	}
+	return false
+}
 
 // hosts returns the host cells of a page in order.
 func hosts(body string) []string {
@@ -111,17 +143,25 @@ func TestAdminDashboard(t *testing.T) {
 	for _, want := range []string{
 		`<a href="/?window=24h" aria-current="true">24h</a>`,
 		`2026-11-24 13:00 to 2026-11-25 13:00 UTC`,
-		`<td class="route">direct</td><td class="n">4</td><td class="n">6</td><td class="n">1</td><td class="n">2.1 KiB</td><td class="n">10.0 KiB</td>`,
-		`<td class="route">upstream:gateway</td><td class="n">1</td><td class="n">3</td><td class="n">0</td><td class="n">150 B</td><td class="n">210 B</td>`,
-		`<td class="route">block</td><td class="n">1</td><td class="n">4</td>`,
-		`<h2>Sent direct</h2>`, `<h2>Sent to upstream gateway</h2>`, `<h2>Blocked</h2>`,
+		`<h3>Sent direct</h3>`, `<h3>Sent to upstream gateway</h3>`, `<h3>Blocked</h3>`,
 		`<a href="/domains?route=upstream%3Agateway&amp;window=24h">All 1 hosts on upstream:gateway</a>`,
-		`<h2>Interfaces</h2>`,
-		`<td>eth-a</td><td class="n">3</td>`,
-		`<td><span class="muted">none</span></td><td class="n">1</td><td class="n">4</td>`,
+		`<h2 id="ifaces-h">Interfaces</h2>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("overview lacks %q", want)
+		}
+	}
+	// Route totals: hosts, requests, failures, and bytes up and down; then
+	// the interface totals.
+	for _, want := range [][]string{
+		{"direct", "4", "6", "1", "2.1 KiB", "10.0 KiB"},
+		{"upstream gateway", "1", "3", "0", "150 B", "210 B"},
+		{"block", "1", "4"},
+		{"eth-a", "3"},
+		{"none", "1", "4"},
+	} {
+		if !hasRow(body, want...) {
+			t.Errorf("overview lacks the row %q", want)
 		}
 	}
 	// The routes come in the order direct, upstreams, block, and each
@@ -170,9 +210,15 @@ func TestAdminDashboard(t *testing.T) {
 	// One row per host and route, with its rules, requests, failures,
 	// bytes, and times; the date range shows its exact hours.
 	_, _, body = domains("route=direct&from=2026-11-25&to=2026-11-25")
+	for _, want := range [][]string{
+		{"1", "big.example", "direct", "default, pinned", "3", "0", "2.0 KiB", "9.8 KiB", "2026-11-25 12:00 to 2026-11-25 12:00"},
+		{"4", "remote.example", "direct", "remote-direct", "1", "1"},
+	} {
+		if !hasRow(body, want...) {
+			t.Errorf("/domains lacks the row %q:\n%s", want, body)
+		}
+	}
 	for _, want := range []string{
-		`<td class="host">big.example</td><td class="route">direct</td><td>default, pinned</td><td class="n">3</td><td class="n">0</td><td class="n">2.0 KiB</td><td class="n">9.8 KiB</td><td>2026-11-25 12:00</td><td>2026-11-25 12:00</td>`,
-		`<td class="host">remote.example</td><td class="route">direct</td><td>remote-direct</td><td class="n">1</td><td class="n">1</td>`,
 		`2026-11-25 00:00 to 2026-11-25 13:00 UTC`,
 		`<option value="upstream:gateway">upstream:gateway</option>`,
 		`<option value="direct" selected>direct</option>`,
@@ -202,7 +248,7 @@ func TestAdminDashboard(t *testing.T) {
 	flush(t, st)
 	code, got, body := domains("source=local&interface=none&route=direct")
 	if code != http.StatusOK || len(got) != 500 || got[0] != "h000.page.example" || got[499] != "h499.page.example" ||
-		!strings.Contains(body, `<a href="/domains?interface=none&amp;offset=500&amp;route=direct&amp;source=local&amp;window=24h">Next 500</a>`) ||
+		!strings.Contains(body, `<a class="btn" href="/domains?interface=none&amp;offset=500&amp;route=direct&amp;source=local&amp;window=24h">Next 500</a>`) ||
 		strings.Contains(body, "Previous 500") {
 		t.Errorf("page 1: %d, %d rows", code, len(got))
 	}
@@ -229,12 +275,14 @@ func TestAdminDashboard(t *testing.T) {
 	body = bodyOf(t, res)
 	for _, want := range []string{
 		`<meta http-equiv="refresh" content="5">`,
-		`<td class="host">big.example:443</td><td>connect</td><td class="route">direct</td><td>local</td><td>eth-a</td><td class="n">1m15s</td><td class="n">2.0 KiB</td><td class="n">4.0 KiB</td>`,
-		`<tr><th>tunnels_active</th><td class="n">1</td></tr>`,
+		`<div><dt>tunnels_active</dt><dd>1</dd></div>`,
 	} {
 		if res.StatusCode != http.StatusOK || !strings.Contains(body, want) {
 			t.Errorf("/live lacks %q:\n%s", want, body)
 		}
+	}
+	if want := []string{"big.example:443", "connect", "direct", "local", "eth-a", "1m15s", "2.0 KiB", "4.0 KiB"}; !hasRow(body, want...) {
+		t.Errorf("/live lacks the row %q:\n%s", want, body)
 	}
 	// Only /live refreshes.
 	if res := b.get("/"); strings.Contains(bodyOf(t, res), "http-equiv") {

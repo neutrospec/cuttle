@@ -48,6 +48,8 @@ type fakeBackend struct {
 	reloads  int
 	loadedAt time.Time
 	lastErr  string
+	// restart is the status's restart_required list.
+	restart []string
 }
 
 func newFakeBackend(t *testing.T) *fakeBackend {
@@ -75,7 +77,7 @@ func (b *fakeBackend) Status() control.Status {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	st := b.status
-	st.Config = control.Config{Path: b.path, SHA256: b.cfg.SHA256, LoadedAt: b.loadedAt, RestartRequired: []string{}, LastReloadError: b.lastErr}
+	st.Config = control.Config{Path: b.path, SHA256: b.cfg.SHA256, LoadedAt: b.loadedAt, RestartRequired: append([]string{}, b.restart...), LastReloadError: b.lastErr}
 	if b.st != nil {
 		st.Stats, st.StatsErr = "enabled", ""
 	}

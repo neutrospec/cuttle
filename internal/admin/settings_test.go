@@ -181,16 +181,17 @@ func TestAdminSettingsForm(t *testing.T) {
 	}
 	unchanged("limits")
 
-	// A stale base: someone else changed the file. 409 shows both texts;
-	// the file keeps the other writer's content.
-	other := strings.Replace(fakeConfig, `name = "cuttle-test"`, `name = "cuttle-other"`, 1)
+	// A stale base: someone else changed the file. 409 shows both texts,
+	// the file's leading empty line included (OI-0006 U-R4); the file
+	// keeps the other writer's content.
+	other := "\n" + strings.Replace(fakeConfig, `name = "cuttle-test"`, `name = "cuttle-other"`, 1)
 	if err := os.WriteFile(f.be.path, []byte(other), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	res, body = post("/settings", url.Values{"text": {valid}, "base": {base}})
 	m := baseRE.FindStringSubmatch(body)
 	if res.StatusCode != http.StatusConflict || !strings.Contains(body, "The file changed since this page loaded") ||
-		!strings.Contains(body, "name = &#34;cuttle-other&#34;") || !strings.Contains(body, "default = &#34;block&#34;") ||
+		!strings.Contains(body, "<pre class=\"disk\">\n\nname = &#34;cuttle-other&#34;") || !strings.Contains(body, "default = &#34;block&#34;") ||
 		m == nil || m[1] != config.Digest([]byte(other)) {
 		t.Fatalf("stale base: %d:\n%s", res.StatusCode, body)
 	}
@@ -225,12 +226,14 @@ func TestAdminSettingsForm(t *testing.T) {
 		t.Errorf("reload: %d, default %v", f.be.reloadCount(), f.be.Config().Proxy.Default)
 	}
 
-	// A proxy.listen change saves, reloads, and lists the key under
-	// restart required.
+	// A proxy.listen change saves, reloads, and names the key in a toast
+	// that says a restart is required.
 	_, base = b.settingsForm()
 	moved := strings.Replace("\n"+valid, "127.0.0.1:41728", "127.0.0.1:41730", 1)
 	res, body = post("/settings", url.Values{"text": {moved}, "base": {base}})
-	if res.StatusCode != http.StatusOK || !strings.Contains(body, "Restart required for: proxy.listen.") {
+	if res.StatusCode != http.StatusOK || !strings.Contains(body, `<div class="toast warn" role="alert" data-toast="warn">`) ||
+		!strings.Contains(body, "<strong>Saved and reloaded. Restart required.</strong>") ||
+		!strings.Contains(body, "<code>proxy.listen</code> changes apply at the next start. Restart with <code>brew services restart cuttle</code> to use the new values.") {
 		t.Errorf("proxy.listen change: %d:\n%s", res.StatusCode, body)
 	}
 

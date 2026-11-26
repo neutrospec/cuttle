@@ -241,10 +241,18 @@ CUTTLE_REQUIRE_CURL=1 go test -race -count=1 -timeout 10m ./...
   `--host-resolver-rules="MAP * ~NOTFOUND, EXCLUDE 127.0.0.1"`. Over the
   DevTools pipe, which opens no port, it signs in at
   `http://127.0.0.1:<port>/`, checks the overview, the `cuttle_session`
-  attributes in Chrome, the domain, live, and settings pages, and the
-  overview at 390 px without sideways scrolling, then closes Chrome and
-  fails if a process with the profile remains or a request left through
-  the proxy. `CUTTLE_CHROME` overrides the Chrome binary, and
+  attributes in Chrome, the domain, live, and Advanced pages, and each of
+  them at 390 px in light and dark appearance without sideways scrolling,
+  a console error, or a Content-Security-Policy violation, then closes
+  Chrome and fails if a process with the profile remains or a request
+  left through the proxy. The script then runs `TestAdminScreens` of
+  `internal/admin`, the browser check of the admin shell, visual system,
+  and script of [0009](0009-web-configuration.md) (D2, D10, D11): the
+  same Chrome setup, with a local listener that refuses every request as
+  its proxy, renders the admin pages with example traffic and state and
+  a component gallery at 1280 and 390 px in both appearances with the
+  same checks, drives the script's controls, and checks the pages with
+  scripts disabled. `CUTTLE_CHROME` overrides the Chrome binary, and
   `CUTTLE_ADMIN_CHROME_OUT` names a directory for screenshots.
 - T2 at M3 close and every later milestone: the D8 M3 matrix, the Homebrew
   checks ([0006](0006-packaging-paths-and-lifecycle.md#acceptance-criteria)

@@ -189,9 +189,10 @@ rate.
   `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, and
   `X-Content-Type-Options: nosniff`. Authenticated pages also carry
   `Cache-Control: no-store`.
-- Pages are rendered with `html/template`. Styles are embedded with
-  `embed`; the pages load nothing from other origins and need no
-  JavaScript.
+- Pages are rendered with `html/template`. Styles and one script are
+  embedded with `embed`; the pages load nothing from other origins. The
+  same-origin script enhances the pages, which work without it
+  ([0009 D10](0009-web-configuration.md#d10-javascript)).
 
 ### D6. Password
 
@@ -277,7 +278,7 @@ exact range.
 | `POST` | `/logout` | Session, CSRF | End the session |
 | `GET` | `/` | Session | Overview: totals per route and per interface, top hosts, live counters, upstream and interface states, configuration and statistics status |
 | `GET` | `/domains` | Session | Host table filtered by `route`, `source`, `interface`, and window |
-| `GET` | `/live` | Session | Active tunnels; refreshes every 5 s with `<meta http-equiv="refresh">` |
+| `GET` | `/live` | Session | Active tunnels; refreshes every 5 s, through the admin script, which waits while a menu or dialog is open ([0009 D10](0009-web-configuration.md#d10-javascript)), or through a `<noscript>` `<meta http-equiv="refresh">` |
 | `GET` | `/settings` | Session | Configuration editor (D10) |
 | `POST` | `/settings/validate` | Session, CSRF | Validate text without saving |
 | `POST` | `/settings` | Session, CSRF | Validate, save, reload |

@@ -45,7 +45,7 @@ cuttle admin passwd           # then sign in at http://127.0.0.1:3129/
 The first start writes the starter configuration to
 `~/.config/cuttle/config.toml`, with the proxy on `127.0.0.1:3128` and the
 admin UI on `http://127.0.0.1:3129/`; point clients at
-`http://127.0.0.1:3128`. Edit the configuration on the admin settings page,
+`http://127.0.0.1:3128`. Edit the configuration on the admin Advanced page,
 or by hand followed by `cuttle check` and `cuttle reload`. Sign-in stays
 disabled until `cuttle admin passwd` has set a password; a new password
 needs no restart. `cuttle paths` lists every file the CLI uses.
@@ -137,11 +137,12 @@ which went direct, and which were blocked over the last hour, 24 hours,
 7 days, 30 days, or a date range, with totals per route and interface,
 upstream and interface states, and the configuration and statistics
 status. The domain table filters by route, source, and interface; the
-live page lists open tunnels; and the settings page edits the
+live page lists open tunnels; and the Advanced page edits the
 configuration as TOML text, validates it with line numbers, saves it
 atomically with a `.bak` copy, refuses a save when the file changed
 meanwhile, and reloads without dropping tunnels. The pages are rendered
-on the server and use no JavaScript. Only the Host values
+on the server; one same-origin script adds conveniences, and every page
+works without it. Only the Host values
 `127.0.0.1:<port>` and `localhost:<port>` are served. `cuttle status`
 shows whether the admin listener is listening, unavailable with the bind
 error, or disabled.
@@ -220,8 +221,9 @@ scripts/gate t0   # gofmt, go mod tidy -diff, vet, build, unit tests,
                   # and a build without cgo
 scripts/gate t1   # every test with -race, including integration and
                   # binary tests; needs /usr/bin/curl (or CUTTLE_CURL)
-scripts/admin-check  # T2 at M2 close: headless Chrome signs in to the
-                     # admin UI of a sandboxed cuttle (0005 A10)
+scripts/admin-check  # T2: headless Chrome signs in to the admin UI of a
+                     # sandboxed cuttle (0005 A10) and checks every admin
+                     # page in both appearances and at phone width (0009)
 ```
 
 Tests use only loopback, generated certificates in temporary directories,

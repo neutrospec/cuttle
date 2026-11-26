@@ -270,3 +270,39 @@ removes entries. Append new entries at the end, oldest first.
   Edit tool rather than `sed`, and assert in the test that the sample
   decodes with `toml.Decode` before using it, so an invalid sample fails
   loudly.
+
+### 2026-11-26 — implementer — waiting on a DOM change in a browser check
+
+- Task: TASK-0019, checking in `TestAdminScreens` that Validate replaces
+  the Advanced page's result block through a fragment request.
+- Attempts: 3.
+- What failed: The check clicked `[data-fragment="settings-result"]` and
+  polled for `#settings-result .issue-list`. The poll returned at once,
+  because the page already listed the file's warnings, and the check read
+  the old block. After that was fixed, the selector matched the block's
+  own root element, which also carried `data-fragment`, before the
+  button, so the click did nothing and the poll timed out.
+- What to do instead: Capture the node that the request replaces
+  (`const old = document.querySelector("#target > [data-block]")`) and
+  poll until a different node is there. Keep trigger and content markers
+  apart: triggers carry `data-fragment="<target id>"`, and fragment roots
+  carry `data-block="<name>"`.
+
+### 2026-11-26 — implementer — the first match in a page with a shell
+
+- Task: TASK-0019 iteration 2, browser checks in `TestAdminScreens` for
+  the refused-fragment messages and the phone table rows.
+- Attempts: 2 failures of the same kind as the entry above, and one
+  check that a mutation survived.
+- What failed: `document.querySelector('input[name="csrf"]')` returned the
+  sidebar's sign-out form, which comes before the editor in the page, so
+  the probe changed the wrong token, the request succeeded, and the check
+  saw no refusal. Separately, a check for misaligned phone rows compared
+  `getBoundingClientRect().left` of the cells; the defect was padding
+  inside the cell, so the check passed with the defect restored.
+- What to do instead: The admin shell repeats the navigation and the
+  sign-out form (sidebar and phone menu), so scope every selector to the
+  element under test, such as `.editor-form input[name="csrf"]`. Measure
+  what the operator sees: the content edge (`left` plus border and
+  padding) or the text's `Range` rects, and prove each layout check by
+  restoring the defect once.

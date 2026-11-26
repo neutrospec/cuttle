@@ -1,7 +1,8 @@
 // Package admin serves the password-protected admin UI on a loopback
 // listener (design 0005 D5–D10): the Host allowlist, the security headers,
 // the Argon2id password file, in-memory sessions, CSRF protection, the
-// login backoff, the dashboard, and the settings page.
+// login backoff, the dashboard, and the settings page, in the shell and
+// visual system of design 0009 D2, D10, and D11.
 package admin
 
 import (
@@ -90,12 +91,15 @@ type Options struct {
 
 // Server is the admin UI.
 type Server struct {
-	log     *slog.Logger
-	now     func() time.Time
-	loc     *time.Location
-	hosts   []string
-	pw      *passwordFile
-	login   *loginTokens
+	log   *slog.Logger
+	now   func() time.Time
+	loc   *time.Location
+	hosts []string
+	pw    *passwordFile
+	login *loginTokens
+	// base holds the layout and the shared blocks; each page is a clone
+	// of it with the page's own templates.
+	base    *template.Template
 	pages   map[string]*template.Template
 	backend Backend
 
@@ -142,9 +146,9 @@ func New(opt Options) *Server {
 	if own := strings.ToLower(opt.Listen.String()); !slices.Contains(s.hosts, own) {
 		s.hosts = append(s.hosts, own)
 	}
-	base := template.Must(template.New("").Funcs(s.funcs()).ParseFS(assets, "templates/layout.html"))
+	s.base = template.Must(template.New("").Funcs(s.funcs()).ParseFS(assets, "templates/layout.html", "templates/icons.html"))
 	for _, name := range []string{"login", "overview", "domains", "live", "settings"} {
-		s.pages[name] = template.Must(template.Must(base.Clone()).ParseFS(assets, "templates/"+name+".html"))
+		s.pages[name] = template.Must(template.Must(s.base.Clone()).ParseFS(assets, "templates/"+name+".html"))
 	}
 
 	mux := http.NewServeMux()
@@ -221,29 +225,52 @@ func (s *Server) hostCheck(next http.Handler) http.Handler {
 
 // pageData is what the templates render.
 type pageData struct {
-	Title    string
+	Title string
+	// Message is an error about the request, shown as the first banner
+	// of a session page or on the sign-in form.
 	Message  string
 	Disabled bool
 	// Token is the login token on the login page and the CSRF token on
 	// session pages.
 	Token string
-	// Page names a session page; the layout then shows the navigation
-	// with that page marked, and the sign-out form.
+	// Page names a session page by its navigation entry; the layout then
+	// draws the shell with that entry marked (design 0009 D2).
 	Page string
-	// Refresh, when positive, reloads the page after that many seconds.
+	// Refresh, when positive, reloads the page after that many seconds:
+	// the script does, and waits while a menu or dialog is open; without
+	// the script, a <noscript> meta refresh does.
 	Refresh int
 	// Data holds the page's own content.
 	Data any
+
+	// Shell is the shell around a session page; render fills it.
+	Shell *shell
+	// Banners are the page's own banners; render puts the shell's ahead
+	// of them.
+	Banners []banner
+	// Toasts report the result of the request's action.
+	Toasts []toast
+	// status is the instance state the page shows, so that the shell
+	// and the page agree; nil makes render read it.
+	status *control.Status
 }
 
+// render renders a whole page. A session page gets the shell. Every page
+// answers with Vary: Cuttle-Fragment, because a script request for the
+// same URL may get one block of it (design 0009 D10).
 func (s *Server) render(w http.ResponseWriter, code int, page string, d pageData) {
+	if d.Page != "" {
+		s.decorate(&d, d.status)
+	}
 	var buf bytes.Buffer
 	if err := s.pages[page].ExecuteTemplate(&buf, "layout", d); err != nil {
 		s.log.Error("admin page", "page", page, "error", err.Error())
 		http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h := w.Header()
+	h.Set("Content-Type", "text/html; charset=utf-8")
+	h.Add("Vary", fragmentHeader)
 	w.WriteHeader(code)
 	w.Write(buf.Bytes())
 }

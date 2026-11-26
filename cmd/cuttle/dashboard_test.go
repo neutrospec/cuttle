@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -143,7 +145,28 @@ func signIn(t *testing.T, base string) *http.Client {
 	return c
 }
 
-var hostCellRE = regexp.MustCompile(`<td class="host">([^<]+)</td>`)
+var (
+	hostCellRE = regexp.MustCompile(`<td class="host[^"]*">([^<]+)</td>`)
+	rowRE      = regexp.MustCompile(`(?s)<tr[^>]*>(.*?)</tr>`)
+	cellRE     = regexp.MustCompile(`(?s)<t[dh][^>]*>(.*?)</t[dh]>`)
+	tagRE      = regexp.MustCompile(`<[^>]*>`)
+)
+
+// hasRow reports whether a table row of the page starts with the cells,
+// compared as text without tags, so that the checks do not depend on the
+// markup of the admin UI's visual system.
+func hasRow(body string, cells ...string) bool {
+	for _, r := range rowRE.FindAllStringSubmatch(body, -1) {
+		var got []string
+		for _, c := range cellRE.FindAllStringSubmatch(r[1], -1) {
+			got = append(got, strings.Join(strings.Fields(html.UnescapeString(tagRE.ReplaceAllString(c[1], " "))), " "))
+		}
+		if len(got) >= len(cells) && slices.Equal(got[:len(cells)], cells) {
+			return true
+		}
+	}
+	return false
+}
 
 func hostCells(body string) string {
 	var out []string
@@ -253,20 +276,23 @@ func TestAdminPages(t *testing.T) {
 		}
 	}
 	_, body, _ := adminGet(t, c, base+"/domains?route=upstream:gateway")
-	if !regexp.MustCompile(`<td class="host">gw\.cuttle\.test</td><td class="route">upstream:gateway</td><td>restricted</td><td class="n">3</td><td class="n">0</td>`).MatchString(body) {
+	if !hasRow(body, "1", "gw.cuttle.test", "upstream gateway", "restricted", "3", "0") {
 		t.Errorf("upstream row:\n%s", body)
 	}
 
 	res, body, _ := adminGet(t, c, base+"/")
 	for _, want := range []string{
-		"<h2>Sent direct</h2>", "<h2>Sent to upstream gateway</h2>", "<h2>Blocked</h2>",
-		`<td class="route">upstream:gateway</td><td class="n">1</td><td class="n">3</td>`,
-		`<td>gateway</td><td>10.8.0.6:3128</td><td><span class="state state-up">up</span></td>`,
+		"<h3>Sent direct</h3>", "<h3>Sent to upstream gateway</h3>", "<h3>Blocked</h3>",
 		"Last statistics write error at ", "context canceled",
-		"<tr><th>Admin listener</th><td>" + adminAddr + " listening</td></tr>",
+		"<dt>Admin listener</dt><dd>" + adminAddr + ` <span class="state listening">listening</span></dd>`,
 	} {
 		if res.StatusCode != 200 || !strings.Contains(body, want) {
 			t.Errorf("overview lacks %q", want)
+		}
+	}
+	for _, want := range [][]string{{"upstream gateway", "1", "3"}, {"gateway", "10.8.0.6:3128", "up"}} {
+		if !hasRow(body, want...) {
+			t.Errorf("overview lacks the row %q", want)
 		}
 	}
 	if got := hostCells(body); got != "bulk.cuttle.test,files.cuttle.test,gw.cuttle.test,blocked.cuttle.test,x.blocked.cuttle.test" {
@@ -274,7 +300,7 @@ func TestAdminPages(t *testing.T) {
 	}
 
 	res, body, _ = adminGet(t, c, base+"/live")
-	if res.StatusCode != 200 || !strings.Contains(body, `<td class="host">bulk.cuttle.test:80</td><td>connect</td><td class="route">direct</td><td>local</td>`) ||
+	if res.StatusCode != 200 || !hasRow(body, "bulk.cuttle.test:80", "connect", "direct", "local") ||
 		!strings.Contains(body, `<meta http-equiv="refresh" content="5">`) || !strings.Contains(body, "Active tunnels (1)") {
 		t.Errorf("/live:\n%s", body)
 	}
@@ -418,7 +444,8 @@ func TestAdminSettings(t *testing.T) {
 	_, b = page()
 	moved := strings.Replace(newRules, "127.0.0.1:18080", "127.0.0.1:18082", 1)
 	res, body = save(moved, b)
-	if res.StatusCode != http.StatusOK || !strings.Contains(body, "Restart required for: proxy.listen.") {
+	if res.StatusCode != http.StatusOK || !strings.Contains(body, "<strong>Saved and reloaded. Restart required.</strong>") ||
+		!strings.Contains(body, "<code>proxy.listen</code> changes apply at the next start.") {
 		t.Errorf("proxy.listen change: %d\n%s", res.StatusCode, body)
 	}
 	_, out, _ = runCLI(a.lookup, "status")

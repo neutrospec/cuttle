@@ -446,6 +446,12 @@ Move resolved items to Closed with their resolving commit or evidence.
     settings page treats it as saved and reloads (`TestAtomicWriteDirSync`,
     `TestAdminSettingsDirSync`); `expectRe` accepts keys with `:`, and the
     three fixtures check their key paths again.
+    U-R3 and U-R4 are settled in TASK-0019 (M4.1 task B2): `/domains`
+    offers the windows as links that drop a date range, its filter form
+    carries the preset in force, a date range marks no preset, and
+    clearing both dates returns to `24h` (`TestAdminDomainsWindow`); the
+    409 view's `<pre class="disk">` starts on a new line after its tag
+    (`TestAdminSettingsForm`).
   - X-R1–X-R5 (from the TASK-0015 reviews; infra unless noted): X-R1
     (minor): `scripts/publish-scan` loses a failing `sed` inside the
     command substitution that tests whether a tag points to a tree, so the
@@ -493,9 +499,22 @@ Move resolved items to Closed with their resolving commit or evidence.
     the settings notice drops the sync warning. Z-R9 (nit): the canonical
     fixtures use `nas.lan`; prefer a reserved name. B1 also carries
     `TestAdminSettingsDirSync` over to `/config/apply` (W14).
+  - T-R1–T-R3 (from the TASK-0019 reviews; M4 tasks): T-R1 (minor, UI):
+    `overflow-wrap: break-word` on `td.host` (`admin.css:435`) also
+    applies to host cells that are not the lead of a phone row (Overview
+    Upstreams "Address", Interface states "Device"), so a long hostname
+    without hyphens makes those panels scroll sideways on a phone; add
+    `table.resp td.host:not(.lead-cell) { overflow-wrap: anywhere; }` in
+    the phone media query and test with a name without hyphens. T-R2
+    (infra or tester): headless Chrome in the browser checks woke the
+    real user's Google updater (`GoogleUpdater --wake`) although `HOME`
+    points at the test directory; find a launch flag or setting that
+    stops it. T-R3 (B1): on Advanced, Command-Enter presses "Save and
+    reload"; once B1 adds the review, the primary action must open the
+    review (0009 D5).
 - Next action: orchestrator — include the open items (V5, V8, V11, V12, P1,
-  W1–W3, Z2, Z4, G1–G2, P-R3–P-R7, Q-R1–Q-R4, Q-R6–Q-R8, S-R1–S-R2,
-  U-R2–U-R4, X-R1–X-R5, Y-R1–Y-R5, and Z-R1–Z-R9) in the briefs of the
+  W1–W3, Z2, Z4, G1–G2, P-R3–P-R7, Q-R1–Q-R4, Q-R6–Q-R8, S-R1–S-R2, U-R2,
+  X-R1–X-R5, Y-R1–Y-R5, Z-R1–Z-R9, and T-R1–T-R3) in the briefs of the
   stages they affect; the producer closes each item with the commit that
   settles it.
   The M1.4 items, R5 with the C13 remainder, the per-request source

@@ -56,6 +56,13 @@ type fixture struct {
 
 func newFixture(t *testing.T, withPassword bool) *fixture {
 	t.Helper()
+	return newFixtureAt(t, withPassword, testListen)
+}
+
+// newFixtureAt is newFixture for a server whose browsers reach it at
+// listen.
+func newFixtureAt(t *testing.T, withPassword bool, listen string) *fixture {
+	t.Helper()
 	f := &fixture{
 		t:      t,
 		clock:  &clock{t: time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC)},
@@ -65,7 +72,7 @@ func newFixture(t *testing.T, withPassword bool) *fixture {
 	if withPassword {
 		f.setPassword(testPassword)
 	}
-	f.s = New(Options{Listen: netip.MustParseAddrPort(testListen), PasswordPath: f.pwPath, Backend: f.be,
+	f.s = New(Options{Listen: netip.MustParseAddrPort(listen), PasswordPath: f.pwPath, Backend: f.be,
 		Now: f.clock.Now, Location: time.UTC})
 	return f
 }
@@ -234,7 +241,7 @@ func (b *browser) signedIn() bool {
 	res := b.get("/")
 	body := bodyOf(b.f.t, res)
 	switch {
-	case res.StatusCode == http.StatusOK && strings.Contains(body, "Signed in"):
+	case res.StatusCode == http.StatusOK && strings.Contains(body, `action="/logout"`):
 		return true
 	case res.StatusCode == http.StatusSeeOther && res.Header.Get("Location") == "/login":
 		return false
@@ -291,7 +298,7 @@ func TestAdminHostAllowlist(t *testing.T) {
 
 	for _, host := range []string{"127.0.0.1:41729", "localhost:41729", "LOCALHOST:41729", "LocalHost:41729"} {
 		res := b.do(req{method: http.MethodGet, path: "/", host: host})
-		if body := bodyOf(t, res); res.StatusCode != http.StatusOK || !strings.Contains(body, "Signed in") {
+		if body := bodyOf(t, res); res.StatusCode != http.StatusOK || !strings.Contains(body, `action="/logout"`) {
 			t.Errorf("Host %q, GET /: %d:\n%s", host, res.StatusCode, body)
 		}
 		nb := f.browser()
@@ -835,8 +842,8 @@ func TestAdminSessionEnd(t *testing.T) {
 }
 
 // TestAdminHeaders checks A7: every response, whatever its status, carries
-// the D5 security headers, and every page but the embedded styles carries
-// Cache-Control: no-store.
+// the D5 security headers, and every page but the embedded styles and
+// script carries Cache-Control: no-store (design 0009 W13).
 func TestAdminHeaders(t *testing.T) {
 	f := newFixture(t, true)
 	b := f.browser()
@@ -872,6 +879,7 @@ func TestAdminHeaders(t *testing.T) {
 		{"unknown path", func() *http.Response { return b.get("/nope") }, 404},
 		{"wrong method", func() *http.Response { return b.do(req{method: "PUT", path: "/login"}) }, 405},
 		{"styles", func() *http.Response { return b.get("/static/admin.css") }, 200},
+		{"script", func() *http.Response { return b.get("/static/admin.js") }, 200},
 		{"static directory", func() *http.Response { return b.get("/static/") }, 404},
 		{"missing static file", func() *http.Response { return b.get("/static/missing.css") }, 404},
 		{"logout", func() *http.Response {
@@ -903,7 +911,7 @@ func TestAdminHeaders(t *testing.T) {
 			}
 		}
 		cc := res.Header.Get("Cache-Control")
-		if strings.HasPrefix(c.name, "styles") || strings.HasPrefix(c.name, "static") || strings.HasPrefix(c.name, "missing static") {
+		if strings.HasPrefix(c.name, "styles") || strings.HasPrefix(c.name, "script") || strings.HasPrefix(c.name, "static") || strings.HasPrefix(c.name, "missing static") {
 			continue
 		}
 		if cc != "no-store" {
@@ -912,6 +920,12 @@ func TestAdminHeaders(t *testing.T) {
 	}
 	if res := b.get("/static/admin.css"); res.Header.Get("Content-Type") != "text/css; charset=utf-8" {
 		t.Errorf("styles Content-Type %q", res.Header.Get("Content-Type"))
+	}
+	if res := b.get("/static/admin.js"); res.Header.Get("Content-Type") != "text/javascript; charset=utf-8" {
+		t.Errorf("script Content-Type %q", res.Header.Get("Content-Type"))
+	}
+	if res := b.get("/static/icon.svg"); res.StatusCode != http.StatusOK || res.Header.Get("Content-Type") != "image/svg+xml" {
+		t.Errorf("icon: %d %q", res.StatusCode, res.Header.Get("Content-Type"))
 	}
 }
 

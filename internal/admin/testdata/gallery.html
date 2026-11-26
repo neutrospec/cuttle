@@ -1,0 +1,104 @@
+{{/* gallery shows every component of design 0009 D11 in the real shell,
+   for TestAdminMarkup and TestAdminScreens and as markup that later
+   pages copy. It is test data, not a page of the product. */}}
+{{define "content"}}
+<header class="page-head">
+<div><div class="crumbs"><a href="/">Overview</a> / Components</div><h1>Components</h1>
+<p class="lead">Every part of the visual system, in the shell, with the page's real stylesheet and script.</p></div>
+<div class="actions"><button class="btn" type="button">{{template "icon" "refresh"}}Refresh</button><button class="btn primary" type="button" data-dialog="review-demo">{{template "icon" "plus"}}Add rule</button></div>
+</header>
+
+<section class="section" aria-labelledby="g-buttons">
+<div class="section-head"><h2 id="g-buttons">Buttons, badges, and states</h2><p>Primary buttons are ink; color means a route or a state.</p></div>
+<div class="panel panel-pad stack">
+<div class="chips"><button class="btn primary" type="button">Apply changes</button> <button class="btn" type="button">Back to editing</button> <button class="btn quiet" type="button">Cancel</button> <button class="btn danger" type="button">{{template "icon" "trash"}}Delete</button> <button class="btn" type="button" disabled>Disabled</button> <button class="btn sm" type="button">{{template "icon" "route"}}Route…</button> <button class="btn quiet icon-btn" type="button" aria-label="Actions for rule ads">{{template "icon" "more"}}</button></div>
+<div class="chips"><span class="badge direct"><span class="sw"></span>direct</span> <span class="badge upstream"><span class="sw"></span>upstream <b>gateway</b></span> <span class="badge block"><span class="sw"></span>block</span> <span class="badge restart">Restart</span> <span class="badge warn">{{template "icon" "alert"}}1 warning</span> <span class="badge ok">{{template "icon" "check"}}valid</span> <span class="badge">disclosure via</span></div>
+<div class="chips"><span class="state up">Up since 09:12</span> <span class="state down">Down for 42 s, 17 failed fast</span> <span class="state probing">Probing</span> <span class="state online">Online, IPv4</span> <span class="state demoted">Demoted until 10:31</span> <span class="state offline">Offline: absent</span></div>
+<div class="chips"><span class="chip">internal.example</span><span class="chip">build.example</span><span class="chip">198.51.100.0/24</span><span class="chip more">+12 more</span></div>
+</div>
+</section>
+
+<section class="section stack" aria-labelledby="g-banners">
+<div class="section-head"><h2 id="g-banners">Banners and notices</h2></div>
+<div class="banner info" role="status">{{template "icon" "info"}}<div class="b-body"><strong>The file changed since cuttle loaded it.</strong><span>Reload to run it, or open Advanced to see it.</span><div class="b-actions"><a class="btn sm" href="/settings">Open Advanced</a></div></div></div>
+<div class="banner ok" role="status">{{template "icon" "check"}}<div class="b-body"><strong>The configuration is valid. It has not been saved.</strong></div></div>
+<div class="banner warn" role="status">{{template "icon" "alert"}}<div class="b-body"><strong><code>proxy.listen</code> changes apply at the next start.</strong><span>Restart with <code>brew services restart cuttle</code> to use the new values.</span></div></div>
+<div class="banner error" role="alert">{{template "icon" "alert"}}<div class="b-body"><strong>The configuration file has errors, so these pages are read-only.</strong><pre>line 58: rule[3].domains[2]: "*.internal.example" is not a domain; write internal.example</pre><div class="b-actions"><a class="btn sm" href="/settings">Fix in Advanced</a></div></div></div>
+<div class="notices"><div class="notice">{{template "icon" "info"}}<span>This save rewrites the file in canonical form: 4 comment lines and 3 end-of-line comments written by hand are removed.</span></div><div class="notice warn">{{template "icon" "alert"}}<span><code>proxy.listen</code> applies only at the next start.</span></div></div>
+</section>
+
+<section class="section" aria-labelledby="g-form">
+<div class="section-head"><h2 id="g-form">Forms</h2><p>Labels, hints, defaults as placeholders, and errors from the validator.</p></div>
+<form class="panel panel-pad" method="get" action="/gallery" data-guard="Unsaved changes to the example rule" novalidate>
+<div class="error-summary" role="alert"><h2>1 error</h2><ul><li><a href="#g-ports">Ports, entry 1: "https" must be an integer port</a></li></ul></div>
+<fieldset class="fsec"><header><h2>Rule</h2><p>Name and note.</p></header><div class="fields">
+<div class="row2">
+<div class="field"><label for="g-name">Name</label><input class="input mono" id="g-name" name="name" value="restricted" aria-describedby="g-name-h"><div class="hint" id="g-name-h">Lowercase letters, digits, and dashes.</div></div>
+<div class="field"><label for="g-note">Note</label><input class="input" id="g-note" name="note" value="Only reachable inside the gateway network"></div>
+</div>
+<div class="field"><label for="g-domains">Domains</label><textarea class="input list" id="g-domains" name="domains" rows="3" data-list data-bad="3" aria-describedby="g-domains-h">internal.example
+build.example
+*.wiki.example</textarea><div class="hint" id="g-domains-h">A name and all of its subdomains: example.com matches a.example.com.</div><div class="err">Entry 3: "*.wiki.example": write wiki.example; a domain already matches its subdomains</div></div>
+<div class="field invalid"><label for="g-ports">Ports</label><textarea class="input list" id="g-ports" name="ports" rows="2" data-list data-bad="1" aria-invalid="true" aria-describedby="g-ports-err">https</textarea><div class="err" id="g-ports-err">Entry 1: "https" must be an integer port</div></div>
+</div></fieldset>
+<fieldset class="fsec"><header><h2>Action</h2><p>Where matching requests go.</p></header><div class="fields">
+<div class="field"><span class="label" id="g-action-l">Action</span><div class="seg action" role="radiogroup" aria-labelledby="g-action-l"><label><input type="radio" name="action" value="direct"><span class="direct">Direct</span></label><label><input type="radio" name="action" value="upstream:gateway" checked><span class="upstream">gateway</span></label><label><input type="radio" name="action" value="upstream:lab"><span class="upstream">lab</span></label><label><input type="radio" name="action" value="block"><span class="block">Block</span></label></div></div>
+<div class="field"><label for="g-timeout">Connect timeout <span class="badge restart">Restart</span></label><input class="input mono" id="g-timeout" name="connect_timeout" placeholder="10s, the default" aria-describedby="g-timeout-h"><div class="hint" id="g-timeout-h">Go durations such as 10s or 1m30s. Applies at the next start.</div></div>
+<div class="field"><label for="g-upstream">Upstream</label><select class="input" id="g-upstream" name="upstream"><option>gateway — 192.0.2.6:3128, up</option><option>lab — 192.0.2.40:3128, down</option></select></div>
+<label class="check"><input type="checkbox" name="allow_private" value="true"><span>Allow private addresses that names resolve to</span><span class="hint">Names that resolve to private addresses are refused unless a rule allows them.</span></label>
+<div class="field"><span class="label" id="g-disc-l">Disclosure</span><div class="rcards" role="radiogroup" aria-labelledby="g-disc-l"><label class="rcard"><input type="radio" name="disclosure" value="via"><b>via</b><span class="hint">Another cuttle instance; adds one Via entry for loop detection.</span></label><label class="rcard"><input type="radio" name="disclosure" value="none"><b>none</b><span class="hint">An egress proxy or any proxy that must not see an intermediary.</span></label></div></div>
+<div class="field"><span class="label">Interfaces</span><ol class="iflist"><li><span class="pos">1</span><span><span class="name-code">eth-a</span> <span class="state online">Online</span></span><span class="moves"><button class="btn quiet icon-btn sm" type="button" aria-label="Move eth-a up" disabled>{{template "icon" "up"}}</button><button class="btn quiet icon-btn sm" type="button" aria-label="Move eth-a down">{{template "icon" "down"}}</button></span><button class="btn quiet icon-btn sm" type="button" aria-label="Remove eth-a">{{template "icon" "x"}}</button></li><li><span class="pos">2</span><span><span class="name-code">wifi</span> <span class="state online">Online</span></span><span class="moves"><button class="btn quiet icon-btn sm" type="button" aria-label="Move wifi up">{{template "icon" "up"}}</button><button class="btn quiet icon-btn sm" type="button" aria-label="Move wifi down" disabled>{{template "icon" "down"}}</button></span><button class="btn quiet icon-btn sm" type="button" aria-label="Remove wifi">{{template "icon" "x"}}</button></li></ol><div class="hint">Requests use only these interfaces, in this order.</div></div>
+</div></fieldset>
+<div class="form-foot"><button class="btn primary" type="submit" data-primary>Review changes</button><a class="btn quiet" href="/gallery">Cancel</a><span class="spacer"></span><button class="btn danger" type="button">Delete</button></div>
+</form>
+</section>
+
+<section class="section" aria-labelledby="g-chain">
+<div class="section-head"><h2 id="g-chain">Rule chain</h2><p>Tested: rule 2 matched; rule 1 was tried and passed.</p></div>
+<section class="panel panel-pad" aria-label="Test a URL"><form class="testbar" role="search" method="get" action="/gallery"><div class="t-input">{{template "icon" "search"}}<input class="input" name="test" aria-label="Test a URL" placeholder="Test a URL, such as https://wiki.internal.example/" value="https://wiki.internal.example/" data-slash></div><button class="btn primary" type="submit">Test</button></form>
+<div class="result" role="status"><div class="res-head">Rule 2 <span class="name-code">restricted</span> matches <span class="badge upstream"><span class="sw"></span>upstream <b>gateway</b></span></div><dl class="res-dl"><dt>Target</dt><dd><code>wiki.internal.example:443</code>, tunnel, local client</dd><dt>Upstream</dt><dd><code>192.0.2.6:3128</code>, disclosure via, <span class="state up">up</span></dd></dl></div></section>
+<div class="panel section"><ol class="chain tested" aria-label="Rules in evaluation order">
+<li class="rule a-direct passed"><div class="r-gutter"><span class="node">1</span></div><button class="btn quiet icon-btn handle" type="button" aria-label="Move rule loopback, position 1 of 3">{{template "icon" "grip"}}</button><div class="r-main"><div class="r-title"><a class="r-name" href="/gallery">loopback</a></div><div class="r-note">localhost and loopback addresses, any port</div><div class="chips"><span class="chip">localhost</span><span class="chip">127.0.0.0/8</span><span class="chip">::1/128</span></div></div><div class="r-route"><span class="badge direct"><span class="sw"></span>direct</span><div class="flags"><span class="flag">allows loopback</span></div></div><div class="r-traffic"><div><b>1,204</b> req</div><div>18.2 MiB</div></div><button class="btn quiet icon-btn r-menu" type="button" aria-label="Actions for rule loopback">{{template "icon" "more"}}</button></li>
+<li class="rule a-upstream matched"><div class="r-gutter"><span class="node">2</span></div><button class="btn quiet icon-btn handle" type="button" aria-label="Move rule restricted, position 2 of 3">{{template "icon" "grip"}}</button><div class="r-main"><div class="r-title"><a class="r-name" href="/gallery">restricted</a></div><div class="r-note">Only reachable inside the gateway network</div><div class="chips"><span class="chip">internal.example</span><span class="chip">build.example</span></div></div><div class="r-route"><span class="badge upstream"><span class="sw"></span>upstream <b>gateway</b></span></div><div class="r-traffic"><div><b>3,512</b> req</div><div>412.0 MiB</div></div><button class="btn quiet icon-btn r-menu" type="button" aria-label="Actions for rule restricted">{{template "icon" "more"}}</button></li>
+<li class="rule a-block unreached"><div class="r-gutter"><span class="node">3</span></div><button class="btn quiet icon-btn handle" type="button" aria-label="Move rule ads, position 3 of 3">{{template "icon" "grip"}}</button><div class="r-main"><div class="r-title"><a class="r-name" href="/gallery">ads</a><span class="badge warn">{{template "icon" "alert"}}1 warning</span></div><div class="chips"><span class="chip">ads.example.net</span><span class="chip">tracker.example</span><span class="chip more">+4 more</span></div></div><div class="r-route"><span class="badge block"><span class="sw"></span>block</span></div><div class="r-traffic"><div><b>2,310</b> req</div><div>0 B</div></div><button class="btn quiet icon-btn r-menu" type="button" aria-label="Actions for rule ads">{{template "icon" "more"}}</button></li>
+<li class="rule default unreached"><div class="r-gutter"><span class="node end" aria-hidden="true"></span></div><span></span><div class="r-main"><div class="r-title"><span class="r-name">No rule matched</span></div><div class="r-note">The default route applies.</div></div><div class="r-route"><div>Local <span class="badge direct"><span class="sw"></span>direct</span></div><div>Remote <span class="badge block"><span class="sw"></span>block</span></div></div><div class="r-traffic"><div><b>21,752</b> req</div><div>1.8 GiB</div></div><span></span></li>
+</ol></div>
+</section>
+
+<section class="section" aria-labelledby="g-ents">
+<div class="section-head"><h2 id="g-ents">Entity list and table</h2></div>
+<div class="panel"><div class="ent-head"><span>Upstream</span><span>Address and disclosure</span><span>State</span><span>Used by</span><span>Last 24 hours</span><span></span></div><ul class="ents">
+<li class="ent"><div class="e-col"><a class="e-name" href="/gallery">gateway</a><span class="e-note">Gateway instance over the private link</span></div><div class="e-col"><code>192.0.2.6:3128</code><span class="badge">disclosure via</span></div><div class="e-col"><span class="state up">Up since 09:12</span></div><div class="e-col e-use"><span>Rule <a class="name-code" href="/gallery">restricted</a></span></div><div class="r-traffic"><div><b>3,512</b> req</div><div>412.0 MiB</div></div><button class="btn quiet icon-btn r-menu" type="button" aria-label="Actions for upstream gateway">{{template "icon" "more"}}</button></li>
+<li class="ent"><div class="e-col"><a class="e-name" href="/gallery">lab</a></div><div class="e-col"><code>192.0.2.40:3128</code><span class="badge">disclosure via</span></div><div class="e-col"><span class="state down">Down for 42 s, 17 failed fast</span><span class="hint">Last error: connection_timeout</span></div><div class="e-col e-use"><span class="badge warn">{{template "icon" "alert"}}Not used by any action</span></div><div class="r-traffic"><div><b>0</b> req</div><div>0 B</div></div><button class="btn quiet icon-btn r-menu" type="button" aria-label="Actions for upstream lab">{{template "icon" "more"}}</button></li>
+</ul></div>
+<div class="panel tablewrap section"><table class="data resp">
+<thead><tr><th>Host</th><th>Route</th><th class="n">Requests</th><th class="n">Bytes</th><th class="barcol"><span class="sr">Share</span></th></tr></thead>
+<tbody>
+<tr class="c-direct"><td class="host lead-cell">video.example</td><td class="route"><span class="badge direct"><span class="sw"></span>direct</span></td><td class="n" data-label="Requests">402</td><td class="n" data-label="Bytes">1.9 GiB</td><td class="barcol"><span class="bar"><i class="w20"></i></span></td></tr>
+<tr class="c-upstream"><td class="host lead-cell">wiki.internal.example</td><td class="route"><span class="badge upstream"><span class="sw"></span>upstream <b>gateway</b></span></td><td class="n" data-label="Requests">1,840</td><td class="n" data-label="Bytes">188.0 MiB</td><td class="barcol"><span class="bar"><i class="w2"></i></span></td></tr>
+<tr class="c-block"><td class="host lead-cell">a-very-long-subdomain-name-that-must-wrap.tracker.example</td><td class="route"><span class="badge block"><span class="sw"></span>block</span></td><td class="n" data-label="Requests">1,204</td><td class="n" data-label="Bytes">0 B</td><td class="barcol"><span class="bar"><i class="w0"></i></span></td></tr>
+</tbody></table></div>
+</section>
+
+<section class="section" aria-labelledby="g-empty">
+<div class="section-head"><h2 id="g-empty">Empty state</h2></div>
+<div class="empty"><h3>No upstreams</h3><p>Add one to send some destinations through another cuttle instance or an egress proxy. Until then, rules can route only direct or block.</p><button class="btn primary" type="button">{{template "icon" "plus"}}Add upstream</button></div>
+</section>
+
+<dialog id="review-demo" aria-labelledby="review-demo-h">
+<div class="dlg-head"><div><h2 id="review-demo-h">Review: change rule <span class="name-code">restricted</span></h2><p>Nothing is written until you apply. The previous file stays in <code>config.toml.bak</code>.</p></div><button class="btn quiet icon-btn" type="button" data-close aria-label="Close">{{template "icon" "x"}}</button></div>
+<div class="dlg-body">
+<section><h3>Summary</h3><ul class="summary"><li><span>Rule <span class="name-code">restricted</span>: domains +1</span></li><li><span>Moved rule <span class="name-code">ads</span> from 4 to 2</span></li></ul></section>
+<section class="notices"><div class="notice warn">{{template "icon" "alert"}}<span>The file changed after you opened this page. The changes below are yours; the other change stays.</span></div></section>
+<section><div class="diff"><div class="diff-file"><span>config.toml</span><span>+2 −1</span></div>
+<div class="dl"><span class="ln">40</span><span class="ln">40</span><span class="m"> </span><span class="t">[[rule]]</span></div>
+<div class="dl"><span class="ln">41</span><span class="ln">41</span><span class="m"> </span><span class="t">name = "restricted"</span></div>
+<div class="dl del"><span class="ln">42</span><span class="ln"></span><span class="m">−</span><span class="t">domains = ["internal.example", "build.example"]</span></div>
+<div class="dl add"><span class="ln"></span><span class="ln">42</span><span class="m">+</span><span class="t">domains = ["internal.example", "build.example", "docs.example.org"]</span></div>
+<details class="gap"><summary>12 unchanged lines</summary><div class="dl"><span class="ln">43</span><span class="ln">43</span><span class="m"> </span><span class="t">action = "upstream:gateway"</span></div></details>
+<div class="dl add"><span class="ln"></span><span class="ln">56</span><span class="m">+</span><span class="t">note = "Moved first"</span></div>
+</div></section>
+</div>
+<div class="dlg-foot"><button class="btn primary" type="button" data-close>Apply changes</button><button class="btn" type="button" data-close>Back to editing</button><span class="spacer"></span><button class="btn quiet" type="button" data-close>Cancel</button></div>
+</dialog>
+{{end}}
