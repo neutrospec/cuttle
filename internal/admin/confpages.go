@@ -23,11 +23,12 @@ import (
 // addConfigPages parses the templates of the rules and upstreams pages,
 // registers their form ops, and adds their routes.
 func (s *Server) addConfigPages(handle func(string, http.HandlerFunc)) {
-	for _, name := range []string{"rules", "rule", "upstreams", "upstream"} {
+	for _, name := range []string{"rules", "rule", "upstreams", "upstream", "route"} {
 		s.pages[name] = template.Must(template.Must(s.base.Clone()).ParseFS(assets, "templates/"+name+".html", "templates/testurl.html"))
 	}
 	s.addRuleOps()
 	s.addUpstreamOps()
+	s.addRouteOp()
 	handle("GET /rules", s.authed(0, s.getRules))
 	handle("GET /rules/{name}", s.authed(0, s.getRule))
 	handle("GET /upstreams", s.authed(0, s.getUpstreams))

@@ -40,6 +40,12 @@
 </form>
 </div>{{end}}{{end}}
 
+{{/* route-dialog is the dialog of Route a host (design 0009 D3.12) on
+   the traffic pages, which the Route… links load the route-editor block
+   into, with the review dialog it opens. */}}
+{{define "route-dialog"}}<dialog id="route-dialog" class="editor-dialog route-dialog" aria-labelledby="editor-h"><div id="route-editor" class="editor-slot"></div></dialog>
+{{template "review-dialog"}}{{end}}
+
 {{/* review-dialog is the dialog a page with a review shows it in; the
    script loads the review block into #review and opens it. */}}
 {{define "review-dialog"}}<dialog id="review-dialog" class="review-dialog" aria-labelledby="review-h"><div id="review" class="review-slot"></div></dialog>
@@ -66,7 +72,7 @@
 {{if .Message}}<div class="banner error" role="alert">{{template "icon" "alert"}}<div class="b-body"><strong>{{template "rich" .Message}}</strong>
 {{if .Reload}}<div class="b-actions"><a class="btn sm" href="{{.Reload}}">Reload the page</a></div>
 {{end}}</div></div>
-{{end}}{{with .Form}}{{if .HasErrors}}<div class="error-summary" role="alert" tabindex="-1"><h2>{{plural .ErrorCount "error"}}</h2><ul>
+{{end}}{{with .Form}}{{if .HasErrors}}<div class="error-summary" role="alert" tabindex="-1"{{if not $.Fragment}} autofocus{{end}}><h2>{{plural .ErrorCount "error"}}</h2><ul>
 {{range .Top}}<li>{{.}}</li>
 {{end}}{{range .Summary}}<li><a href="{{.Href}}">{{template "rich" .Label}}: {{.Msg}}</a></li>
 {{end}}</ul></div>

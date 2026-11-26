@@ -243,7 +243,12 @@ CUTTLE_REQUIRE_CURL=1 go test -race -count=1 -timeout 10m ./...
   `http://127.0.0.1:<port>/`, checks the overview, the `cuttle_session`
   attributes in Chrome, the domain, live, and Advanced pages, and each of
   them at 390 px in light and dark appearance without sideways scrolling,
-  a console error, or a Content-Security-Policy violation, then closes
+  a console error, or a Content-Security-Policy violation, drives the
+  form flows of [0009 W26](0009-web-configuration.md#m44--dashboard-integration-and-browser-check)
+  against the built binary (a rule from pasted domains with the live check
+  and test, a keyboard reorder, an upstream, an interface defined from
+  this Mac's table, the password change, and Route a host from the
+  domains page with and without the script), then closes
   Chrome and fails if a process with the profile remains or a request
   left through the proxy. The script then runs `TestAdminScreens` of
   `internal/admin`, the browser check of the admin shell, visual system,
@@ -253,7 +258,16 @@ CUTTLE_REQUIRE_CURL=1 go test -race -count=1 -timeout 10m ./...
   a component gallery at 1280 and 390 px in both appearances with the
   same checks, drives the script's controls, the review dialog and its
   apply, the file banners, and the previous version, and checks the pages
-  with scripts disabled, the review page included. `CUTTLE_CHROME` overrides the Chrome binary, and
+  with scripts disabled, the review page included, and
+  `TestAdminScreensSettings`, `TestAdminScreensRules`, and
+  `TestAdminScreensRoute`, which do the same for the configuration pages,
+  the overview, and Route a host. Every Chrome also gets
+  `--disable-updater-scheduler`, without which it installs and wakes the
+  user's own Google updater, and a check fails if Chrome starts it anyway.
+  The script runs everything with `TMPDIR` set to a new directory under
+  `/tmp` and checks for leftover processes whose command line names that
+  directory, so that a run in another checkout or an installed cuttle
+  does not fail it. `CUTTLE_CHROME` overrides the Chrome binary, and
   `CUTTLE_ADMIN_CHROME_OUT` names a directory for screenshots.
 - T2 at M3 close and every later milestone: the D8 M3 matrix, the Homebrew
   checks ([0006](0006-packaging-paths-and-lifecycle.md#acceptance-criteria)

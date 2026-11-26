@@ -90,6 +90,17 @@ func hasRow(body string, cells ...string) bool {
 	return false
 }
 
+// listedHosts returns the hosts of the overview's top-host lists in order.
+func listedHosts(body string) []string {
+	var out []string
+	for _, m := range topHostRE.FindAllStringSubmatch(body, -1) {
+		out = append(out, m[1])
+	}
+	return out
+}
+
+var topHostRE = regexp.MustCompile(`<li><span class="h">([^<]+)</span>`)
+
 // hosts returns the host cells of a page in order.
 func hosts(body string) []string {
 	var out []string
@@ -143,35 +154,48 @@ func TestAdminDashboard(t *testing.T) {
 	for _, want := range []string{
 		`<a href="/?window=24h" aria-current="true">24h</a>`,
 		`2026-11-24 13:00 to 2026-11-25 13:00 UTC`,
-		`<h3>Sent direct</h3>`, `<h3>Sent to upstream gateway</h3>`, `<h3>Blocked</h3>`,
-		`<a href="/domains?route=upstream%3Agateway&amp;window=24h">All 1 hosts on upstream:gateway</a>`,
+		`<h3>Sent direct</h3>`, `<h3>Sent to gateway</h3>`, `<h3>Blocked</h3>`,
+		`<a href="/domains?route=upstream%3Agateway&amp;window=24h">The host on upstream:gateway in the domain table</a>`,
+		`<a href="/domains?route=direct&amp;window=24h">All 4 hosts on direct in the domain table</a>`,
 		`<h2 id="ifaces-h">Interfaces</h2>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("overview lacks %q", want)
 		}
 	}
-	// Route totals: hosts, requests, failures, and bytes up and down; then
-	// the interface totals.
-	for _, want := range [][]string{
-		{"direct", "4", "6", "1", "2.1 KiB", "10.0 KiB"},
-		{"upstream gateway", "1", "3", "0", "150 B", "210 B"},
-		{"block", "1", "4"},
-		{"eth-a", "3"},
-		{"none", "1", "4"},
+	// Route totals: the sentence and the bar of design 0009 D3.1, by bytes
+	// with the block route by requests, and each route's hosts, requests,
+	// and failures; then the interface totals.
+	for _, want := range []string{
+		`In the last 24 hours, 97% of traffic went <span class="rt c-direct">direct</span>, 3% through <span class="rt c-upstream">gateway</span>, and 4 requests were <span class="rt c-block">blocked</span>.`,
+		`<div class="routebar" role="img" aria-label="Bytes by route: direct 97%, gateway 3%"><i class="c-direct g97"></i><i class="c-upstream g3"></i></div>`,
+		`<li><span class="lg c-upstream">gateway</span><span class="num">360 B</span><span class="muted num">3%</span></li><li><span class="lg c-block">block</span><span class="num">4 requests</span></li>`,
+		`<p class="route-totals"><span>4 hosts</span><span>6 requests</span><span>1 failed</span></p>`,
+		`<p class="route-totals"><span>1 host</span><span>3 requests</span></p>`,
+		`<li><span class="lg c-direct">direct</span><span class="num">12.0 KiB</span><span class="muted num">97%</span></li>`,
+		`<p class="route-totals"><span>1 host</span><span>4 requests</span></p>`,
 	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("overview lacks %q", want)
+		}
+	}
+	for _, want := range [][]string{{"eth-a", "3"}, {"none", "1", "4"}} {
 		if !hasRow(body, want...) {
 			t.Errorf("overview lacks the row %q", want)
 		}
 	}
 	// The routes come in the order direct, upstreams, block, and each
-	// route's hosts by bytes, then requests.
-	if got := strings.Join(hosts(body), ","); got != "big.example,small.example,old.example,remote.example,wiki.internal.example,ads.example" {
+	// route's hosts by bytes, then requests, each with Route… that returns
+	// to the overview.
+	if got := strings.Join(listedHosts(body), ","); got != "big.example,small.example,old.example,remote.example,wiki.internal.example,ads.example" {
 		t.Errorf("overview hosts %s", got)
+	}
+	if !strings.Contains(body, `<a class="btn quiet icon-btn sm act" href="/rules/new?host=wiki.internal.example&amp;return=%2F" data-fragment="route-editor" aria-label="Route wiki.internal.example…"`) {
+		t.Error("overview lacks Route… for a host")
 	}
 	res = b.get("/?window=1h")
 	body = bodyOf(t, res)
-	if got := strings.Join(hosts(body), ","); res.StatusCode != http.StatusOK || got != "big.example,small.example,remote.example,wiki.internal.example,ads.example" ||
+	if got := strings.Join(listedHosts(body), ","); res.StatusCode != http.StatusOK || got != "big.example,small.example,remote.example,wiki.internal.example,ads.example" ||
 		!strings.Contains(body, "2026-11-25 12:00 to 2026-11-25 13:00 UTC") {
 		t.Errorf("1h: %d %s", res.StatusCode, got)
 	}
@@ -211,7 +235,7 @@ func TestAdminDashboard(t *testing.T) {
 	// bytes, and times; the date range shows its exact hours.
 	_, _, body = domains("route=direct&from=2026-11-25&to=2026-11-25")
 	for _, want := range [][]string{
-		{"1", "big.example", "direct", "default, pinned", "3", "0", "2.0 KiB", "9.8 KiB", "2026-11-25 12:00 to 2026-11-25 12:00"},
+		{"1", "big.example", "direct", "default , pinned", "3", "0", "2.0 KiB", "9.8 KiB", "2026-11-25 12:00 to 2026-11-25 12:00"},
 		{"4", "remote.example", "direct", "remote-direct", "1", "1"},
 	} {
 		if !hasRow(body, want...) {

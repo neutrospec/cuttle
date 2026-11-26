@@ -186,6 +186,9 @@ type ifListView struct {
 	Defined bool
 	// Empty says what an empty list means.
 	Empty string
+	// ListHint says what the list does; it shows with the list, so not
+	// while the choice leaves the key unset (OI-0006 AC-R1).
+	ListHint string
 }
 
 // ifEntry is one entry of the list.
@@ -202,7 +205,8 @@ type ifEntry struct {
 // the choice that controls it and set the option that uses the list, or
 // both are "".
 func (f *form) IfList(name, choice, set string, states []ifState, empty string) *ifListView {
-	v := &ifListView{fieldView: f.Field(name), SetOption: set, Defined: len(states) > 0, Empty: empty}
+	v := &ifListView{fieldView: f.Field(name), SetOption: set, Defined: len(states) > 0, Empty: empty,
+		ListHint: "Requests use only these interfaces, in this order; the first one that is online carries the connection."}
 	if choice != "" {
 		c := f.Field(choice)
 		v.Choice = &c

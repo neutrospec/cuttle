@@ -391,9 +391,19 @@
       update,
       // leaving lets a watched form's own submit leave the page, and
       // a form marked data-leave, such as the review's Apply changes,
-      // which posts the edit that the watched form holds.
+      // when it posts the edit of every watched form with unsaved
+      // changes: the same op and target. A restore reviewed while the
+      // Advanced editor holds other text still asks first, since
+      // applying it would lose that text (OI-0006 AA-R8).
       leaving(form) {
-        if (watched.has(form) || form.hasAttribute("data-leave")) leaving = true;
+        if (watched.has(form)) {
+          leaving = true;
+          return;
+        }
+        if (!form.hasAttribute("data-leave")) return;
+        const value = (f, name) => (f.elements[name] ? f.elements[name].value : "");
+        const same = (f) => value(f, "op") === value(form, "op") && value(f, "target") === value(form, "target");
+        if (Array.from(watched.entries()).every(([f, s]) => !s.dirty || same(f))) leaving = true;
       },
       dirty: (form) => !!(watched.get(form) || {}).dirty,
     };
@@ -1073,4 +1083,43 @@
     const menu = e.target.closest && e.target.closest("details.ifmenu");
     if (menu) menu.open = false;
   }, true);
+})();
+
+/* ---------------------------------------------------- Route a host */
+// The form of design 0009 D3.12, in the dialog of the overview, domains,
+// and live pages or on its own page. "Where" offers only the rules of the
+// chosen route: without the script the select lists every rule without
+// ports grouped by route, and the server refuses a rule of another route;
+// with it, the select shows "New rule" and the chosen route's rules. The
+// dialog drops its form when it closes, so that a later Route… starts
+// afresh.
+(() => {
+  const { $, $$ } = window.cuttle;
+  function arm(form) {
+    if (!form || form.dataset.routeArmed) return;
+    form.dataset.routeArmed = "1";
+    const where = form.elements.namedItem("where");
+    if (!where) return;
+    const rules = $$("option[data-route]", where).map((o) => o.cloneNode(true));
+    const sync = () => {
+      const chosen = ($('input[name="action"]:checked', form) || {}).value || "";
+      const keep = where.value;
+      Array.from(where.children).slice(1).forEach((c) => c.remove());
+      for (const o of rules) if (o.dataset.route === chosen) where.append(o.cloneNode(true));
+      where.value = Array.from(where.options).some((o) => o.value === keep) ? keep : "";
+    };
+    form.addEventListener("change", (e) => { if (e.target.name === "action") sync(); });
+    sync();
+  }
+  arm(document.getElementById("route-form"));
+  new MutationObserver(() => arm(document.getElementById("route-form")))
+    .observe(document.body, { childList: true, subtree: true });
+
+  const slot = document.getElementById("route-editor");
+  const dlg = slot && slot.closest("dialog");
+  if (dlg) {
+    dlg.addEventListener("close", () => {
+      setTimeout(() => { if (!dlg.open) slot.replaceChildren(); }, 50);
+    });
+  }
 })();

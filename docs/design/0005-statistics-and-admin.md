@@ -281,7 +281,7 @@ exact range.
 | `POST` | `/login` | Host check, login token | Verify the password, start a session |
 | `POST` | `/logout` | Session, CSRF | End the session |
 | `GET` | `/` | Session | Overview: totals per route and per interface, top hosts, live counters, upstream and interface states, configuration and statistics status |
-| `GET` | `/domains` | Session | Host table filtered by `route`, `source`, `interface`, and window |
+| `GET` | `/domains` | Session | Host table filtered by `route`, `rule`, `source`, `interface`, and window |
 | `GET` | `/live` | Session | Active tunnels; refreshes every 5 s, through the admin script, which waits while a menu or dialog is open ([0009 D10](0009-web-configuration.md#d10-javascript)), or through a `<noscript>` `<meta http-equiv="refresh">` |
 | `GET` | `/settings` | Session | Configuration editor (D10) and the previous version ([0009 D3.10](0009-web-configuration.md#d310-advanced)) |
 | `GET` | `/settings/backup` | Session | The previous version, `.bak`, and its diff with the current file |
@@ -297,6 +297,10 @@ exact range.
 | `POST` | `/account/sessions` | Session, CSRF | End every other session |
 | `GET` | `/static/*` | Host check | Embedded styles |
 
+`rule` is a rule name, one of the decisions without a rule (`default`,
+`remote-default`, `remote-direct`, `port`), or `all`; its select lists the
+running configuration's rules and keeps a well-formed name that it no
+longer has ([0009 D3.2](0009-web-configuration.md#d32-domains-and-live)).
 `route` is `direct`, `upstream` (all upstreams), `upstream:<name>`,
 `block`, or `all`. `source` is `local`, `remote`, or `all`. `interface` is
 a configured interface name, `other`, `none` for rows without an

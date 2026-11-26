@@ -1,0 +1,41 @@
+{{/* route is Route a host of design 0009 D3.12 as a page, without the
+   script; with it, the overview, domains, and live pages load the
+   route-editor block into their dialog. Its Data is a formPage with the
+   route.host form and a routeHostView. */}}
+{{define "content"}}{{with .Data.View}}
+<header class="page-head"><div><p class="crumbs"><a href="/rules">Rules</a> /</p>
+<h1>Route <span class="name-code">{{.Host}}</span></h1>
+<p class="lead">Send this host, or the domain it belongs to, another way. The new route applies after you review and apply it.</p></div></header>
+<div class="panel up-page">{{template "route-editor" $}}</div>
+{{template "review-dialog"}}{{end}}{{end}}
+
+{{/* route-editor is the form: how the host goes now, the match, the
+   route with the current one unavailable, and where the pattern goes. */}}
+{{define "route-editor"}}{{$f := .Data.Form}}{{with .Data.View}}<div class="up-editor route-editor" data-block="route-editor">
+<form id="route-form" method="post" action="/config/draft" class="route-form" novalidate>
+{{if not .ReadOnly}}{{template "default-button"}}{{end}}<input type="hidden" name="csrf" value="{{$.Token}}">
+{{range $f.Hidden}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">
+{{end}}<input type="hidden" name="host" value="{{$f.Value "host"}}">
+{{if .Fragment}}<div class="dlg-head"><div><h2 id="editor-h">Route <span class="name-code">{{.Host}}</span></h2>
+<p>Send this host, or the domain it belongs to, another way.</p></div>
+<button class="btn quiet icon-btn" type="button" data-close aria-label="Close">{{template "icon" "x"}}</button></div>
+{{end}}<div class="dlg-body">
+{{if .ReadOnly}}{{template "readonly"}}{{end}}<div id="form-issues">{{template "form-issues" $}}</div>
+{{with .Current}}<div class="verdict now" role="status"><div class="v-line"><span class="v-lab">Currently</span> {{if .Err}}<span class="err">{{.Err}}</span>{{else}}{{template "route" .Route}} <span>{{if .MatchPos}}by rule {{.MatchPos}}, <a class="name-code" href="/rules/{{.MatchName}}">{{.MatchName}}</a>{{else}}by the default route, <code>proxy.default</code>{{end}}, for HTTPS from a local client</span>{{end}}</div></div>
+{{end}}<fieldset class="fields"{{if .ReadOnly}} disabled{{end}}>
+{{with $f.Field "match"}}<div class="field{{if .Invalid}} invalid{{end}}"><span class="label" id="f-match-l">Match</span>
+<div class="rcards matches" role="radiogroup" id="f-match" tabindex="-1" aria-labelledby="f-match-l" aria-describedby="f-match-hint f-match-issues">{{range $.Data.View.Matches}}<label class="rcard"><input type="radio" name="match" value="{{.Value}}"{{if .Checked}} checked{{end}}><b class="mono">{{.Label}}</b><span class="hint">{{.Hint}}</span></label>{{end}}</div>
+<div class="hint" id="f-match-hint">{{if gt (len $.Data.View.Matches) 1}}cuttle has no list of public suffixes, so a parent such as <code>co.uk</code> or <code>github.io</code> is offered like any other; choose a parent knowingly.{{else}}A rule matches this exactly.{{end}}</div>{{template "fissues" .}}</div>
+{{end}}{{with $f.Field "action"}}<div class="field{{if .Invalid}} invalid{{end}}"><span class="label" id="f-action-l">Route</span>
+<div class="seg action" role="radiogroup" id="f-action" tabindex="-1" aria-labelledby="f-action-l" aria-describedby="f-action-hint f-action-issues">{{range $.Data.View.Routes}}<label{{if .Disabled}} title="The current route"{{end}}><input type="radio" name="action" value="{{.Value}}"{{if .Checked}} checked{{end}}{{if .Disabled}} disabled{{end}}><span class="{{.Class}}">{{.Label}}</span></label>{{end}}</div>
+<div class="hint" id="f-action-hint">The current route is unavailable here; choose where the host should go instead.</div>{{template "fissues" .}}</div>
+{{end}}{{with $f.Field "where"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-where">Where</label>
+<select class="input" id="f-where" name="where" aria-describedby="f-where-hint f-where-issues"><option value="">New rule, first in the chain</option>{{range $g := $.Data.View.Where}}<optgroup label="{{$g.Label}}">{{range $g.Options}}<option value="{{.Value}}" data-route="{{$g.Action}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</optgroup>{{end}}</select>
+<div class="hint" id="f-where-hint">A new rule goes first, so that it wins over the rules below it, and is named after the pattern. Only rules without ports are offered, as the pattern would not match on other ports.</div>{{template "fissues" .}}</div>
+{{end}}</fieldset>
+</div>
+<div class="dlg-foot">{{if not .ReadOnly}}<button class="btn primary" type="submit" name="intent" value="review" data-primary data-fragment="review" data-alt="form-issues">Review changes</button>
+{{end}}<a class="btn" href="{{.Cancel}}" data-close>Cancel</a>
+</div>
+</form>
+</div>{{end}}{{end}}

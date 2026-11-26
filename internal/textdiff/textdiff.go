@@ -312,12 +312,25 @@ func lineBefore(lines []Line, i int, n func(Line) int) int {
 
 // Apply rebuilds the new text from the old one and the hunks of their
 // diff: the check that a diff is complete. It returns false when a hunk
-// does not match the old text.
+// does not match the old text or overlaps the one before it.
 func Apply(old string, hunks []Hunk) (string, bool) {
 	al := split(old)
 	var b strings.Builder
 	next := 0 // next line of old, 0-based
 	for _, h := range hunks {
+		// The old lines before the hunk are unchanged. A hunk without old
+		// lines, an insertion with no context, starts after old line h.A
+		// (OI-0006 AA-R4).
+		start := h.A - 1
+		if h.ALen == 0 {
+			start = h.A
+		}
+		if start < next || start > len(al) {
+			return "", false
+		}
+		for ; next < start; next++ {
+			b.WriteString(al[next])
+		}
 		for _, l := range h.Lines {
 			if l.Kind == Add {
 				b.WriteString(text(l))

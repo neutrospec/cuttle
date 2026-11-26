@@ -353,8 +353,11 @@ func (s *Server) interfaceView(d *config.Doc, f *form) *ifEditorView {
 	if f.New {
 		v.Title = "Add interface"
 		v.Sub = "A name for one of this Mac's network interfaces, for interface lists."
-		if dev := f.Value("device"); dev != "" && f.Value("mac") != "" {
-			// A form that Define… prefilled names the device it started from.
+		if dev := f.Rendered("device"); dev != "" && f.Rendered("mac") != "" {
+			// A form that Define… prefilled names the device it started
+			// from. The rendered values say so, since every render carries
+			// them unchanged; a manual Add with both fields typed stays
+			// "Add interface" (OI-0006 AB-R8).
 			v.Title = "Define " + dev
 		}
 	} else {

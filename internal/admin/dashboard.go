@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/neutrospec/cuttle/internal/control"
+	"github.com/neutrospec/cuttle/internal/policy"
 	"github.com/neutrospec/cuttle/internal/stats"
 )
 
@@ -63,6 +64,8 @@ func (s *Server) funcs() template.FuncMap {
 		"rowIndex": func(first, i int) int64 {
 			return int64(first + i)
 		},
+		"routeHref": routeHref,
+		"hostOf":    hostOfTarget,
 	}
 }
 
@@ -226,7 +229,7 @@ type routeBlock struct {
 	AllHref    string
 }
 
-// overview is the data of GET / (design 0005 D9).
+// overview is the data of GET / (design 0005 D9, 0009 D3.1).
 type overview struct {
 	Status        control.Status
 	Uptime        string
@@ -237,6 +240,13 @@ type overview struct {
 	Interfaces    []stats.Total
 	MaxIfBytes    int64
 	Counters      []counter
+	// Hero is the route sentence and bar; nil without traffic.
+	Hero *routeHero
+	// UpRows and IfRows are the compact states, Conf the configuration
+	// summary, and Ret the page that Route… returns to.
+	UpRows, IfRows []stateRow
+	Conf           confSummary
+	Ret            string
 }
 
 // getOverview answers the operator's questions directly: the domains sent
@@ -245,8 +255,9 @@ type overview struct {
 // configuration and statistics status (design 0005 D9).
 func (s *Server) getOverview(w http.ResponseWriter, r *http.Request, _ string, v session) {
 	st := s.backend.Status()
-	d := overview{Status: st, Stats: s.statsState(st), Counters: pickCounters(st.Counters)}
+	d := overview{Status: st, Stats: s.statsState(st), Counters: pickCounters(st.Counters), Ret: trafficRet(r)}
 	d.Uptime = s.now().Sub(st.StartedAt).Round(time.Second).String()
+	s.fillStates(&d, st)
 	win, err := s.window(r, "/", nil)
 	d.Window = win
 	if err != nil {
@@ -292,6 +303,7 @@ func (s *Server) fillOverview(ctx context.Context, sv *stats.Stats, d *overview)
 		d.MaxRouteBytes = max(d.MaxRouteBytes, t.Bytes())
 		d.Routes = append(d.Routes, b)
 	}
+	d.Hero = newRouteHero(d.Window, routes)
 	if d.Interfaces, err = sv.InterfaceTotals(ctx, f); err != nil {
 		return err
 	}
@@ -323,8 +335,15 @@ type domainsPage struct {
 	MaxBytes   int64
 	First      int // 1-based index of the first row
 	Prev, Next string
-	// Rule is the rule filter, and AllRules the page without it.
+	// Rule is the rule filter, and AllRules the page without it; Rules
+	// are the choices of its select (design 0009 D3.2).
 	Rule, AllRules string
+	Rules          []option
+	// RuleLinks links each rule name of the running configuration, and
+	// the decisions without a rule, to the page that configures it.
+	RuleLinks map[string]string
+	// Ret is the page that Route… returns to.
+	Ret string
 }
 
 // getDomains shows the host table filtered by route, source, interface,
@@ -339,7 +358,7 @@ func (s *Server) getDomains(w http.ResponseWriter, r *http.Request, _ string, v 
 	}
 	keep := url.Values{"route": {f.Route}, "source": {f.Source}, "interface": {f.Interface}}
 	st := s.backend.Status()
-	d := domainsPage{Stats: s.statsState(st)}
+	d := domainsPage{Stats: s.statsState(st), Ret: trafficRet(r)}
 	if rule := q.Get("rule"); rule != "" && rule != "all" {
 		all := url.Values{}
 		for k, vs := range r.URL.Query() {
@@ -351,6 +370,7 @@ func (s *Server) getDomains(w http.ResponseWriter, r *http.Request, _ string, v 
 		keep.Set("rule", rule)
 	}
 	d.Route, d.Source, d.Interface = s.filterOptions(f)
+	d.Rules, d.RuleLinks = s.ruleOptions(f.Rule)
 	win, err := s.window(r, "/domains", keep)
 	offset := 0
 	if o := q.Get("offset"); err == nil && o != "" {
@@ -441,15 +461,52 @@ func (s *Server) filterOptions(f stats.Filter) (routes, sources, ifaces []option
 		opts(iv, f.Interface, map[string]string{"all": "all interfaces", "none": "no interface"})
 }
 
+// ruleOptions lists the choices of the domains page's rule filter: every
+// rule of the running configuration, the decisions that no rule made,
+// and a chosen value that the configuration no longer names, such as a
+// renamed rule (design 0009 D3.2). links maps each of them but the last
+// to the page that configures it.
+func (s *Server) ruleOptions(chosen string) (opts []option, links map[string]string) {
+	if chosen == "" {
+		chosen = "all"
+	}
+	links = map[string]string{policy.RuleDefault: "/proxy", policy.RuleRemoteDefault: "/remote",
+		policy.RuleRemoteDirect: "/remote", policy.RulePort: "/remote"}
+	opts = []option{{Value: "all", Label: "all rules"}}
+	if cfg := s.backend.Config(); cfg != nil {
+		for _, r := range cfg.Rules {
+			opts = append(opts, option{Value: r.Name, Label: r.Name})
+			links[r.Name] = "/rules/" + r.Name
+		}
+	}
+	for _, p := range []struct{ v, l string }{
+		{policy.RuleDefault, "default: no rule matched"},
+		{policy.RuleRemoteDefault, "remote-default: no rule matched a remote client"},
+		{policy.RuleRemoteDirect, "remote-direct: direct refused to a remote client"},
+		{policy.RulePort, "port: a port that remote clients may not use"},
+	} {
+		opts = append(opts, option{Value: p.v, Label: p.l})
+	}
+	if !slices.ContainsFunc(opts, func(o option) bool { return o.Value == chosen }) {
+		opts = append(opts, option{Value: chosen, Label: chosen})
+	}
+	for i := range opts {
+		opts[i].Selected = opts[i].Value == chosen
+	}
+	return opts, links
+}
+
 // livePage is the data of GET /live.
 type livePage struct {
 	Status   control.Status
 	Counters []counter
+	// Ret is the page that Route… returns to.
+	Ret string
 }
 
 // getLive lists the active tunnels and reloads every 5 s (design 0005 D9).
 func (s *Server) getLive(w http.ResponseWriter, r *http.Request, _ string, v session) {
 	st := s.backend.Status()
 	s.render(w, http.StatusOK, "live", pageData{Title: "Live", Token: v.csrf, Page: "live", Refresh: liveRefresh,
-		Data: livePage{Status: st, Counters: pickCounters(st.Counters)}, status: &st})
+		Data: livePage{Status: st, Counters: pickCounters(st.Counters), Ret: trafficRet(r)}, status: &st})
 }

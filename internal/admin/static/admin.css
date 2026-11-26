@@ -248,6 +248,7 @@ main:focus { outline: none; }
   background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--muted); border-radius: 8px;
 }
 .banner > .ic { margin-top: 2px; color: var(--ink-2); }
+.banner.info { background: var(--direct-soft); border-left-color: var(--direct); }
 .banner.info > .ic { color: var(--direct); }
 .banner.ok { background: var(--ok-soft); border-left-color: var(--ok); }
 .banner.ok > .ic { color: var(--ok); }
@@ -340,9 +341,9 @@ textarea.input { min-height: 96px; padding: 8px 10px; line-height: 1.5; resize: 
 
 /* Filters above a table */
 .filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; padding: 14px 16px; margin-bottom: 16px; }
-.filters .field { flex: 1 1 150px; gap: 4px; }
+.filters .field { flex: 1 1 120px; gap: 4px; }
 .filters .field > label { font-size: 13px; color: var(--ink-2); }
-.filters .field.date { flex: 0 1 160px; }
+.filters .field.date { flex: 0 1 140px; }
 .filters .go { display: flex; gap: 8px; }
 .filters .hint { flex: 1 1 100%; margin-top: -4px; }
 
@@ -902,7 +903,7 @@ a.badge.warn { text-decoration: none; }
 /* The upstream editor: a dialog over the list with the script, a panel
    on its own page without it. */
 dialog.editor-dialog { width: min(680px, calc(100% - 32px)); }
-.editor-slot, .up-editor, .upstream-form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.editor-slot, .up-editor, .upstream-form, .route-form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 .up-editor .dlg-body { flex: 1 1 auto; min-height: 0; align-content: start; }
 .up-page { overflow: hidden; }
 .upstream-form details.disclosure { padding-top: 12px; border-top: 1px solid var(--line); }
@@ -922,4 +923,47 @@ dialog.editor-dialog { width: min(680px, calc(100% - 32px)); }
   .r-pos .input { width: 56px; }
   .test-res .res-dl { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .test-res .res-dl dd { margin-bottom: 6px; }
+}
+
+/* ------------------------------------------- overview and Route a host */
+/* The stacked route bar of design 0009 D3.1: each part grows by its share
+   in whole percents, from classes, since the policy refuses inline
+   styles. The second and later upstreams share the upstream hue in
+   lighter shades. */
+.routebar i.g1 { flex-grow: 1; } .routebar i.g2 { flex-grow: 2; } .routebar i.g3 { flex-grow: 3; } .routebar i.g4 { flex-grow: 4; } .routebar i.g5 { flex-grow: 5; } .routebar i.g6 { flex-grow: 6; } .routebar i.g7 { flex-grow: 7; } .routebar i.g8 { flex-grow: 8; } .routebar i.g9 { flex-grow: 9; } .routebar i.g10 { flex-grow: 10; }
+.routebar i.g11 { flex-grow: 11; } .routebar i.g12 { flex-grow: 12; } .routebar i.g13 { flex-grow: 13; } .routebar i.g14 { flex-grow: 14; } .routebar i.g15 { flex-grow: 15; } .routebar i.g16 { flex-grow: 16; } .routebar i.g17 { flex-grow: 17; } .routebar i.g18 { flex-grow: 18; } .routebar i.g19 { flex-grow: 19; } .routebar i.g20 { flex-grow: 20; }
+.routebar i.g21 { flex-grow: 21; } .routebar i.g22 { flex-grow: 22; } .routebar i.g23 { flex-grow: 23; } .routebar i.g24 { flex-grow: 24; } .routebar i.g25 { flex-grow: 25; } .routebar i.g26 { flex-grow: 26; } .routebar i.g27 { flex-grow: 27; } .routebar i.g28 { flex-grow: 28; } .routebar i.g29 { flex-grow: 29; } .routebar i.g30 { flex-grow: 30; }
+.routebar i.g31 { flex-grow: 31; } .routebar i.g32 { flex-grow: 32; } .routebar i.g33 { flex-grow: 33; } .routebar i.g34 { flex-grow: 34; } .routebar i.g35 { flex-grow: 35; } .routebar i.g36 { flex-grow: 36; } .routebar i.g37 { flex-grow: 37; } .routebar i.g38 { flex-grow: 38; } .routebar i.g39 { flex-grow: 39; } .routebar i.g40 { flex-grow: 40; }
+.routebar i.g41 { flex-grow: 41; } .routebar i.g42 { flex-grow: 42; } .routebar i.g43 { flex-grow: 43; } .routebar i.g44 { flex-grow: 44; } .routebar i.g45 { flex-grow: 45; } .routebar i.g46 { flex-grow: 46; } .routebar i.g47 { flex-grow: 47; } .routebar i.g48 { flex-grow: 48; } .routebar i.g49 { flex-grow: 49; } .routebar i.g50 { flex-grow: 50; }
+.routebar i.g51 { flex-grow: 51; } .routebar i.g52 { flex-grow: 52; } .routebar i.g53 { flex-grow: 53; } .routebar i.g54 { flex-grow: 54; } .routebar i.g55 { flex-grow: 55; } .routebar i.g56 { flex-grow: 56; } .routebar i.g57 { flex-grow: 57; } .routebar i.g58 { flex-grow: 58; } .routebar i.g59 { flex-grow: 59; } .routebar i.g60 { flex-grow: 60; }
+.routebar i.g61 { flex-grow: 61; } .routebar i.g62 { flex-grow: 62; } .routebar i.g63 { flex-grow: 63; } .routebar i.g64 { flex-grow: 64; } .routebar i.g65 { flex-grow: 65; } .routebar i.g66 { flex-grow: 66; } .routebar i.g67 { flex-grow: 67; } .routebar i.g68 { flex-grow: 68; } .routebar i.g69 { flex-grow: 69; } .routebar i.g70 { flex-grow: 70; }
+.routebar i.g71 { flex-grow: 71; } .routebar i.g72 { flex-grow: 72; } .routebar i.g73 { flex-grow: 73; } .routebar i.g74 { flex-grow: 74; } .routebar i.g75 { flex-grow: 75; } .routebar i.g76 { flex-grow: 76; } .routebar i.g77 { flex-grow: 77; } .routebar i.g78 { flex-grow: 78; } .routebar i.g79 { flex-grow: 79; } .routebar i.g80 { flex-grow: 80; }
+.routebar i.g81 { flex-grow: 81; } .routebar i.g82 { flex-grow: 82; } .routebar i.g83 { flex-grow: 83; } .routebar i.g84 { flex-grow: 84; } .routebar i.g85 { flex-grow: 85; } .routebar i.g86 { flex-grow: 86; } .routebar i.g87 { flex-grow: 87; } .routebar i.g88 { flex-grow: 88; } .routebar i.g89 { flex-grow: 89; } .routebar i.g90 { flex-grow: 90; }
+.routebar i.g91 { flex-grow: 91; } .routebar i.g92 { flex-grow: 92; } .routebar i.g93 { flex-grow: 93; } .routebar i.g94 { flex-grow: 94; } .routebar i.g95 { flex-grow: 95; } .routebar i.g96 { flex-grow: 96; } .routebar i.g97 { flex-grow: 97; } .routebar i.g98 { flex-grow: 98; } .routebar i.g99 { flex-grow: 99; } .routebar i.g100 { flex-grow: 100; }
+.routebar i.shade2, .rt.shade2::before, .lg.shade2::before { opacity: .6; }
+.routebar i.shade3, .rt.shade3::before, .lg.shade3::before { opacity: .35; }
+.route-totals { display: flex; flex-wrap: wrap; gap: 2px 12px; margin: 0; padding: 0 16px 8px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.top-hosts > .panel { align-self: stretch; display: flex; flex-direction: column; }
+.top-hosts .hosts { flex: 1 1 auto; }
+.top-hosts .hosts li { min-height: 40px; }
+.hosts .act .ic { width: 15px; height: 15px; }
+.states .panel-head a.hint { font-size: 13px; }
+.states .kv dt { display: flex; align-items: center; min-width: 0; }
+.states .kv dt a { overflow-wrap: anywhere; }
+table.data th.act, table.data td.act { width: 1%; text-align: right; white-space: nowrap; }
+table.data td.act .btn { margin: -4px 0; }
+td.rules a { text-decoration-color: var(--line-strong); }
+.route-editor .verdict.now .v-lab { font-weight: 600; color: var(--ink); }
+.route-editor .verdict.now .err { color: var(--block); }
+.route-editor .rcards.matches { grid-template-columns: minmax(0, 1fr); }
+.route-editor .rcard b { font-size: 13px; }
+
+@media (max-width: 759px) {
+  .hero { padding: 16px; }
+  .hero-sentence { font-size: 16px; }
+  table.resp td.act { display: block; text-align: left; padding-top: 6px; }
+  table.data td.act .btn { margin: 0; }
+  table.resp td.act .route-btn { width: auto; padding: 0 12px; border-color: var(--line-strong); }
+  .states .kv { grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; }
+  .states .kv dd { margin-bottom: 0; }
 }

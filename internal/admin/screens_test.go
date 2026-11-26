@@ -505,6 +505,37 @@ func TestAdminScreens(t *testing.T) {
 		t.Errorf("the toast showed again: %d", left)
 	}
 
+	// Leaving through a review's Apply changes (OI-0006 AA-R8): with
+	// unsaved text in the editor, the Apply of a restore asks first, since
+	// the restore loses that text, and the Apply of the text's own review
+	// does not. The submit is stopped before it leaves, and a beforeunload
+	// event shows what the guard answers.
+	asks := func(open string) bool {
+		t.Helper()
+		p.Navigate(base + "/settings")
+		setText(readFile(t, f.be.path) + "# unsaved\n")
+		file := readFile(t, f.be.path)
+		if ds := openReview(open); !ds.Open {
+			t.Fatalf("no review dialog from %s", open)
+		}
+		var prevented bool
+		eval(`(() => { window.addEventListener("submit", (e) => e.preventDefault(), {once: true});
+			document.querySelector("#review-dialog .dlg-foot .btn.primary").click();
+			const e = new Event("beforeunload", {cancelable: true}); window.dispatchEvent(e);
+			document.getElementById("review-dialog").close(); return e.defaultPrevented; })()`, &prevented)
+		// The editor goes back to the file, so that the next navigation
+		// leaves without a prompt.
+		setText(file)
+		return prevented
+	}
+	if !asks(`form.inline-form [value="review"]`) {
+		t.Error("Apply of a restore left the unsaved editor text without asking")
+	}
+	if asks(`.editor-form [data-primary]`) {
+		t.Error("Apply of the editor's own review asked first")
+	}
+	clean("restore with unsaved text")
+
 	// The phone menu is a <details>: it opens, shows the navigation with
 	// the current page, and Escape closes it.
 	p.Viewport(390, 844, true)

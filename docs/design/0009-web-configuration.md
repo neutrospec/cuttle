@@ -155,7 +155,10 @@ Changes to the [0005 D9][d5-9] overview, delivered in M4.4:
   route in the route colors (D11), with a legend that names each route,
   its bytes, and its share.
 - The per-route top-host tables stay, each host with a "Route…" action
-  (D3.12).
+  (D3.12). As the prototype draws them, they are compact lists side by
+  side, each host with its bytes, or requests on `block`, and a bar;
+  each list's head gives the route's hosts, requests, and failures, and
+  the legend its bytes. The domains page keeps the full columns.
 - Upstream and interface states become compact rows with state badges;
   each name links to its configuration page.
 - A configuration summary: the number of rules, upstreams, and
@@ -440,6 +443,19 @@ shows:
 So routing a host takes four activations: Route…, the route, Review
 changes, and Apply changes. The match and the place have defaults.
 
+The new rule is named after its pattern, as the rule editor suggests a
+name, with a number added when the name is taken; the operator renames
+it on the Rules page. Without the script "Where" lists every rule
+without `ports`, grouped by route, and a rule of another route than the
+chosen one is a form error of the field; with it, the select shows only
+the chosen route's rules. The server accepts only an offered match for
+the posted host, which it checks again, so a form cannot add a pattern
+broader than the parent the operator picked. The review adds how the
+candidate routes the host for a local client, and warns when an earlier
+rule still decides it, as for a pattern added to a rule below the one
+that matches now. `return` names the traffic page that apply goes back
+to.
+
 #### D3.13 Common states
 
 | State | Where | Presentation |
@@ -448,7 +464,7 @@ changes, and Apply changes. The match and the place have defaults.
 | Loading | Script requests only: live test, live check, review dialog | The control keeps its content and shows a small inline spinner after 150 ms; pages themselves render on the server |
 | Request failed | Script requests | The panel says "Could not reach cuttle. Check that it is running, then try again" with a Retry button; the form keeps its values |
 | Field errors | Forms | Under each field, with `aria-invalid`; an error summary at the top that links to each field and takes focus after a full-page submit |
-| Unsaved changes | Forms and the rules order | A sticky bar at the bottom with Discard and Review changes; leaving the page asks first |
+| Unsaved changes | Forms and the rules order | A sticky bar at the bottom with Discard and Review changes; leaving the page asks first, also through the Apply of a review that holds another edit, such as a restore while the Advanced editor has unsaved text. The editor dialogs over a list (upstream, interface, Route a host) are not guarded: closing one drops its form, and the page behind it holds no edit (OI-0006 AC-R4) |
 | Conflict | Review and apply | D7 |
 | Restart required | Shell banner, review, toast | The keys, and the command `brew services restart cuttle` |
 | Reload failed | Toast and shell banner | The validator's messages; the running configuration stays |
@@ -684,7 +700,7 @@ and passes `http.CrossOriginProtection` ([0005 D8][d5-8]).
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/rules`, `/rules/new`, `/rules/{name}` | Rules list (`?q=` filter, `?test=` and `source=` for Test a URL), new rule (`?host=` prefill), rule editor |
+| `GET` | `/rules`, `/rules/new`, `/rules/{name}` | Rules list (`?q=` filter, `?test=` and `source=` for Test a URL), new rule (`?from=` for Duplicate; `?host=` and `return=` for Route a host, D3.12), rule editor |
 | `GET` | `/upstreams`, `/upstreams/new`, `/upstreams/{name}` | List and editor |
 | `GET` | `/interfaces`, `/interfaces/new`, `/interfaces/{name}` | Definitions, detected table, editor (`?device=` prefill) |
 | `GET` | `/proxy`, `/remote`, `/general`, `/account` | Settings forms |

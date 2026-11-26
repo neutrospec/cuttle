@@ -26,7 +26,7 @@ func lcs(a, b []string) int {
 
 // check verifies one diff: the lines rebuild both texts with consecutive
 // line numbers, the edit script is shortest when want is set, removals
-// come before additions within a run, and the hunks with context 3
+// come before additions within a run, and the hunks with context 0 to 3
 // rebuild the new text from the old one.
 func check(t *testing.T, a, b string, shortest bool) []Line {
 	t.Helper()
@@ -68,6 +68,13 @@ func check(t *testing.T, a, b string, shortest bool) []Line {
 			t.Fatalf("%d edits, want %d for\n%q\n%q", edits, want, a, b)
 		}
 	}
+	// Any context rebuilds it, also none, where a hunk may hold only
+	// added lines (OI-0006 AA-R4).
+	for _, c := range []int{0, 1, 2} {
+		if got, ok := Apply(a, Hunks(lines, c)); !ok || got != b {
+			t.Fatalf("the hunks with context %d do not rebuild the new text: %v\n%q\nwant %q", c, ok, got, b)
+		}
+	}
 	hunks := Hunks(lines, 3)
 	got, ok := Apply(a, hunks)
 	if !ok || got != b {
@@ -100,6 +107,8 @@ func TestTextDiff(t *testing.T) {
 		{"a\nb", "a\nb\n"},
 		{"a\nb\nc\n", "a\nc\n"},
 		{"a\nb\nc\n", "a\nx\nc\n"},
+		{"a\nb\n", "a\nX\nb\n"},
+		{"a\nb\n", "a\nb\nX\n"},
 		{"x\r\ny\n", "x\ny\n"},
 		{"1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n", "1\n2\nX\n4\n5\n6\n7\n8\n9\n10\n11\n12\nY\n14\n15\n"},
 	}

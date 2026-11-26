@@ -335,8 +335,12 @@ func (s *Server) draftForm(w http.ResponseWriter, r *http.Request, v session, d 
 	if err := op.Edit(d.doc, f); err != nil {
 		var inUse *config.InUseError
 		switch {
-		case errors.Is(err, config.ErrNotFound):
+		case errors.Is(err, config.ErrNotFound) && f.Target != "":
 			s.refuseForm(w, r, v, d, http.StatusConflict, gone(op.Kind, f.Target))
+		case errors.Is(err, config.ErrNotFound):
+			// Another entity than the target, such as the rule that
+			// "Add to rule" names (design 0009 D3.12).
+			s.refuseForm(w, r, v, d, http.StatusConflict, plain(changedElsewhere(err)))
 		case errors.Is(err, config.ErrOrder), errors.Is(err, config.ErrRuleChanged), errors.As(err, &inUse):
 			s.refuseForm(w, r, v, d, http.StatusConflict, plain(changedElsewhere(err)))
 		default:

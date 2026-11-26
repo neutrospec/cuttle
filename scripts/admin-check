@@ -1,21 +1,25 @@
 #!/bin/sh
 # Runs the headless Chrome admin checks: design 0005 A10, the T2 check
 # at M2 close (design 0007 D7), and the browser check of the admin shell,
-# visual system, and script of design 0009 (D2, D10, D11).
+# visual system, script, and form flows of design 0009 (D2, D10, D11,
+# W26).
 #
 # TestAdminChrome builds cuttle, serves it with temporary XDG directories
 # and test-chosen loopback ports, and drives headless Chrome through
-# sign-in and every page, also at 390 px in light and dark appearance.
+# sign-in, every page, and the form flows of W26 against the built
+# binary, also at 390 px in light and dark appearance.
 # TestAdminScreens serves the admin pages with example traffic and state
 # and checks each page at 1280 and 390 px in both appearances, the
 # script's controls, the review dialog and apply, the file banners, the
 # previous version, and the pages without the script.
 # TestAdminScreensSettings does the same for the Interfaces, Proxy,
-# Remote clients, General, and Account pages, and TestAdminScreensRules
-# for the Rules and Upstreams pages, and both drive their flows with and
-# without the script. All use a throwaway profile and the mock keychain;
-# Chrome opens no window and no debugging port, and its only proxy is a
-# listener that refuses every request.
+# Remote clients, General, and Account pages, TestAdminScreensRules for
+# the Rules and Upstreams pages, and TestAdminScreensRoute for the
+# overview, the domains rule filter, Route a host, and the Account error
+# summary; they drive their flows with and without the script. All use a
+# throwaway profile and the mock keychain; Chrome opens no window and no
+# debugging port, and its only proxy is a listener that refuses every
+# request.
 #
 #   scripts/admin-check
 #
@@ -24,15 +28,26 @@
 set -eu
 
 cd "$(dirname "$0")/.."
+# Every temporary file of this run, the test binaries, the built cuttle,
+# and the Chrome profiles, goes under one new directory, so that the
+# check for leftover processes below sees only this run's processes, not
+# a run in another worktree or an installed cuttle (OI-0006 AB-R4). The
+# path is short, because tests put Unix sockets under it.
+run_tmp=$(mktemp -d /tmp/cuttle-ac.XXXXXX)
+run_tmp=$(cd "$run_tmp" && pwd -P)
+trap 'rm -rf "$run_tmp"' EXIT
+export TMPDIR="$run_tmp"
 set -x
 CUTTLE_ADMIN_CHROME=1 go test -count=1 -v -run '^TestAdminChrome$' ./cmd/cuttle
 CUTTLE_ADMIN_CHROME=1 go test -count=1 -v -run '^TestAdminScreens$' ./internal/admin
 CUTTLE_ADMIN_CHROME=1 go test -count=1 -v -run '^TestAdminScreensSettings$' ./internal/admin
 CUTTLE_ADMIN_CHROME=1 go test -count=1 -v -run '^TestAdminScreensRules$' ./internal/admin
+CUTTLE_ADMIN_CHROME=1 go test -count=1 -v -run '^TestAdminScreensRoute$' ./internal/admin
 { set +x; } 2>/dev/null
-# Only this check's processes: the binary under cuttle-bin-* and Chrome
-# with a throwaway profile under a test's temporary directory.
-pids=$(/usr/bin/pgrep -f 'cuttle-bin-|TestAdminChrome|TestAdminScreens' || true)
+# Only this run's processes: anything whose command line names its
+# temporary directory, such as the binary under cuttle-bin-* and Chrome
+# with a throwaway profile.
+pids=$(/usr/bin/pgrep -f "$run_tmp" || true)
 if [ -n "$pids" ]; then
 	echo "admin-check: processes left: $pids" >&2
 	exit 1

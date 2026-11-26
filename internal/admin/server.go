@@ -287,6 +287,9 @@ type pageData struct {
 	Banners []banner
 	// Toasts report the result of the request's action.
 	Toasts []toast
+	// Fragment marks a render of one block for a script request, so that
+	// a block does not take the focus as a whole page does.
+	Fragment bool
 	// status is the instance state the page shows, so that the shell
 	// and the page agree; nil makes render read it.
 	status *control.Status

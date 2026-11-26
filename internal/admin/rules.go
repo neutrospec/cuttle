@@ -52,6 +52,10 @@ var ruleFormFields = []formField{
 	}},
 	{Name: "ifaces_list", Key: "interfaces", Label: "Interfaces", Kind: fieldList, Under: "ifaces"},
 	{Name: "position", Label: "Position", Kind: fieldText},
+	// from names the rule that a new rule duplicates. It has only a
+	// rendered value, so that Discard returns to the copy after any
+	// re-render (OI-0006 AC-R2).
+	{Name: "from", Label: "Copy of", Kind: fieldText},
 }
 
 // orderFields are the fields of the rule order: the names in the order
@@ -588,6 +592,9 @@ func (s *Server) ruleEditView(ctx context.Context, d *config.Doc, f *form) *rule
 	st := s.confState()
 	v := &ruleEditView{ReadOnly: st.readOnly, New: f.New, Action: f.Value("action"), Ifaces: f.Value("ifaces"),
 		InterfacesHref: pagePath("interfaces"), UpstreamsHref: "/upstreams"}
+	if from := f.Rendered("from"); f.New && config.ValidName(config.KindRule, from) {
+		v.From = from
+	}
 	cur := st.doc
 	status := s.backend.Status()
 	states := s.upstreamStates(status)
@@ -651,15 +658,16 @@ func (s *Server) getRule(w http.ResponseWriter, r *http.Request, _ string, v ses
 	digest := st.file.Digest
 	var fm *form
 	missing := ""
-	from := ""
 	switch {
+	case name == "new" && r.URL.Query().Has("host") && s.getRouteHost(w, r, v):
+		return
 	case name == "new":
 		vals := map[string]string{"action": "direct", "ifaces": "default", "position": "first",
 			"allow_loopback": "false", "allow_private": "false"}
 		if f := r.URL.Query().Get("from"); config.ValidName(config.KindRule, f) {
 			if dup, err := st.doc.DuplicateRule(f); err == nil {
-				vals, from = ruleValues(dup), f
-				vals["position"] = "first"
+				vals = ruleValues(dup)
+				vals["position"], vals["from"] = "first", f
 			}
 		}
 		fm = newFormFrom(op, vals, "", digest, "/rules")
@@ -679,7 +687,6 @@ func (s *Server) getRule(w http.ResponseWriter, r *http.Request, _ string, v ses
 		return
 	}
 	view := s.ruleEditView(r.Context(), st.doc, fm)
-	view.From = from
 	title := "Add rule"
 	if !fm.New {
 		title = "Rule " + name

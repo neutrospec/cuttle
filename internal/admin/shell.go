@@ -284,6 +284,7 @@ func wantsFragment(r *http.Request) bool { return r.Header.Get(fragmentHeader) =
 // children with that element. The block gets the pageData that the
 // whole page gets, and html/template escapes it as in the page.
 func (s *Server) renderFragment(w http.ResponseWriter, code int, page, block string, d pageData) {
+	d.Fragment = true
 	var buf bytes.Buffer
 	if err := s.pages[page].ExecuteTemplate(&buf, block, d); err != nil {
 		s.log.Error("admin fragment", "page", page, "block", block, "error", err.Error())

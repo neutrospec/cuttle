@@ -270,6 +270,7 @@ func (s *Server) upstreamEditView(_ *config.Doc, f *form) *upstreamEditView {
 	v := &upstreamEditView{ReadOnly: st.readOnly, New: f.New, InterfacesHref: pagePath("interfaces"), Ifaces: f.Value("ifaces"),
 		DefConnect: defaultUpConnect, DefResp: defaultUpResponse, DefHold: defaultUpHold}
 	v.Interfaces = s.ifListChoice(f, st.doc, "system", "System routing", "Add at least one interface, or choose System routing.")
+	v.Interfaces.ListHint = "Connections to the upstream use only these interfaces, in this order; the first one that is online carries the connection."
 	or := func(val, def string) string {
 		if strings.TrimSpace(val) == "" {
 			return def
