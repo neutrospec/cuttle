@@ -44,22 +44,20 @@ A closed task becomes one line under Closed:
 ### TASK-0026 — Prebuilt bottles from the tap's CI
 
 - Milestone: none (packaging follow-up to M3.1)
-- Status: implement
+- Status: review
 - Iteration: 2/3
 - Workers: infra on `t3/homebrew-bottle-workflows` and tap branches
-  `bottle-workflows` and `cuttle-bottles`
+  `bottle-workflows` and `bump-cuttle-0.2.0`
 - Base: `fd5f615`; tap `bcec56d`
-- Candidate: `03db298` (tree `893955b`); tap `90456f5` (workflows) and
-  `2435b3d` (formula header)
+- Candidate: `3a1cffb` (tree `31f4c01`) on `03db298`; tap `c9e0b51`
+  (workflows) and `48e6583` (formula header)
 - Evidence: `gates: none` (docs and formula comment only); actionlint
-  1.7.12 with `brew style`'s ignores, a YAML parse, and `brew style` on the
-  tap formula pass; CI evidence follows the approved pushes
-- Findings: F1 medium (security), `publish.yml` accepts an optional
-  `head_sha`, fork heads, and non-formula files — implementer; minor F2
-  (`xcode-27` is GA), F3 (branch and tag share `cuttle-X.Y.Z`), F4 (AGENTS
-  wording) folded into the same round
-- Next action: infra — fix F1–F4 and the nit, then hand the fixes to a
-  fresh re-check
+  1.7.12 with `brew style`'s ignores, a YAML parse, `brew style` on both
+  formula copies, a link check, 17 stubbed precheck cases, and the tap
+  pre-push check on synthetic repositories pass; CI evidence follows the
+  approved pushes
+- Findings: F1–F4 and the nit fixed, awaiting re-check
+- Next action: reviewer — re-check the F1–F4 fixes
 
 ## Closed
 
