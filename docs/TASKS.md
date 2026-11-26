@@ -41,20 +41,6 @@ A closed task becomes one line under Closed:
 
 ## Active
 
-### TASK-0025 — Publish v0.2.0
-
-- Milestone: M4 close
-- Status: approval
-- Iteration: 1/3
-- Workers: orchestrator on `main`
-- Base: this board update
-- Candidate: `main` with tag `v0.2.0`
-- Evidence: none yet
-- Findings: none
-- Next action: orchestrator — run `scripts/publish-scan` on a scratch bare
-  repository holding `main`, `v0.1.0`, and `v0.2.0`, then ask the user to
-  confirm the push and the tap update
-
 ## Closed
 
 The history was rewritten on 2026-11-25 (TASK-0003) to remove local
@@ -63,6 +49,11 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0025 — Publish v0.2.0 — landed: `main` and `v0.2.0` (`e61543e`)
+  pushed to `neutrospec/cuttle`, tap `bcec56d`, gates: none @ `6d08a01`;
+  the pre-push and remote scans show only the two matches OI-0004
+  accepts; `brew test` and `brew audit --strict` pass from the tap, and
+  the user's service runs 0.2.0 after `cuttle check`
 - TASK-0024 — v0.2.0 release preparation — landed `924253d`, gates: T0 T1
   T2 @ `dc09c81` (landed tree differs only in tracking records), with the
   review's three changelog fixes in `30dcabf` (gates: none); iteration 1
