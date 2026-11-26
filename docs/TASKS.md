@@ -44,28 +44,19 @@ A closed task becomes one line under Closed:
 ### TASK-0019 — M4.1 B2: admin shell, visual system, and script core
 
 - Milestone: M4.1
-- Status: implement
+- Status: review
 - Iteration: 1/3
-- Workers: implementer on a T3 worktree branch, alongside TASK-0018
-- Base: this board update
-- Candidate: none
-- Evidence: none
-- Findings: none
-- Next action: implementer — build task B2 of design 0009 (W13) to the
-  approved prototype and return the candidate
-
-### TASK-0018 — M4.1 A: configuration model and canonical writer
-
-- Milestone: M4.1
-- Status: implement
-- Iteration: 1/3
-- Workers: implementer on a T3 worktree branch, alongside TASK-0019
-- Base: this board update
-- Candidate: none
-- Evidence: none
-- Findings: none
-- Next action: implementer — build task A of design 0009 (W1–W4, W14,
-  OI-0006 U-R1) and return the candidate
+- Workers: implementer done on branch `t3/admin-shell-visual-system`;
+  fresh reviewer running
+- Base: `dccee4c`
+- Candidate: `7430ead` (tree `1bc90af`)
+- Evidence: implementer ran `scripts/gate t0`, `t1`, and
+  `scripts/admin-check` on `1bc90af`, all pass; W13 tests, 8 mutation
+  proofs, and 46 headless Chrome screenshots at 1280 and 390 px in light
+  and dark with no horizontal overflow
+- Findings: none yet
+- Next action: reviewer — risk-based review of `dccee4c..7430ead`,
+  including the screenshots against the prototype
 
 ## Closed
 
@@ -75,6 +66,9 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0018 — M4.1 A: configuration model and canonical writer — landed
+  `63e8090`, gates: T0 T1 @ `5f0459f` (landed tree differs only in tracking
+  records); iteration 1 of 3; follow-ups Z-R1–Z-R9 in OI-0006
 - TASK-0017 — M4 design: full configuration in the web admin — landed
   `0167a58`, gates: none @ `4b8d4a7`; reviewed tree `dc39942` (iteration 3
   of 3); prototype approved by the user; follow-ups Y-R1–Y-R5 binding for

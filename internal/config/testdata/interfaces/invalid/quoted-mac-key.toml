@@ -1,4 +1,4 @@
-# want: 6 : TOML syntax: expected value but found "adapter" instead
+# want: 6 notes.00:00:5e:00:53:13: TOML syntax: expected value but found "adapter" instead
 name = "cuttle-test"
 [proxy]
 default = "direct"

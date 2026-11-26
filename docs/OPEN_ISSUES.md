@@ -441,6 +441,11 @@ Move resolved items to Closed with their resolving commit or evidence.
     editor does. U-R5 (test, nit): `expectRe` in
     `internal/config/config_test.go` cannot express a key that contains
     `:`, so three MAC-key fixtures no longer check the reported key path.
+    U-R1 and U-R5 are settled in TASK-0018 (M4.1 task A): `WriteAtomic`
+    returns a wrapped `ErrNotSynced` only after the final rename, and the
+    settings page treats it as saved and reloads (`TestAtomicWriteDirSync`,
+    `TestAdminSettingsDirSync`); `expectRe` accepts keys with `:`, and the
+    three fixtures check their key paths again.
     U-R3 and U-R4 are settled in TASK-0019 (M4.1 task B2): `/domains`
     offers the windows as links that drop a date range, its filter form
     carries the preset in force, a date range marks no preset, and
@@ -474,10 +479,31 @@ Move resolved items to Closed with their resolving commit or evidence.
     "Use the default list", "System routing") as mapping by the table, so
     a hidden sub-field cannot keep a key the choice removes. Y-R5 (nit):
     the conflict notice names the fields that changed elsewhere and stay.
+  - Z-R1–Z-R9 (from the TASK-0018 review; M4 tasks): Z-R1 (B1, minor): no
+    valid sample uses inline arrays of tables (`rule = [{...}]`), so a
+    `rawTables` defect that drops them on a form save goes unnoticed; add
+    one to `internal/config/testdata/canonical/`. Z-R2 (B1, minor): no test
+    shows that a failure before or at the final rename is not
+    `ErrNotSynced` (the reverse of U-R1); a 0500 directory makes the write
+    fail. Z-R3 (minor): a TOML syntax error inside a rule or upstream
+    `note` repeats up to about 10 characters of it in the message; give a
+    `LastKey` ending in `note` a generic message. Z-R4 (D, minor):
+    `WritePasswordFile` and `EnsureStarter` still treat `ErrNotSynced` as a
+    failure, so the D12 password change would report a failure after the
+    new hash is in place. Z-R5 (orchestrator, minor): the release that
+    ships `note` must warn that v0.1.0 refuses a file with notes (0004
+    D3). Z-R6 (nit): 0009 W2 names `TestCanonicalFixedPoint`, which is
+    checked inside `checkCanonical`. Z-R7 (nit): an escaped quote in a
+    single-line basic string is untested in `HandComments`. Z-R8 (B1,
+    nit): when the directory sync fails and the reload is also refused,
+    the settings notice drops the sync warning. Z-R9 (nit): the canonical
+    fixtures use `nas.lan`; prefer a reserved name. B1 also carries
+    `TestAdminSettingsDirSync` over to `/config/apply` (W14).
 - Next action: orchestrator — include the open items (V5, V8, V11, V12, P1,
   W1–W3, Z2, Z4, G1–G2, P-R3–P-R7, Q-R1–Q-R4, Q-R6–Q-R8, S-R1–S-R2,
-  U-R1–U-R5, X-R1–X-R5, and Y-R1–Y-R5) in the briefs of the stages they
-  affect; the producer closes each item with the commit that settles it.
+  U-R2–U-R4, X-R1–X-R5, Y-R1–Y-R5, and Z-R1–Z-R9) in the briefs of the
+  stages they affect; the producer closes each item with the commit that
+  settles it.
   The M1.4 items, R5 with the C13 remainder, the per-request source
   recheck of 0003 D10 with N5, the bind retry of V1, Z3, W-R1, and W-R2,
   are settled in TASK-0007.

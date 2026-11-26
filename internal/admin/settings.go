@@ -184,6 +184,14 @@ func (s *Server) postSettings(w http.ResponseWriter, r *http.Request, _ string, 
 	s.settingsMu.Lock()
 	defer s.settingsMu.Unlock()
 	err := config.WriteAtomic(d.Path, []byte(d.Text), config.WriteOptions{ExpectSHA256: d.Base, Backup: true})
+	// The file holds the new text even when the directory sync after the
+	// rename failed, so that counts as saved and the reload runs (OI-0006
+	// U-R1).
+	unsynced := errors.Is(err, config.ErrNotSynced)
+	if unsynced {
+		s.log.Warn("admin settings saved, but the directory could not be synced", "config", d.Path, "error", err.Error())
+		err = nil
+	}
 	if errors.Is(err, config.ErrConflict) {
 		s.log.Warn("admin settings conflict; the file changed since the page loaded", "config", d.Path)
 		d.Conflict = true
@@ -213,16 +221,23 @@ func (s *Server) postSettings(w http.ResponseWriter, r *http.Request, _ string, 
 		s.renderSettings(w, r, http.StatusUnprocessableEntity, v, d)
 		return
 	}
-	s.renderSettings(w, r, http.StatusOK, v, d, savedToast(res))
+	s.renderSettings(w, r, http.StatusOK, v, d, savedToast(res, unsynced))
 }
 
 // savedToast reports a save that the reload accepted (design 0009 D7):
-// restart-only keys and warnings make it a toast that stays. The page
-// lists the warnings, which the validator gives for the saved text.
-func savedToast(res control.ReloadResult) toast {
+// restart-only keys, warnings, and a directory that could not be synced
+// (OI-0006 U-R1) make it a toast that stays. The page lists the
+// warnings, which the validator gives for the saved text.
+func savedToast(res control.ReloadResult, unsynced bool) toast {
 	t := toast{Kind: "ok", Title: "Saved and reloaded."}
+	if unsynced {
+		t.Kind, t.Title = "warn", "Saved and reloaded; the directory could not be synced."
+	}
 	if keys := res.RestartRequired; len(keys) > 0 {
-		t.Kind, t.Title = "warn", "Saved and reloaded. Restart required."
+		t.Kind = "warn"
+		if !unsynced {
+			t.Title = "Saved and reloaded. Restart required."
+		}
 		t.Lines = append(t.Lines, append(plain("Restart required for: "+strings.Join(keys, ", ")+". These keys apply at the next start: "),
 			seg{Text: restartCommand, Code: true}))
 	}

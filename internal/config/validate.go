@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/BurntSushi/toml"
 
@@ -54,6 +55,12 @@ const (
 // Parse decodes and validates a configuration. file names the source in
 // messages. The Config is nil when the report has errors.
 func Parse(data []byte, file string) (*Config, *Report) {
+	cfg, _, r := parse(data, file)
+	return cfg, r
+}
+
+// parse is Parse that also returns the decoded TOML, for DocOf.
+func parse(data []byte, file string) (*Config, map[string]any, *Report) {
 	r := &Report{}
 	var raw map[string]any
 	if _, err := toml.Decode(string(data), &raw); err != nil {
@@ -63,15 +70,15 @@ func Parse(data []byte, file string) (*Config, *Report) {
 		} else {
 			r.Errors = append(r.Errors, Issue{File: file, Msg: "TOML: " + err.Error()})
 		}
-		return nil, r
+		return nil, nil, r
 	}
 	v := &validator{file: file, idx: indexLines(string(data)), r: r}
 	cfg := v.config(raw)
 	if len(r.Errors) > 0 {
-		return nil, r
+		return nil, nil, r
 	}
 	cfg.SHA256 = Digest(data)
-	return cfg, r
+	return cfg, raw, r
 }
 
 // syntaxIssue reports a TOML syntax error with its position and the
@@ -440,7 +447,8 @@ func (v *validator) config(raw map[string]any) *Config {
 	for _, te := range v.tables(raw, "upstream") {
 		um := te.m
 		base := elem("upstream", te.i)
-		v.known(um, base, "name", "address", "disclosure", "connect_timeout", "response_timeout", "unreachable_hold", "interfaces")
+		v.known(um, base, "name", "note", "address", "disclosure", "connect_timeout", "response_timeout", "unreachable_hold", "interfaces")
+		v.note(um, base)
 		u := Upstream{}
 		if name, ok := v.str(um, base, "name"); ok {
 			switch {
@@ -632,7 +640,8 @@ func (v *validator) rules(raw map[string]any, c *Config, upstreams map[string]bo
 	for _, te := range v.tables(raw, "rule") {
 		rm := te.m
 		base := elem("rule", te.i)
-		v.known(rm, base, "name", "hosts", "domains", "cidrs", "ports", "action", "allow_loopback", "allow_private", "interfaces")
+		v.known(rm, base, "name", "note", "hosts", "domains", "cidrs", "ports", "action", "allow_loopback", "allow_private", "interfaces")
+		v.note(rm, base)
 		r := policy.Rule{Name: "rule-" + strconv.Itoa(te.i+1)}
 		var at patternIdx
 		namePath := sub(base, "name")
@@ -841,7 +850,8 @@ func (v *validator) interfaces(raw map[string]any, c *Config) {
 	for _, te := range v.tables(raw, "interface") {
 		im := te.m
 		base := elem("interface", te.i)
-		v.known(im, base, "name", "mac", "device", "kind")
+		v.known(im, base, "name", "note", "mac", "device", "kind")
+		v.note(im, base)
 		d := Interface{}
 		if name, ok := v.str(im, base, "name"); ok {
 			path := sub(base, "name")
@@ -918,6 +928,31 @@ func (v *validator) interfaces(raw map[string]any, c *Config) {
 		c.Interfaces = append(c.Interfaces, d)
 	}
 }
+
+// MaxNoteLength is the longest note, in Unicode code points (design 0009
+// D6).
+const MaxNoteLength = 120
+
+// note checks the optional note of a rule, upstream, or interface (design
+// 0009 D6). It changes no behavior, so the Config does not hold it, and no
+// message repeats it.
+func (v *validator) note(m map[string]any, base string) {
+	s, ok := v.str(m, base, "note")
+	if !ok {
+		return
+	}
+	path := sub(base, "note")
+	if n := utf8.RuneCountInString(s); n > MaxNoteLength {
+		v.errf(path, "is %d characters long; a note has at most %d", n, MaxNoteLength)
+	}
+	if strings.ContainsFunc(s, isControl) {
+		v.errf(path, "contains a control character; a note is one line of text")
+	}
+}
+
+// isControl reports the control characters U+0000 to U+001F and U+007F.
+// TOML forbids each of them but tab raw in a basic string.
+func isControl(r rune) bool { return r < 0x20 || r == 0x7f }
 
 // interfaceList reads an interfaces list. It reports whether the key is
 // present. Each element must name a definition, once; an empty list is an

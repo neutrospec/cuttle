@@ -252,6 +252,25 @@ removes entries. Append new entries at the end, oldest first.
   command of a control, and check the planted value with `git log
   --format='%an <%ae>'` before counting a pass as a miss.
 
+### 2026-11-26 — implementer — TOML samples inside Go string literals
+
+- Task: TASK-0018, changing one line of a TOML sample written as a
+  double-quoted Go string in `internal/config/edit_test.go`.
+- Attempts: 3 for one sample line.
+- What failed: `sed -i '' "s/.../.../"` with the Go escapes of TOML
+  quotes (`\"`, `\\`) matched nothing and exited 0, so the file was
+  unchanged. A Python replacement then wrote `'it"s'` into the Go string,
+  which ended the literal (`expected ';', found s`). After that, the
+  sample `t = """\""""` had been written as `\"\"\"\\\"\"\"`, which is
+  `"""\"""` in TOML, an unterminated string; the comment counter under
+  test still returned a count, and only a check added later showed that
+  the sample was not TOML.
+- What to do instead: Write TOML samples in tests as Go raw strings
+  (backticks) where they hold no backtick, edit them with the exact-text
+  Edit tool rather than `sed`, and assert in the test that the sample
+  decodes with `toml.Decode` before using it, so an invalid sample fails
+  loudly.
+
 ### 2026-11-26 — implementer — waiting on a DOM change in a browser check
 
 - Task: TASK-0019, checking in `TestAdminScreens` that Validate replaces
