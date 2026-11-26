@@ -79,7 +79,7 @@ func (f *fixture) withExample() {
 	}
 	now := f.clock.Now()
 	f.be.mu.Lock()
-	f.be.cfg = cfg
+	f.be.cfg, f.be.start = cfg, cfg
 	f.be.status.Name, f.be.status.Version = "cuttle-edge", "0.2.0"
 	f.be.status.StartedAt = now.Add(-(3*24 + 4) * time.Hour)
 	f.be.loadedAt = now.Add(-2*time.Hour - 18*time.Minute)

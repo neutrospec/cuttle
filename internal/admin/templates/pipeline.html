@@ -1,0 +1,86 @@
+{{/* pipeline holds the blocks of the save pipeline of design 0009 D7
+   that every page shares: the review, the diff, the review dialog, and
+   the issues of a form. */}}
+
+{{/* review is the review of design 0009 D3.11, the one step before every
+   write: the title, the change summary, the notices, and the diff, with
+   Apply changes, Back to editing, and Cancel. The script shows it in the
+   page's review dialog; without the script it is a page (InPage). A
+   refusal shows its reason instead of the diff. Its argument is the
+   pageData. */}}
+{{define "review"}}{{with .Data}}<div class="review{{if .InPage}} panel review-page{{end}}" data-block="review">
+<form method="post" action="/config/apply" class="review-form" data-leave>
+<input type="hidden" name="csrf" value="{{$.Token}}">
+{{range .Carry}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">
+{{end}}{{if .CanApply}}<input type="hidden" name="reviewed" value="{{.Reviewed}}">
+<input type="hidden" name="text" value="{{.Text}}">
+{{end}}<div class="dlg-head"><div>{{if .InPage}}<h1 id="review-h">{{else}}<h2 id="review-h">{{end}}{{template "rich" .Title}}{{if .InPage}}</h1>{{else}}</h2>{{end}}
+<p>Nothing is written until you apply. The previous file stays in <code>{{.BakName}}</code>.</p></div>
+{{if not .InPage}}<button class="btn quiet icon-btn" type="button" data-close aria-label="Close">{{template "icon" "x"}}</button>
+{{end}}</div>
+<div class="dlg-body">
+{{if .Message}}<div class="banner {{if .Again}}warn{{else}}error{{end}}" role="alert">{{template "icon" "alert"}}<div class="b-body"><strong>{{template "rich" .Message}}</strong>
+{{if .Errors}}<ul class="issue-list errors">{{range .Errors}}<li>{{.}}</li>{{end}}</ul>
+{{end}}</div></div>
+{{end}}{{if .Summary}}<section class="r-sec" aria-labelledby="review-sum-h"><h3 id="review-sum-h">Summary</h3>
+<ul class="summary">{{range .Summary}}<li><span>{{template "rich" .}}</span></li>{{end}}</ul></section>
+{{end}}{{if .Notices}}<section class="notices" aria-label="Notices">{{range .Notices}}<div class="notice {{.Kind}}">{{template "icon" (bannerIcon .Kind)}}<div class="n-body"><span>{{template "rich" .Text}}</span>{{if .List}}
+<ul class="n-list">{{range .List}}<li>{{.}}</li>{{end}}</ul>{{end}}</div></div>
+{{end}}</section>
+{{end}}{{with .Diff}}<section class="r-sec" aria-label="Changes">{{template "diff" .}}</section>
+{{end}}</div>
+<div class="dlg-foot">
+{{if .CanApply}}<button type="submit" class="btn primary">Apply changes</button>
+{{end}}{{if .Again}}<button type="submit" class="btn primary" formaction="/config/draft" name="intent" value="review">Review again</button>
+{{end}}{{if .Back}}<button type="submit" class="btn" formaction="/config/draft" name="intent" value="edit" data-close>Back to editing</button>
+{{end}}{{if .Reload}}<a class="btn" href="{{.Reload}}">Reload the page</a>
+{{end}}<span class="spacer"></span>
+<a class="btn quiet" href="{{.Return}}" data-close>Cancel</a>
+</div>
+</form>
+</div>{{end}}{{end}}
+
+{{/* review-dialog is the dialog a page with a review shows it in; the
+   script loads the review block into #review and opens it. */}}
+{{define "review-dialog"}}<dialog id="review-dialog" class="review-dialog" aria-labelledby="review-h"><div id="review" class="review-slot"></div></dialog>
+{{end}}
+
+{{/* diff is the unified diff of design 0009 D3.11: both line numbers,
+   + and − marks as well as color, and unchanged stretches collapsed in
+   <details>, which needs no script. */}}
+{{define "diff"}}<div class="diff" role="region" aria-label="Changes to {{.File}}"><div class="diff-file"><span>{{.File}}</span><span>{{.Added}} added, {{.Removed}} removed</span></div>
+{{range .Parts}}{{if .Gap}}<details class="gap"><summary>{{.Label}}</summary>{{range .Lines}}{{template "dl" .}}{{end}}</details>
+{{else}}{{range .Lines}}{{template "dl" .}}{{end}}{{end}}{{end}}</div>{{end}}
+
+{{define "dl"}}<div class="dl{{if .Class}} {{.Class}}{{end}}"><span class="ln">{{.A}}</span><span class="ln">{{.B}}</span><span class="m">{{.Mark}}</span><span class="t">{{.Text}}{{if .NoEOL}}<span class="eol">no line feed at the end</span>{{end}}</span></div>
+{{end}}
+
+{{/* form-issues is the issue block of a form op (design 0009 D7): the
+   reason a draft was refused, the error summary with a link to each
+   field, the issues of the edited entity without a field, and the issues
+   of other entities with links to them. A check and a refused review
+   answer it to a script request. Its argument is the pageData with a
+   formPage. */}}
+{{define "form-issues"}}{{with .Data}}<div class="stack" data-block="form-issues">
+{{if .Message}}<div class="banner error" role="alert">{{template "icon" "alert"}}<div class="b-body"><strong>{{template "rich" .Message}}</strong>
+{{if .Reload}}<div class="b-actions"><a class="btn sm" href="{{.Reload}}">Reload the page</a></div>
+{{end}}</div></div>
+{{end}}{{with .Form}}{{if .HasErrors}}<div class="error-summary" role="alert" tabindex="-1"><h2>{{plural .ErrorCount "error"}}</h2><ul>
+{{range .Top}}<li>{{.}}</li>
+{{end}}{{range .Summary}}<li><a href="{{.Href}}">{{template "rich" .Label}}: {{.Msg}}</a></li>
+{{end}}</ul></div>
+{{end}}{{if .TopWarnings}}<div class="notices">{{range .TopWarnings}}<div class="notice warn">{{template "icon" "alert"}}<span>{{.}}</span></div>{{end}}</div>
+{{end}}{{if .Others}}<section class="others" aria-labelledby="others-h"><h3 id="others-h">Other entries</h3><ul>
+{{range .Others}}<li class="{{if .Warn}}wrn{{else}}err{{end}}"><a href="{{.Href}}">{{template "rich" .Label}}</a>: {{.Msg}}</li>
+{{end}}</ul></section>
+{{end}}{{end}}</div>{{end}}{{end}}
+
+{{/* restore is the Restore button: a review of the restore op. Its
+   argument is the pageData of a page whose Data has Base. */}}
+{{define "restore"}}<form method="post" action="/config/draft" class="inline-form">
+<input type="hidden" name="csrf" value="{{.Token}}">
+<input type="hidden" name="op" value="restore">
+<input type="hidden" name="base" value="{{.Data.Base}}">
+<input type="hidden" name="return" value="/settings">
+<button type="submit" class="btn" name="intent" value="review" data-fragment="review">{{template "icon" "refresh"}}Restore…</button>
+</form>{{end}}

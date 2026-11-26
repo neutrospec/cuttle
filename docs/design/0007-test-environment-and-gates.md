@@ -251,8 +251,9 @@ CUTTLE_REQUIRE_CURL=1 go test -race -count=1 -timeout 10m ./...
   same Chrome setup, with a local listener that refuses every request as
   its proxy, renders the admin pages with example traffic and state and
   a component gallery at 1280 and 390 px in both appearances with the
-  same checks, drives the script's controls, and checks the pages with
-  scripts disabled. `CUTTLE_CHROME` overrides the Chrome binary, and
+  same checks, drives the script's controls, the review dialog and its
+  apply, the file banners, and the previous version, and checks the pages
+  with scripts disabled, the review page included. `CUTTLE_CHROME` overrides the Chrome binary, and
   `CUTTLE_ADMIN_CHROME_OUT` names a directory for screenshots.
 - T2 at M3 close and every later milestone: the D8 M3 matrix, the Homebrew
   checks ([0006](0006-packaging-paths-and-lifecycle.md#acceptance-criteria)

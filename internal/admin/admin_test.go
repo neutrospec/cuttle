@@ -116,6 +116,12 @@ type req struct {
 
 func (b *browser) do(r req) *http.Response {
 	b.f.t.Helper()
+	return b.doWith(b.f.s, r)
+}
+
+// doWith is do through the handler h, such as a server with test pages.
+func (b *browser) doWith(h http.Handler, r req) *http.Response {
+	b.f.t.Helper()
 	host := r.host
 	switch host {
 	case "":
@@ -157,7 +163,7 @@ func (b *browser) do(r req) *http.Response {
 		}
 	}
 	rec := httptest.NewRecorder()
-	b.f.s.ServeHTTP(rec, hr)
+	h.ServeHTTP(rec, hr)
 	res := rec.Result()
 	if r.cookies == nil && !r.noCookies {
 		for _, c := range res.Cookies() {

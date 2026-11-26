@@ -479,6 +479,16 @@ Move resolved items to Closed with their resolving commit or evidence.
     "Use the default list", "System routing") as mapping by the table, so
     a hidden sub-field cannot keep a key the choice removes. Y-R5 (nit):
     the conflict notice names the fields that changed elsewhere and stay.
+    Settled in TASK-0020 (M4.1 task B1), apart from the W25 case of Y-R3:
+    apply checks `reviewed` and 0009 D7 and the alternatives say so, and
+    W8 has both cases (`TestAdminDraftConflict`); a delete op posts the
+    rendered values and its review warns (Y-R2); the pipeline answers
+    `409` for `config.ErrRuleChanged` at the draft step, proved with a
+    test-only "Add to rule" op, and the `route.host` op with its W25 case
+    stays with task E; D4 says every choice maps by the table, and
+    `form.Choice` compares and writes a choice with its chosen option's
+    sub-fields only (`TestFieldState`, Y-R4); the notice names the fields
+    that changed elsewhere and stay (Y-R5).
   - Z-R1–Z-R9 (from the TASK-0018 review; M4 tasks): Z-R1 (B1, minor): no
     valid sample uses inline arrays of tables (`rule = [{...}]`), so a
     `rawTables` defect that drops them on a form save goes unnoticed; add
@@ -499,6 +509,13 @@ Move resolved items to Closed with their resolving commit or evidence.
     the settings notice drops the sync warning. Z-R9 (nit): the canonical
     fixtures use `nas.lan`; prefer a reserved name. B1 also carries
     `TestAdminSettingsDirSync` over to `/config/apply` (W14).
+    Z-R1, Z-R2, Z-R8, and the W14 carry-over are settled in TASK-0020:
+    `testdata/canonical/inline-tables.toml`; `TestAtomicWriteDirSync`
+    (0500 directory) and `TestAtomicWriteFinalRename` (immutable target)
+    show that those failures are not `ErrNotSynced` and leave the file;
+    the toast and the settings notice keep the sync warning when the
+    reload refuses the file, and `TestAdminApply` covers both on
+    `/config/apply`.
   - T-R1–T-R3 (from the TASK-0019 reviews; M4 tasks): T-R1 (minor, UI):
     `overflow-wrap: break-word` on `td.host` (`admin.css:435`) also
     applies to host cells that are not the lead of a phone row (Overview
@@ -511,12 +528,14 @@ Move resolved items to Closed with their resolving commit or evidence.
     points at the test directory; find a launch flag or setting that
     stops it. T-R3 (B1): on Advanced, Command-Enter presses "Save and
     reload"; once B1 adds the review, the primary action must open the
-    review (0009 D5).
+    review (0009 D5). T-R3 is settled in TASK-0020: the primary action is
+    Review changes, and `TestAdminScreens` presses Command-Enter in the
+    editor and sees the review dialog without a save.
 - Next action: orchestrator — include the open items (V5, V8, V11, V12, P1,
   W1–W3, Z2, Z4, G1–G2, P-R3–P-R7, Q-R1–Q-R4, Q-R6–Q-R8, S-R1–S-R2, U-R2,
-  X-R1–X-R5, Y-R1–Y-R5, Z-R1–Z-R9, and T-R1–T-R3) in the briefs of the
-  stages they affect; the producer closes each item with the commit that
-  settles it.
+  X-R1–X-R5, the W25 case of Y-R3, Z-R3–Z-R7, Z-R9, and T-R1–T-R2) in
+  the briefs of the stages they affect; the producer closes each item
+  with the commit that settles it.
   The M1.4 items, R5 with the C13 remainder, the per-request source
   recheck of 0003 D10 with N5, the bind retry of V1, Z3, W-R1, and W-R2,
   are settled in TASK-0007.

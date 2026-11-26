@@ -51,6 +51,9 @@ type session struct {
 	digest   [sha256.Size]byte
 	created  time.Time
 	lastSeen time.Time
+	// flash is the toast of an action that redirected, which the next
+	// page of this session shows once (design 0009 D7).
+	flash []toast
 }
 
 // sessions is the in-memory session store. A restart ends every session.
@@ -100,6 +103,36 @@ func (s *sessions) get(id string, now time.Time, pw passwordState, touch bool) (
 		v.lastSeen = now
 	}
 	return *v, true
+}
+
+// setFlash keeps a toast for the next page of the session whose CSRF
+// token is csrf. Every session page carries its token, which names the
+// session as surely as its ID, so the page that renders the toast needs
+// nothing else.
+func (s *sessions) setFlash(csrf string, t toast) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, v := range s.m {
+		if tokenEqual(v.csrf, csrf) {
+			v.flash = append(v.flash, t)
+			return
+		}
+	}
+}
+
+// takeFlash returns and forgets the toasts kept for the session whose
+// CSRF token is csrf.
+func (s *sessions) takeFlash(csrf string) []toast {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, v := range s.m {
+		if tokenEqual(v.csrf, csrf) {
+			out := v.flash
+			v.flash = nil
+			return out
+		}
+	}
+	return nil
 }
 
 // remove ends a session.

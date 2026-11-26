@@ -138,9 +138,10 @@ which went direct, and which were blocked over the last hour, 24 hours,
 upstream and interface states, and the configuration and statistics
 status. The domain table filters by route, source, and interface; the
 live page lists open tunnels; and the Advanced page edits the
-configuration as TOML text, validates it with line numbers, saves it
-atomically with a `.bak` copy, refuses a save when the file changed
-meanwhile, and reloads without dropping tunnels. The pages are rendered
+configuration as TOML text, validates it with line numbers, shows the
+change as a diff for review, applies it atomically with a `.bak` copy that
+the page can restore, refuses to apply when the file changed meanwhile,
+and reloads without dropping tunnels. The pages are rendered
 on the server; one same-origin script adds conveniences, and every page
 works without it. Only the Host values
 `127.0.0.1:<port>` and `localhost:<port>` are served. `cuttle status`

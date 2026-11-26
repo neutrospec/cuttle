@@ -92,6 +92,15 @@ type banner struct {
 	// Pre is preformatted text, such as validator messages.
 	Pre     string
 	Actions []link
+	// Post is an action that changes state, a button in a form with the
+	// CSRF token, such as "Reload now".
+	Post *postAction
+}
+
+// postAction is a button that posts to Action with the CSRF token and the
+// page to return to.
+type postAction struct {
+	Label, Action, Token, Return string
 }
 
 // toast reports the result of an action (design 0009 D7). Kind ok closes
@@ -150,16 +159,49 @@ func (s *Server) decorate(d *pageData, st *control.Status) {
 	if d.Message != "" {
 		b = append(b, banner{Kind: "error", Title: plain(d.Message)})
 	}
-	d.Banners = append(append(b, s.shellBanners(st, d.Page)...), d.Banners...)
+	d.Banners = append(append(b, s.shellBanners(st, d.Page, d.Token)...), d.Banners...)
+	// The toast of an action that redirected here, shown once.
+	d.Toasts = append(s.sessions.takeFlash(d.Token), d.Toasts...)
 }
 
 // shellBanners returns the banners of the instance state, at most one of
-// each, in the order of design 0009 D2: the file on disk has errors, the
-// file differs from the running configuration, the last reload failed,
-// and restart required. The first two need the file's model and arrive
-// with the save pipeline (design 0009 task B1), ahead of the others.
-func (s *Server) shellBanners(st *control.Status, page string) []banner {
+// each, in the order of design 0009 D2: the file on disk has errors (or
+// cannot be read), the file differs from the running configuration, the
+// last reload failed, and restart required. token is the session's CSRF
+// token for "Reload now".
+func (s *Server) shellBanners(st *control.Status, page, token string) []banner {
 	var out []banner
+	file := s.readFile()
+	switch {
+	case file.ReadErr != nil:
+		b := banner{Kind: "error", Title: plain("The configuration file cannot be read, so the configuration pages are read-only."),
+			Lines: [][]seg{plain(file.ReadErr.Error()), plain("The running configuration stays in force.")}}
+		if page != "advanced" {
+			b.Actions = []link{{Label: "Open Advanced", Href: "/settings"}}
+		}
+		out = append(out, b)
+	case !file.Valid():
+		b := banner{Kind: "error", Title: plain("The configuration file has errors, so the configuration pages are read-only."),
+			Lines: [][]seg{plain("The running configuration, loaded " + s.when(st.Config.LoadedAt, s.now()) + ", stays in force until the file is fixed.")},
+			Pre:   strings.Join(issueLines(file.Report.Errors), "\n")}
+		if page != "advanced" {
+			b.Actions = append(b.Actions, link{Label: "Fix in Advanced", Href: "/settings"})
+		}
+		if bak := s.readBackup(); bak.Offered() && bak.Valid {
+			b.Actions = append(b.Actions, link{Label: "Restore the previous version", Href: "/settings/backup"})
+		}
+		out = append(out, b)
+	case file.Digest != st.Config.SHA256:
+		ret := "/"
+		for _, p := range navPages {
+			if p.id == page && p.path != "" {
+				ret = p.path
+			}
+		}
+		out = append(out, banner{Kind: "info", Title: plain("The file changed since cuttle loaded it."),
+			Lines: [][]seg{plain("The running configuration is the one cuttle loaded; reload to use the file as it is now.")},
+			Post:  &postAction{Label: "Reload now", Action: "/config/reload", Token: token, Return: ret}})
+	}
 	if e := st.Config.LastReloadError; e != "" {
 		b := banner{Kind: "error", Title: plain("The last reload refused the file; the running configuration is unchanged."), Pre: e}
 		if page != "advanced" {

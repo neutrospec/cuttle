@@ -8,7 +8,8 @@
 # sign-in and every page, also at 390 px in light and dark appearance.
 # TestAdminScreens serves the admin pages with example traffic and state
 # and checks each page at 1280 and 390 px in both appearances, the
-# script's controls, and the pages without the script. Both use a
+# script's controls, the review dialog and apply, the file banners, the
+# previous version, and the pages without the script. Both use a
 # throwaway profile and the mock keychain; Chrome opens no window and no
 # debugging port, and its only proxy is a listener that refuses every
 # request.

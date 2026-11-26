@@ -41,8 +41,11 @@ type fakeBackend struct {
 	t    *testing.T
 	path string
 
-	mu       sync.Mutex
-	cfg      *config.Config
+	mu  sync.Mutex
+	cfg *config.Config
+	// start is the configuration the instance started with, which the
+	// reload compares for restart_required as cuttle serve does.
+	start    *config.Config
 	st       *stats.Stats
 	status   control.Status
 	reloads  int
@@ -50,6 +53,8 @@ type fakeBackend struct {
 	lastErr  string
 	// restart is the status's restart_required list.
 	restart []string
+	// refuse, when set, makes Reload refuse the file with this error.
+	refuse string
 }
 
 func newFakeBackend(t *testing.T) *fakeBackend {
@@ -66,7 +71,7 @@ func newFakeBackend(t *testing.T) *fakeBackend {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b.cfg = cfg
+	b.cfg, b.start = cfg, cfg
 	b.loadedAt = time.Date(2026, 11, 25, 11, 0, 0, 0, time.UTC)
 	b.status = control.Status{Name: "cuttle-test", Version: "test", Stats: "unavailable", StatsErr: "test backend",
 		Counters: map[string]int64{}, Admin: control.Admin{Address: testListen, State: control.AdminListening}}
@@ -90,6 +95,12 @@ func (b *fakeBackend) Config() *config.Config {
 	return b.cfg
 }
 
+func (b *fakeBackend) StartConfig() *config.Config {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.start
+}
+
 func (b *fakeBackend) ConfigPath() string { return b.path }
 
 func (b *fakeBackend) Stats() *stats.Stats {
@@ -104,6 +115,11 @@ func (b *fakeBackend) Reload() (control.ReloadResult, bool) {
 	defer b.mu.Unlock()
 	b.reloads++
 	res := control.ReloadResult{RestartRequired: []string{}, Warnings: []string{}}
+	if b.refuse != "" {
+		res.Errors = []string{b.refuse}
+		b.lastErr = b.refuse
+		return res, false
+	}
 	if err := config.CheckFileSecurity(b.path); err != nil {
 		res.Errors = []string{err.Error()}
 		b.lastErr = err.Error()
@@ -120,8 +136,8 @@ func (b *fakeBackend) Reload() (control.ReloadResult, bool) {
 	for _, w := range r.Warnings {
 		res.Warnings = append(res.Warnings, w.String())
 	}
-	res.RestartRequired = config.RestartRequired(b.cfg, cfg)
-	b.cfg, b.loadedAt, b.lastErr = cfg, time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC), ""
+	res.RestartRequired = config.RestartRequired(b.start, cfg)
+	b.cfg, b.loadedAt, b.lastErr, b.restart = cfg, time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC), "", res.RestartRequired
 	return res, true
 }
 

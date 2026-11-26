@@ -651,6 +651,31 @@ pre.disk {
 .login .lead { color: var(--ink-2); }
 .login-foot { text-align: center; font-size: 12px; color: var(--muted); }
 
+/* ------------------------------------- review, diff, previous version */
+/* The review (design 0009 D3.11) sits in the page's review dialog with
+   the script: its body scrolls between the fixed head and foot. Without
+   the script it is a panel on its own page. */
+.review-slot, .review, .review-form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.review .dlg-body { flex: 1 1 auto; min-height: 0; align-content: start; }
+/* The save bar would show through the backdrop; the review is the step
+   it leads to. */
+body:has(dialog[open]) .savebar { display: none; }
+.review .r-sec { display: grid; gap: 8px; min-width: 0; }
+.review .summary li > span { min-width: 0; overflow-wrap: anywhere; }
+.review-page .dlg-head h1 { font-size: 20px; }
+.review-page .dlg-foot { border-radius: 0 0 10px 10px; }
+.notice .n-body { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.notice .n-list { margin: 0; padding-left: 18px; font: 12px/1.5 var(--mono); color: var(--ink-2); }
+.diff { min-width: 0; }
+.dl .eol { margin-left: 8px; color: var(--muted); font-family: var(--sans); font-size: 11px; }
+.diff-file span { overflow-wrap: anywhere; min-width: 0; }
+.bak-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.inline-form { display: contents; }
+.others { padding: 12px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.others ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; overflow-wrap: anywhere; }
+.others li.err::marker { color: var(--block); }
+.others li.wrn::marker { color: var(--warn); }
+
 /* --------------------------------------------------------- responsive */
 @media (max-width: 1099px) {
   .split, .editor { grid-template-columns: minmax(0, 1fr); }

@@ -491,8 +491,13 @@ LF, and integers as numbers. On a save:
 - a text field or list input that the operator emptied removes its key,
   and so does a checkbox cleared to `false`, since every boolean key
   defaults to `false`;
-- the explicit choices of `proxy.remote.ports` and `admin.listen` map as
-  the table says.
+- every choice control maps as the table says: the explicit choices of
+  `proxy.remote.ports` and `admin.listen`, the interface identity, "Use
+  the default list" or "Only these interfaces", and "System routing" or
+  "Only these interfaces". A choice is compared as its option together
+  with the sub-fields of that option; once it changed, the chosen option
+  alone sets every key the choice controls, so a sub-field of an option
+  that is not chosen, hidden or not, keeps no key (OI-0006 Y-R4).
 
 The last column says what an empty, cleared, or unset field means.
 
@@ -670,7 +675,7 @@ the new name; the review lists it under the change summary.
   `DocOf` returned, so set and unset keys survive a save.
 
 An encoded file larger than the 256 KiB limit is refused at review with
-the size, as the text editor refuses it.
+the size and `413`, as the text editor refuses it.
 
 ### D7. Edit and save pipeline
 
@@ -751,9 +756,9 @@ and their review shows the plain-text diff.
    the issues with their lines as the Advanced page does, and render.
 
 Nothing on the draft or apply path refuses a candidate because the
-current file is invalid: `POST /config/apply` and `POST /settings` check
-only the size limit, the candidate's validity, and `base`
-([0005 D10][d5-10]).
+current file is invalid: `POST /config/apply` checks only the size limit,
+the candidate's validity, and the `reviewed` digest, and `POST /settings`
+the size limit, the text's validity, and `base` ([0005 D10][d5-10]).
 
 **Key paths to fields.** The candidate is canonical, so `rule[n]` is the
 `n`-th rule of the `Doc`, which the page knows by name. An issue key is
@@ -772,11 +777,12 @@ stale copy, and the review always compares against the current file.
 | Situation | Behavior |
 | --- | --- |
 | `base` equals the current file | Normal review |
-| `base` differs, and every changed field's key, of the existing entity or of the settings page, still has its rendered value in the current file | The review shows the notice "The file changed after you opened this page. The changes below are yours; the other change stays." Untouched fields keep the other change (D4) |
+| `base` differs, and every changed field's key, of the existing entity or of the settings page, still has its rendered value in the current file | The review shows the notice "The file changed after you opened this page. The changes below are yours; the other change stays", followed by the form's fields that changed elsewhere and stay, such as "Rule `restricted`: note was changed elsewhere and keeps that change" (OI-0006 Y-R5). Untouched fields keep the other change (D4) |
 | `base` differs, and the key of a changed field also changed elsewhere | The review shows the warning "`restricted`: domains was also changed elsewhere. Applying replaces that change with yours; the diff shows what is lost." For a new entity the other change always stays |
 | `text` or `restore`, and `base` differs | The review shows the warning "The file changed after you opened this page. Applying replaces that change with this text; the diff shows what is lost." |
-| The edited entity no longer exists | `409` at the draft step (step 2) |
-| The file changes between review and apply | `POST /config/apply` answers `409` as `/settings` does, and shows a "Review again" button that rebuilds the review from the posted fields and their rendered values |
+| A delete, and the entity's rendered values, which the delete posts, differ from the current entity | The review shows the warning "Rule `ads`: domains was changed after you opened this page. Deleting removes that change too; the diff shows it." (OI-0006 Y-R2) |
+| The edited entity no longer exists, or no longer allows the op, such as "Add to rule" of a rule whose action changed or that now has `ports` | `409` at the draft step (step 2; OI-0006 Y-R3) |
+| The file changes between review and apply | `POST /config/apply` answers `409` as `/settings` does, and shows a "Review again" button that rebuilds the review from the posted fields and their rendered values. Apply compares the file with the `reviewed` digest, so a file that changed after the review, even back to the `base` content, gets `409` (OI-0006 Y-R1) |
 
 **Apply.** The review's form posts `text` (the candidate exactly as
 reviewed), `reviewed` (the digest of the file the review compared
@@ -925,7 +931,13 @@ says so. Without statistics the hints are left out (D3.13).
   response text as HTML in any other way and never runs scripts from a
   response. Responses carry `Vary: Cuttle-Fragment`. Requests use
   `fetch` with `credentials: "same-origin"` and post the form's own
-  `FormData`, which includes the CSRF token.
+  `FormData`, which includes the CSRF token. A review that the validator
+  refuses answers the page's issue block instead of the review (the
+  Advanced page's result block, a form's `form-issues` block); the
+  button lists that block's target in `data-alt`, and the script puts
+  the answer there and opens no dialog. In the review dialog, "Back to
+  editing" and "Cancel" close the dialog; without the script they post
+  the form back for editing and return to the page.
 - A failed request shows the D3.13 request-failed state; the script then
   leaves the form to a normal submit.
 
@@ -1137,7 +1149,7 @@ unless marked otherwise. "Review" means `POST /config/draft` with
 | W5 | Every key-path form the validator emits maps to its form, field, and entry, and issues of other entities go to the summary list. The D4 field-state rule holds for each control kind: a field posted with its rendered value keeps its key set or unset, also when another writer changed that key; a changed field sets it; an emptied text field, list, or cleared checkbox unsets it. A re-render from posted values carries the rendered values unchanged, and a list posted with CRLF line ends or commas that parses to its rendered list counts as untouched. A new entity writes its untouched prefilled fields. | T0 `TestIssueFieldMap`, `TestFieldState` |
 | W6 | Review of a valid edit answers `200` with the change summary and a diff whose hunks rebuild the candidate from the file; the file and `.bak` are unchanged afterwards. An invalid edit answers `422` with each error inside its field's element, and the file is unchanged. A non-integer port answers `422` without running the validator. A `text` review shows the plain-text diff and the one-line summary. | T1 `TestAdminDraftReview`; T0 `TestTextDiff` |
 | W7 | Apply writes the reviewed text (mode 0600, `.bak` holding the previous content), reloads, and answers `303` to `return`; the next page shows the toast with the reload result; an open tunnel survives; a `proxy.listen` change shows restart required in the review, the toast, and the banner, and after that save a review that changes `proxy.listen` back to its start value lists no restart key. A reviewed `text` posted with CRLF line ends is written with LF. A `return` outside the page list gets `400`. | T1 `TestAdminApply` |
-| W8 | Concurrency: each row of the D7 table, including `409` at apply after the file changed between review and apply, which leaves the file unchanged. | T1 `TestAdminDraftConflict` |
+| W8 | Concurrency: each row of the D7 table, including `409` at apply after the file changed between review and apply, which leaves the file unchanged; an apply after a review with the "other change stays" notice writes and keeps the other change; a file that changed after the review and back to the `base` content gets `409` (OI-0006 Y-R1). | T1 `TestAdminDraftConflict` |
 | W9 | A file with hand comments gives a review whose summary counts the removed comment lines; after apply the file equals `Encode(DocOf(file))` with the edit. | T1 `TestAdminDraftReview` |
 | W10 | With an invalid file on disk, form pages are read-only with the errors banner, and every draft intent of a form op answers `409` and leaves the file unchanged. The same invalid file is fixed from the UI in three ways, each leaving the file valid, reloaded, and the banner gone: Advanced → review → apply with valid text; restore of a valid `.bak` → review → apply; and `POST /settings` with valid text, as A9. A file that differs from the running configuration shows its banner, and `POST /config/reload` reloads it. | T1 `TestAdminInvalidFile`, `TestAdminReloadButton` |
 | W11 | Every new `POST` without a session, without the CSRF token, or with `Sec-Fetch-Site: cross-site` gets `403`. The test enumerates the routes registered on the mux, so a new `POST` without the checks fails it. | T1 `TestAdminPostProtection` |
@@ -1231,7 +1243,8 @@ producer of that stage, so each record matches the code it describes.
   rewriting.
 - **Keeping the candidate on the server between review and apply.** It
   adds per-session state; posting the reviewed text back costs nothing,
-  is validated again, and the `base` check guards the file.
+  is validated again, and the check of the `reviewed` digest guards the
+  file.
 - **Writing every effective value.** Files would grow by every default,
   and a later change of a default would never reach them; set and unset
   keys keep the file close to what the operator chose.

@@ -83,7 +83,9 @@
 <strong>{{template "rich" .Title}}</strong>
 {{range .Lines}}<span>{{template "rich" .}}</span>
 {{end}}{{if .Pre}}<pre>{{.Pre}}</pre>
-{{end}}{{if .Actions}}<div class="b-actions">{{range .Actions}}<a class="btn sm" href="{{.Href}}">{{.Label}}</a>{{end}}</div>
+{{end}}{{if or .Actions .Post}}<div class="b-actions">{{range .Actions}}<a class="btn sm" href="{{.Href}}">{{.Label}}</a>{{end}}{{with .Post}}<form method="post" action="{{.Action}}">
+<input type="hidden" name="csrf" value="{{.Token}}"><input type="hidden" name="return" value="{{.Return}}">
+<button type="submit" class="btn sm">{{.Label}}</button></form>{{end}}</div>
 {{end}}</div></div>
 {{end}}
 
