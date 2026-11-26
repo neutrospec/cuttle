@@ -113,6 +113,22 @@ control   /var/folders/<id>/T/cuttle/control.sock     TMPDIR
   source: a rule, `proxy.interfaces`, or an upstream's own list, or
   `system routing` when none applies ([0008 D15][d8-15]).
 
+  A direct route adds an `address` line, the destination address check
+  of [0003 D11][d3-11] as far as the file decides it, without DNS
+  ([0009 D8][d9-8]): for an IP literal, `allowed: <class> address` or
+  `refused: <class> address, 502 destination_ip_prohibited`; for a name,
+  the address classes that the dial accepts after resolution. The admin
+  UI's Test a URL shows the same explanation, from `config.Explain`.
+
+  ```text
+  $ cuttle explain http://169.254.169.254/
+  target      169.254.169.254:80 (http, local client)
+  rule        default (proxy.default)
+  action      direct
+  interfaces  system routing
+  address     refused: unusable address, 502 destination_ip_prohibited
+  ```
+
 ### D4. Control socket
 
 - An HTTP/1.1 server on a Unix stream socket, socket mode 0600 in a 0700
@@ -477,6 +493,7 @@ state, harmless, and removing it needs root.
 [d2-8]: 0002-proxy-core-and-routing.md#d8-decision-log
 [d3-8]: 0003-upstream-chaining-and-exposure.md#d8-unreachable-upstream-hold
 [d3-9]: 0003-upstream-chaining-and-exposure.md#d9-listeners
+[d3-11]: 0003-upstream-chaining-and-exposure.md#d11-destination-address-policy-for-direct-routes
 [d3-12]: 0003-upstream-chaining-and-exposure.md#d12-connection-limits
 [d4-5]: 0004-configuration-and-reload.md#d5-starter-configuration
 [d4-6]: 0004-configuration-and-reload.md#d6-reload
@@ -487,6 +504,7 @@ state, harmless, and removing it needs root.
 [d8-3]: 0008-interface-selection.md#d3-matching-system-interfaces
 [d8-15]: 0008-interface-selection.md#d15-status-command-line-logging-counters-and-statistics
 [d8-16]: 0008-interface-selection.md#d16-dependencies-and-platform-code
+[d9-8]: 0009-web-configuration.md#d8-test-a-url
 [oi]: ../OPEN_ISSUES.md
 [r1]: ../research/0001-homebrew-launchd-xdg.md
 [r1-1]: ../research/0001-homebrew-launchd-xdg.md#1-homebrew-formula-for-a-go-program-in-a-personal-tap

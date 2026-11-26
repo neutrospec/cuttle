@@ -110,6 +110,13 @@
   // named like their blocks: a review refused for errors answers the
   // page's issue block instead of the review (design 0009 D7).
   const pending = new WeakMap();
+  // altSaved keeps what an alternative target held before an answer
+  // went there instead of to the request's own target, such as the
+  // errors of a refused review in a form's issue block. A later answer
+  // to the request's own target puts that back, so the refusal does not
+  // stay behind the dialog (OI-0006 AA-R1); an answer that lands in the
+  // alternative target as its own target forgets it.
+  const altSaved = new WeakMap();
 
   // FragmentError is an answer that is not a fragment: a refusal such as
   // 403 after the session ended or 400 for a bad form, or a redirect to
@@ -147,6 +154,19 @@
       const alt = alts.includes(root.dataset.block) && doc.getElementById(root.dataset.block);
       const dest = alt || target;
       const node = doc.adoptNode(root);
+      if (alt && alt !== target) {
+        if (!altSaved.has(alt)) altSaved.set(alt, Array.from(alt.childNodes));
+      } else {
+        altSaved.delete(target);
+        for (const id of alts) {
+          const other = doc.getElementById(id);
+          const saved = other && other !== target && altSaved.get(other);
+          if (saved) {
+            altSaved.delete(other);
+            other.replaceChildren(...saved);
+          }
+        }
+      }
       dest.replaceChildren(node);
       enhance(node);
       return { status: res.status, root: node, target: dest };
@@ -290,9 +310,12 @@
     let leaving = false;
     const bar = $("#savebar");
 
+    // A field marked data-unguarded, such as a test input that posts with
+    // the form, is not an edit of what the form saves.
     const snapshot = (form) => {
       const p = new URLSearchParams(new FormData(form));
       p.delete("csrf");
+      for (const e of form.elements) if (e.name && e.hasAttribute("data-unguarded")) p.delete(e.name);
       return p.toString();
     };
 
@@ -571,6 +594,376 @@
   from.addEventListener("input", pair);
   to.addEventListener("input", pair);
   pair();
+})();
+
+/* ------------------------------------------ Rules and upstreams (task C) */
+// Issues under their fields (design 0009 D7, D10): the form-issues block
+// that a check or a refused review answers holds each field's issues in
+// hidden holders; they are copied under the fields, with aria-invalid
+// and the refused entries of a list input marked. The holders stay, so
+// that a block put back later puts its own issues back too.
+(() => {
+  const { $, $$, splitList } = window.cuttle;
+  function distribute(block) {
+    for (const h of $$("[data-issues-for]", block)) {
+      const id = h.dataset.issuesFor;
+      const slot = document.getElementById(id + "-issues");
+      if (!slot) continue;
+      slot.replaceChildren(...Array.from(h.childNodes, (n) => n.cloneNode(true)));
+      const invalid = h.hasAttribute("data-invalid");
+      const field = slot.closest(".field");
+      if (field) field.classList.toggle("invalid", invalid);
+      const control = document.getElementById(id);
+      if (!control || !/^(INPUT|TEXTAREA|SELECT)$/.test(control.tagName)) continue;
+      const mark = (el) => (invalid ? el.setAttribute("aria-invalid", "true") : el.removeAttribute("aria-invalid"));
+      mark(control);
+      if (control.matches("textarea[data-list]")) {
+        control.dataset.bad = h.dataset.bad || "";
+        const box = control.nextElementSibling;
+        if (box && box.classList.contains("tokens")) {
+          const bad = new Set(splitList(h.dataset.bad || "").map(Number));
+          $$(".tok", box).forEach((t, i) => t.classList.toggle("bad", bad.has(i + 1)));
+          const entry = $("input", box);
+          if (entry) mark(entry);
+        }
+      }
+    }
+  }
+  new MutationObserver((records) => {
+    for (const r of records) {
+      for (const n of r.addedNodes) {
+        if (n.nodeType !== 1) continue;
+        if (n.matches('[data-block="form-issues"]')) distribute(n);
+        else $$('[data-block="form-issues"]', n).forEach(distribute);
+      }
+    }
+  }).observe(document.body, { childList: true, subtree: true });
+
+  // A choice of a row menu closes the menu.
+  document.addEventListener("click", (e) => {
+    const item = e.target.closest(".menu-details .menu [role=menuitem]");
+    if (item && !item.disabled) item.closest("details").open = false;
+  });
+
+  // The upstream editor dialog drops its form when it closes. The form in
+  // the dialog is not watched for unsaved changes, as the interface
+  // editor's dialog is not; the editor's own page is.
+  const slot = document.getElementById("upstream-editor");
+  const dlg = slot && slot.closest("dialog");
+  if (dlg) {
+    dlg.addEventListener("close", () => {
+      setTimeout(() => { if (!dlg.open) slot.replaceChildren(); }, 50);
+    });
+  }
+})();
+
+/* ------------------------------------------------------- Rule editor */
+// The live check and the live test of design 0009 D5: 500 ms after the
+// last change the draft is checked, and tested when a target is given;
+// the latest request wins. A name is suggested from the first pattern of
+// a new rule until the operator types one.
+(() => {
+  const { $, loadFragment, failed, splitList } = window.cuttle;
+  const form = $("form[data-live]");
+  if (!form) return;
+  const issues = document.getElementById("form-issues");
+  const out = document.getElementById("rule-test");
+  const url = document.getElementById("rule-test-url");
+  const action = form.getAttribute("action");
+  const post = (intent, target) => {
+    const body = new URLSearchParams(new FormData(form));
+    body.set("intent", intent);
+    return loadFragment(target, action, { method: "POST", body }).catch((err) => {
+      if (err.name !== "AbortError") failed(target, () => post(intent, target), err);
+    });
+  };
+  const test = () => {
+    if (!url || !out) return;
+    if (!url.value.trim()) {
+      out.replaceChildren();
+      return;
+    }
+    post("test", out);
+  };
+  let checkTimer = 0;
+  let testTimer = 0;
+  const changed = () => {
+    clearTimeout(checkTimer);
+    checkTimer = setTimeout(() => {
+      post("check", issues);
+      test();
+    }, 500);
+  };
+  form.addEventListener("input", changed);
+  form.addEventListener("change", changed);
+  if (url) {
+    url.addEventListener("input", (e) => {
+      e.stopPropagation();
+      clearTimeout(testTimer);
+      testTimer = setTimeout(test, 500);
+    });
+    url.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" || e.metaKey || e.ctrlKey) return;
+      e.preventDefault();
+      clearTimeout(testTimer);
+      test();
+    });
+  }
+  for (const r of document.querySelectorAll('input[name="source"][form="rule-form"]')) {
+    r.addEventListener("change", (e) => { e.stopPropagation(); test(); });
+  }
+  const name = $("input[data-suggest]", form);
+  if (name) {
+    let auto = name.value === "";
+    name.addEventListener("input", () => { auto = name.value === ""; });
+    form.addEventListener("input", (e) => {
+      if (!auto || e.target === name) return;
+      const first = ["domains", "hosts", "cidrs"].map((n) => splitList(form.elements[n] ? form.elements[n].value : "")[0]).find(Boolean) || "";
+      name.value = first.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[^a-z0-9]+/, "").slice(0, 64);
+    });
+  }
+})();
+
+/* -------------------------------------------------------- Rules page */
+// Test a URL as you type, marking the chain: the rules tried and passed,
+// the one that matched, and those not reached (design 0009 D3.3, D11).
+// While the order has unsaved moves, the test runs against that order.
+// The filter hides the rows it does not match and turns reordering off.
+// Reordering: drag a row by its handle; or focus the handle, press Space
+// or Enter, move with the arrow keys, and drop with Space or Enter, or
+// cancel with Escape; or use the row menu. Every move changes the page
+// only; the save bar reviews them all at once.
+(() => {
+  const { $, $$, loadFragment, failed, announce, guard } = window.cuttle;
+  const out = document.getElementById("rules-test");
+  const testForm = document.getElementById("rules-test-form");
+  if (!out || !testForm) return;
+  const chain = document.getElementById("chain");
+  const order = document.getElementById("order-form");
+  const def = chain && $(".rule.default", chain);
+  const reorderable = !!(chain && order && chain.hasAttribute("data-reorder"));
+  const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const rows = () => (chain ? $$(".rule[data-name]", chain) : []);
+  let filtering = false;
+
+  // refresh numbers the rows as they stand, with their position fields,
+  // handle names, and the moves their menus allow.
+  function refresh() {
+    const list = rows();
+    list.forEach((r, i) => {
+      const n = i + 1;
+      $(".node", r).textContent = n;
+      const pos = $('input[name="position"]', r);
+      if (pos) pos.value = n;
+      const h = $(".handle", r);
+      if (h) {
+        h.setAttribute("aria-label", `Move rule ${r.dataset.name}, position ${n} of ${list.length}`);
+        h.disabled = filtering;
+      }
+      for (const b of $$("[data-move]", r)) {
+        const up = b.dataset.move === "top" || b.dataset.move === "up";
+        b.disabled = filtering || (up ? i === 0 : i === list.length - 1);
+      }
+    });
+  }
+
+  function mark(block) {
+    if (!chain) return;
+    for (const r of [...rows(), def]) {
+      r.classList.remove("passed", "matched", "unreached");
+      r.style.transitionDelay = "";
+    }
+    def.classList.remove("a-direct", "a-upstream", "a-block");
+    chain.classList.remove("tested");
+    if (!block || !block.hasAttribute("data-match")) return;
+    const name = block.dataset.match;
+    const port = block.hasAttribute("data-port");
+    let state = port ? "unreached" : "passed";
+    let matched = null;
+    rows().forEach((r, i) => {
+      if (!port && name && r.dataset.name === name) {
+        r.classList.add("matched");
+        matched = r;
+        state = "unreached";
+      } else {
+        r.classList.add(state);
+      }
+      if (!reduced()) r.style.transitionDelay = i * 40 + "ms";
+    });
+    if (block.hasAttribute("data-default") && !port) {
+      def.classList.add("matched", "a-" + (block.dataset.action || "direct"));
+      matched = def;
+    } else {
+      def.classList.add("unreached");
+    }
+    requestAnimationFrame(() => chain.classList.add("tested"));
+    if (matched) {
+      const r = matched.getBoundingClientRect();
+      if (r.top > innerHeight || r.bottom < 0) matched.scrollIntoView({ block: "center", behavior: reduced() ? "auto" : "smooth" });
+    }
+  }
+
+  const input = $("#test-url", testForm);
+  const test = () => {
+    if (!input.value.trim()) {
+      out.replaceChildren();
+      mark(null);
+      return;
+    }
+    const src = $('input[name="source"]:checked', testForm);
+    const source = src ? src.value : "local";
+    let req;
+    if (order && guard.dirty(order)) {
+      const body = new URLSearchParams(new FormData(order));
+      body.set("intent", "test");
+      body.set("test", input.value);
+      body.set("source", source);
+      req = loadFragment(out, order.getAttribute("action"), { method: "POST", body });
+    } else {
+      req = loadFragment(out, "/rules?" + new URLSearchParams({ test: input.value, source }), { method: "GET" });
+    }
+    req.then((r) => mark(r.root), (err) => {
+      if (err.name !== "AbortError") failed(out, test, err);
+    });
+  };
+  let timer = 0;
+  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(test, 500); });
+  testForm.addEventListener("change", (e) => { if (e.target.name === "source") test(); });
+  testForm.addEventListener("submit", (e) => { e.preventDefault(); clearTimeout(timer); test(); });
+
+  // The filter, as you type, unless the page is filtered already.
+  const filter = document.getElementById("rule-filter");
+  const meta = document.getElementById("filter-meta");
+  if (filter && chain && !filter.value) {
+    filter.form.addEventListener("submit", (e) => e.preventDefault());
+    filter.addEventListener("input", () => {
+      const q = filter.value.trim().toLowerCase();
+      let shown = 0;
+      for (const r of rows()) {
+        const hit = !q || r.dataset.hay.includes(q);
+        r.classList.toggle("filtered-out", !hit);
+        if (hit) shown++;
+      }
+      filtering = !!q;
+      chain.classList.toggle("filtering", filtering);
+      const total = rows().length;
+      meta.textContent = q ? `${shown} of ${total} rules match` + (reorderable ? "; reordering is off while filtering." : ".") :
+        total + (total === 1 ? " rule" : " rules");
+      refresh();
+    });
+  }
+
+  if (!reorderable) return;
+  function moved() {
+    refresh();
+    guard.update(order);
+    if (input.value.trim()) test();
+  }
+  function moveTo(row, index) {
+    const list = rows().filter((r) => r !== row);
+    chain.insertBefore(row, list[index] || def);
+  }
+  refresh();
+
+  // The row menu.
+  chain.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-move]");
+    if (!b || b.disabled) return;
+    const row = b.closest(".rule");
+    const list = rows();
+    const i = list.indexOf(row);
+    const to = { top: 0, up: i - 1, down: i + 1, bottom: list.length - 1 }[b.dataset.move];
+    moveTo(row, to);
+    moved();
+    $("summary", row).focus();
+    announce(`${row.dataset.name} moved to position ${to + 1} of ${list.length}.`);
+  });
+
+  // Drag by the handle.
+  let dragged = null;
+  const clearDrop = () => $$(".drop-before", chain).forEach((r) => r.classList.remove("drop-before"));
+  chain.addEventListener("dragstart", (e) => {
+    const h = e.target.closest(".handle");
+    if (!h || h.disabled) {
+      e.preventDefault();
+      return;
+    }
+    dragged = h.closest(".rule");
+    dragged.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", dragged.dataset.name);
+    e.dataTransfer.setDragImage(dragged, 30, 20);
+  });
+  chain.addEventListener("dragover", (e) => {
+    const r = dragged && e.target.closest(".rule");
+    if (!r) return;
+    e.preventDefault();
+    clearDrop();
+    if (r !== dragged) r.classList.add("drop-before");
+  });
+  chain.addEventListener("drop", (e) => {
+    const r = dragged && e.target.closest(".rule");
+    if (!r) return;
+    e.preventDefault();
+    if (r !== dragged) {
+      chain.insertBefore(dragged, r);
+      moved();
+      announce(`${dragged.dataset.name} moved to position ${rows().indexOf(dragged) + 1}.`);
+    }
+  });
+  chain.addEventListener("dragend", () => {
+    if (dragged) dragged.classList.remove("dragging");
+    dragged = null;
+    clearDrop();
+  });
+
+  // The keyboard on the handle. An arrow key moves the neighbour across
+  // the lifted row, so that the focused handle stays where it is in the
+  // document and keeps the focus.
+  let lifted = null;
+  const drop = (cancel, refocus) => {
+    const row = lifted.row;
+    if (cancel) moveTo(row, lifted.from);
+    row.classList.remove("lifted");
+    lifted = null;
+    moved();
+    if (refocus) $(".handle", row).focus();
+    const n = rows().indexOf(row) + 1;
+    announce(cancel ? `Move cancelled. ${row.dataset.name} is back at position ${n}.` : `Dropped ${row.dataset.name} at position ${n} of ${rows().length}.`);
+  };
+  chain.addEventListener("keydown", (e) => {
+    const h = e.target.closest(".handle");
+    if (!h || h.disabled) return;
+    const row = h.closest(".rule");
+    const list = rows();
+    const i = list.indexOf(row);
+    if (e.key === " " || e.key === "Enter") {
+      e.preventDefault();
+      if (lifted && lifted.row === row) {
+        drop(false, true);
+        return;
+      }
+      if (lifted) drop(true, false);
+      lifted = { row, from: i };
+      row.classList.add("lifted");
+      announce(`Picked up ${row.dataset.name}, position ${i + 1} of ${list.length}. Use the arrow keys to move it.`);
+    } else if (lifted && lifted.row === row && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+      e.preventDefault();
+      const up = e.key === "ArrowUp";
+      const other = list[i + (up ? -1 : 1)];
+      if (!other) return;
+      chain.insertBefore(other, up ? row.nextSibling : row);
+      refresh();
+      announce(`${row.dataset.name}, position ${rows().indexOf(row) + 1} of ${list.length}.`);
+    } else if (lifted && lifted.row === row && e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      drop(true, true);
+    }
+  });
+  chain.addEventListener("focusout", (e) => {
+    if (lifted && !lifted.row.contains(e.relatedTarget)) drop(false, false);
+  });
 })();
 
 /* ------------------------------------------- Interface list editor */

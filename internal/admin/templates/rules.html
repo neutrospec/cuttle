@@ -1,0 +1,72 @@
+{{/* rules is the rules page of design 0009 D3.3: Test a URL, the
+   filter, and the chain of rules tried from top to bottom, which ends at
+   the default row. Without the script each row has a position field and
+   the order form a Review changes button; with it, rows move by drag, by
+   keyboard on the handle, and by the row menu, and the save bar reviews
+   every move at once. Its Data is a formPage whose Form is the
+   rules.order form, nil while the file has errors, and whose View is a
+   rulesView. */}}
+{{define "content"}}{{$f := .Data.Form}}{{with .Data.View}}
+<header class="page-head">
+<div><h1>Rules</h1>
+<p class="lead">Tried from top to bottom; the first rule that matches decides the route.</p></div>
+{{if not .ReadOnly}}<div class="actions"><a class="btn primary" href="/rules/new">{{template "icon" "plus"}}Add rule</a></div>
+{{end}}</header>
+<section class="panel panel-pad test-panel" aria-labelledby="test-h"><h2 id="test-h" class="sr">Test a URL</h2>
+<form class="testbar" id="rules-test-form" method="get" action="/rules" role="search">
+<div class="t-input">{{template "icon" "search"}}<input class="input" id="test-url" name="test" value="{{.TestInput}}" aria-label="Test a URL" aria-describedby="test-hint" placeholder="Test a URL, such as https://wiki.internal.example/" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+<div class="seg sm" role="radiogroup" aria-label="Client"><label><input type="radio" name="source" value="local"{{if not .Remote}} checked{{end}}><span>Local</span></label><label><input type="radio" name="source" value="remote"{{if .Remote}} checked{{end}}><span>Remote</span></label></div>
+{{with .Query}}<input type="hidden" name="q" value="{{.}}">
+{{end}}<button class="btn primary" type="submit">Test</button>
+</form>
+<p class="hint t-hint" id="test-hint">A URL, a <code>host:port</code>, or a host. Nothing is resolved or connected.</p>
+<div id="rules-test" class="test-out">{{template "rules-test" $}}</div>
+</section>
+{{if or .Rules .Query}}<div class="toolbar">
+<form class="filter" method="get" action="/rules" role="search">{{template "icon" "search"}}<input class="input" id="rule-filter" name="q" value="{{.Query}}" aria-label="Filter rules" placeholder="Filter by name, note, pattern, or action" autocomplete="off" autocapitalize="off" spellcheck="false" data-slash>{{with .TestInput}}<input type="hidden" name="test" value="{{.}}">{{end}}</form>
+<span class="meta" id="filter-meta" aria-live="polite" data-total="{{.Total}}">{{if .Query}}{{len .Rules}} of {{.Total}} rules match; reordering is off while filtering. <a href="/rules">Clear the filter</a>{{else}}{{plural .Total "rule"}}{{end}}</span>
+<span class="meta">{{.TrafficLine}}</span>
+</div>
+{{end}}<div id="form-issues">{{template "form-issues" $}}</div>
+{{if .Rules}}{{if $f}}<form id="order-form" method="post" action="/config/draft" class="order-form" novalidate data-guard="Rule order changed. Nothing is saved until you review and apply." data-guard-discard="/rules">
+<input type="hidden" name="csrf" value="{{$.Token}}">
+{{range $f.Hidden}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">
+{{end}}{{end}}<p class="sr" id="reorder-help">Press Space to pick the rule up, the arrow keys to move it, Space to drop it, and Escape to cancel.</p>
+<div class="panel chain-panel"><ol class="chain{{with .Test}}{{if not .Err}} tested{{end}}{{end}}" id="chain" aria-label="Rules in evaluation order"{{if .Reorder}} data-reorder{{end}}>
+{{range .Rules}}<li class="rule a-{{.Route.Action}}{{with .Mark}} {{.}}{{end}}" data-name="{{.Name}}" data-hay="{{.Hay}}">
+<div class="r-gutter"><span class="node">{{.Pos}}</span></div>
+<span class="r-handle">{{if $.Data.View.Reorder}}<button class="btn quiet icon-btn handle js-only" type="button" draggable="true" aria-label="Move rule {{.Name}}, position {{.Pos}} of {{.Total}}" aria-describedby="reorder-help">{{template "icon" "grip"}}</button>{{end}}</span>
+<div class="r-main"><div class="r-title">{{if $.Data.View.Reorder}}<span class="r-pos nojs-only"><label for="pos-{{.Pos}}">Position<span class="sr"> of rule {{.Name}}</span></label><input class="input" type="number" id="pos-{{.Pos}}" name="position" value="{{.Pos}}" min="1" max="{{.Total}}" inputmode="numeric"></span>{{end}}<a class="r-name" href="{{.Href}}">{{.Name}}</a>{{if .Warnings}}<a class="badge warn" href="{{.Href}}" title="{{join .Warnings "; "}}">{{template "icon" "alert"}}{{plural (len .Warnings) "warning"}}</a>{{end}}</div>
+{{with .Note}}<div class="r-note">{{.}}</div>
+{{end}}{{if .Patterns}}<div class="chips">{{range .Patterns}}<span class="chip">{{.}}</span>{{end}}{{if .More}}<span class="chip more">+{{.More}} more</span>{{end}}</div>
+{{end}}</div>
+<div class="r-route">{{template "route" .Route}}{{if .Flags}}<div class="flags">{{range .Flags}}<span class="flag">{{.}}</span>{{end}}</div>{{end}}</div>
+<div class="r-traffic">{{if $.Data.View.Traffic}}<div><b>{{num .Requests}}</b> req</div><div>{{bytes .Bytes}}</div>{{end}}</div>
+<details class="r-menu menu-details"><summary class="btn quiet icon-btn" aria-label="Actions for rule {{.Name}}">{{template "icon" "more"}}</summary>
+<div class="menu" role="menu">
+<a role="menuitem" href="{{.Href}}">{{template "icon" "edit"}}{{if $.Data.View.ReadOnly}}View{{else}}Edit{{end}}</a>
+{{if not $.Data.View.ReadOnly}}<a role="menuitem" href="/rules/new?from={{.Name}}">{{template "icon" "copy"}}Duplicate</a>
+{{if $.Data.View.Reorder}}<div class="js-only"><hr><button type="button" role="menuitem" data-move="top">{{template "icon" "up"}}Move to top</button><button type="button" role="menuitem" data-move="up">{{template "icon" "up"}}Move up</button><button type="button" role="menuitem" data-move="down">{{template "icon" "down"}}Move down</button><button type="button" role="menuitem" data-move="bottom">{{template "icon" "down"}}Move to bottom</button></div>
+{{end}}{{if .Delete}}<hr><button type="submit" role="menuitem" class="danger" form="del-{{.Pos}}" name="intent" value="review" data-fragment="review">{{template "icon" "trash"}}Delete…</button>
+{{end}}{{end}}</div></details>
+{{if $f}}<input type="hidden" name="order" value="{{.Name}}">
+{{end}}</li>
+{{end}}<li class="rule default{{with .Default.Mark}} {{.}}{{end}}"><div class="r-gutter"><span class="node end" aria-hidden="true"></span></div><span></span>
+<div class="r-main"><div class="r-title"><span class="r-name">No rule matched</span></div><div class="r-note">The default route applies{{if or .Default.ProxyHref .Default.RemoteHref}}: {{with .Default.ProxyHref}}<a href="{{.}}">local default</a>{{end}}{{if and .Default.ProxyHref .Default.RemoteHref}}, {{end}}{{with .Default.RemoteHref}}<a href="{{.}}">remote default</a>{{end}}{{end}}.</div></div>
+<div class="r-route"><div>Local {{template "route" .Default.Local}}</div><div>Remote {{template "route" .Default.Remote}}</div></div>
+<div class="r-traffic">{{if .Traffic}}<div><b>{{num .Default.Requests}}</b> req</div><div>{{bytes .Default.Bytes}}</div>{{end}}</div><span></span></li>
+</ol></div>
+{{if $f}}{{if .Reorder}}<div class="form-foot order-foot nojs-only"><button type="submit" class="btn primary" name="intent" value="review" data-primary data-fragment="review" data-alt="form-issues">Review changes</button><span class="hint">Type the position each rule should have, then review the new order.</span></div>
+{{end}}</form>
+{{range .Rules}}{{$pos := .Pos}}{{with .Delete}}<form id="del-{{$pos}}" method="post" action="/config/draft" class="inline-form">
+<input type="hidden" name="csrf" value="{{$.Token}}">
+{{range .Hidden}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">
+{{end}}</form>
+{{end}}{{end}}{{end}}{{else if .Query}}<div class="empty"><h3>No rules match</h3><p>No rule's name, note, pattern, or action contains <code>{{.Query}}</code>.</p><a class="btn" href="/rules">Clear the filter</a></div>
+{{else}}<div class="empty section"><h3>No rules yet</h3><p>Every request takes the default route: {{template "route" .Default.Local}} for local clients and {{template "route" .Default.Remote}} for remote clients. Add a rule to send some destinations elsewhere; Test a URL above shows what happens now.</p>{{if not .ReadOnly}}<a class="btn primary" href="/rules/new">{{template "icon" "plus"}}Add rule</a>{{end}}</div>
+{{end}}{{template "review-dialog"}}{{end}}{{end}}
+
+{{/* rules-test is the result of Test a URL on the rules page, which the
+   script loads alone; its root names the rule that matched, the default
+   row, or the port check, so that the script marks the chain. */}}
+{{define "rules-test"}}{{with .Data.View}}<div class="test-res" data-block="rules-test"{{with .Test}}{{if not .Err}} data-match="{{.MatchName}}" data-action="{{.Route.Action}}"{{if .Default}} data-default{{end}}{{if .Port}} data-port{{end}}{{end}}{{end}}>{{with .Test}}{{template "test-result" .}}{{end}}</div>{{end}}{{end}}

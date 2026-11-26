@@ -111,6 +111,9 @@ type formOp struct {
 	// Test answers intent=test, Test a URL against the candidate (D8);
 	// nil answers 400.
 	Test func(s *Server, w http.ResponseWriter, r *http.Request, v session, d *draft)
+	// Notices returns the op's own notices of a review, such as where a
+	// deleted rule's traffic goes next; nil for none.
+	Notices func(d *draft) []reviewNotice
 }
 
 func (op *formOp) field(name string) (formField, bool) {
@@ -129,10 +132,23 @@ func (op *formOp) block() string {
 	return op.Block
 }
 
-// addOp registers a form op.
+// reservedFields are the names of the hidden inputs that a form op's form
+// and its review post besides the fields: a field of the same name would
+// be overwritten or carried as one of them (OI-0006 AA-R5). The review's
+// form also carries every other posted name, the rendered values use the
+// prefix r:, and the interface list editor's Add select the prefix add:.
+var reservedFields = []string{"csrf", "intent", "op", "base", "return", "target", "text", "reviewed"}
+
+// addOp registers a form op. It panics on a second op of the same name
+// and on a field whose name a hidden input of the pipeline uses.
 func (s *Server) addOp(op *formOp) {
 	if _, dup := s.ops[op.Name]; dup || op.Name == opText || op.Name == opRestore {
 		panic("admin: op registered twice: " + op.Name)
+	}
+	for _, f := range op.Fields {
+		if slices.Contains(reservedFields, f.Name) || strings.HasPrefix(f.Name, "r:") || strings.HasPrefix(f.Name, "add:") || f.Name == "" {
+			panic("admin: op " + op.Name + " has a field with a reserved name: " + strconv.Quote(f.Name))
+		}
 	}
 	s.ops[op.Name] = op
 }
@@ -153,6 +169,15 @@ type form struct {
 	// New marks a form for an entity that is not in the file yet, whose
 	// save writes every field that holds a value.
 	New bool
+	// intent is the draft intent of a posted form, "" for a GET, so that
+	// an op can leave a check of an unfinished form quiet where a review
+	// is not.
+	intent string
+	// entity is the 1-based index of the edited entity in the edited
+	// model, which an op's Edit may set where the name cannot find it,
+	// such as a new rule named like an existing one; 0 leaves it to the
+	// op's Entity.
+	entity int
 
 	values   url.Values
 	rendered map[string]string
@@ -243,6 +268,18 @@ func (f *form) Bad(name string) string {
 		out = append(out, strconv.Itoa(n))
 	}
 	return strings.Join(out, " ")
+}
+
+// Fields returns the view of every field of the form, for the hidden
+// holders of the form-issues block, from which the script copies each
+// field's issues under it after a check or a refused review: into the
+// element with id <ID>-issues where the page draws one.
+func (f *form) Fields() []fieldView {
+	out := make([]fieldView, len(f.op.Fields))
+	for i, fd := range f.op.Fields {
+		out[i] = f.Field(fd.Name)
+	}
+	return out
 }
 
 // HasErrors reports whether the form has any error, and ErrorCount how
@@ -775,6 +812,37 @@ func (f *form) mapIssues(rep *config.Report, d *config.Doc, entity int) {
 	}
 	each(rep.Errors, false)
 	each(rep.Warnings, true)
+}
+
+// dropKnownWarnings removes from Others the warnings of other entities
+// that the current file, rep of model d, has already, so that the list
+// names what the edit causes, such as a later rule that the edited rule
+// now shadows. Errors stay, since they block the save. Entities are
+// compared by name, so an edit that moves them keeps the match.
+func (f *form) dropKnownWarnings(rep *config.Report, d *config.Doc) {
+	if rep == nil || len(f.Others) == 0 {
+		return
+	}
+	key := func(label []seg, msg string) string {
+		var b strings.Builder
+		for _, sg := range label {
+			b.WriteString(sg.Text)
+		}
+		return b.String() + "\x00" + msg
+	}
+	known := map[string]bool{}
+	for _, is := range rep.Warnings {
+		if ref, ok := parseIssueKey(is.Key); ok {
+			known[key(entityLabel(ref, d), issueText(ref, is.Msg))] = true
+		}
+	}
+	out := f.Others[:0]
+	for _, o := range f.Others {
+		if !o.Warn || !known[key(o.Label, o.Msg)] {
+			out = append(out, o)
+		}
+	}
+	f.Others = out
 }
 
 // owns reports whether an issue belongs to the form: the edited entity

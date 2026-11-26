@@ -1,0 +1,85 @@
+{{/* rule is the rule editor of design 0009 D3.4: name and note, the
+   patterns as list inputs, the action with the upstream or the direct
+   options, the position of a new rule, and, beside the form, Test a URL
+   against the draft and the rule's last 24 hours. The groups that the
+   chosen action does not use are hidden by the stylesheet, so the page
+   needs no script for that. Its Data is a formPage with the rule.save
+   form and a ruleEditView. */}}
+{{define "content"}}{{$f := .Data.Form}}{{with .Data.View}}{{if .Missing}}
+<header class="page-head"><div><p class="crumbs"><a href="/rules">Rules</a> /</p><h1>Rule not found</h1>
+<p class="lead">There is no rule named <code>{{.Missing}}</code>. It may have been renamed or deleted.</p></div></header>
+<a class="btn" href="/rules">Back to rules</a>
+{{else}}<header class="page-head"><div><p class="crumbs"><a href="/rules">Rules</a> /</p>
+<h1>{{if .New}}Add rule{{else}}Edit rule <span class="name-code">{{$f.Target}}</span>{{end}}</h1>
+<p class="lead">{{if .New}}{{with .From}}A copy of rule <code>{{.}}</code>. {{end}}A new rule is tried before the rules below the place you choose.{{else if .ReadOnly}}Position {{.Pos}} of {{.Count}}, as cuttle runs it.{{else}}Position {{.Pos}} of {{.Count}}. Changes apply after you review and apply them.{{end}}</p></div></header>
+<div id="form-issues">{{template "form-issues" $}}</div>
+<div class="editor">
+<form id="rule-form" method="post" action="/config/draft" class="rule-form" novalidate{{if not .ReadOnly}} data-guard="{{if .New}}Unsaved new rule{{else}}Unsaved changes to rule {{$f.Target}}{{end}}" data-guard-discard="{{if .New}}/rules/new{{else}}/rules/{{$f.Target}}{{end}}" data-live{{end}}>
+{{if not .ReadOnly}}{{template "default-button"}}{{end}}<input type="hidden" name="csrf" value="{{$.Token}}">
+{{range $f.Hidden}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">
+{{end}}<fieldset class="fsec"{{if .ReadOnly}} disabled{{end}}><header><h2>Name and note</h2><p>The name appears in logs, statistics, and errors.</p></header>
+<div class="fields"><div class="row2">
+{{with $f.Field "name"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-name">Name</label><input class="input mono" id="f-name" name="name" value="{{$f.Value "name"}}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="f-name-hint f-name-issues"{{if .Invalid}} aria-invalid="true"{{end}}{{if $.Data.View.New}} data-suggest{{end}}><div class="hint" id="f-name-hint">Lowercase letters, digits, dots, hyphens, and underscores.</div>{{template "fissues" .}}</div>
+{{end}}{{with $f.Field "note"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-note">Note <span class="hint">optional</span></label><input class="input" id="f-note" name="note" value="{{$f.Value "note"}}" autocomplete="off" aria-describedby="f-note-hint f-note-issues"{{if .Invalid}} aria-invalid="true"{{end}}><div class="hint" id="f-note-hint">One line, up to 120 characters. It takes the place of a comment in the file.</div>{{template "fissues" .}}</div>
+{{end}}</div></div></fieldset>
+<fieldset class="fsec"{{if .ReadOnly}} disabled{{end}}><header><h2>Match</h2><p>The rule matches when any pattern matches and the port is listed, or no ports are listed.</p></header>
+<div class="fields">
+{{with $f.Field "domains"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-domains">Domains</label><textarea class="input list" id="f-domains" name="domains" rows="3" data-list data-bad="{{.Bad}}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="f-domains-hint f-domains-issues"{{if .Invalid}} aria-invalid="true"{{end}}>{{$f.Value "domains"}}</textarea><div class="hint" id="f-domains-hint">A name and all of its subdomains: <code>example.com</code> matches <code>a.example.com</code>.</div>{{template "fissues" .}}</div>
+{{end}}{{with $f.Field "hosts"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-hosts">Hosts</label><textarea class="input list" id="f-hosts" name="hosts" rows="2" data-list data-bad="{{.Bad}}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="f-hosts-hint f-hosts-issues"{{if .Invalid}} aria-invalid="true"{{end}}>{{$f.Value "hosts"}}</textarea><div class="hint" id="f-hosts-hint">Exact names only: <code>example.com</code> does not match <code>a.example.com</code>.</div>{{template "fissues" .}}</div>
+{{end}}{{with $f.Field "cidrs"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-cidrs">CIDRs</label><textarea class="input list" id="f-cidrs" name="cidrs" rows="2" data-list data-bad="{{.Bad}}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="f-cidrs-hint f-cidrs-issues"{{if .Invalid}} aria-invalid="true"{{end}}>{{$f.Value "cidrs"}}</textarea><div class="hint" id="f-cidrs-hint">IP-literal targets inside a prefix, such as <code>198.51.100.0/24</code>. A name never matches a CIDR.</div>{{template "fissues" .}}</div>
+{{end}}{{with $f.Field "ports"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-ports">Ports</label><textarea class="input list" id="f-ports" name="ports" rows="1" data-list data-bad="{{.Bad}}" placeholder="Any port" autocomplete="off" spellcheck="false" aria-describedby="f-ports-hint f-ports-issues"{{if .Invalid}} aria-invalid="true"{{end}}>{{$f.Value "ports"}}</textarea><div class="hint" id="f-ports-hint">Empty matches any port.</div>{{template "fissues" .}}</div>
+{{end}}</div></fieldset>
+<fieldset class="fsec"{{if .ReadOnly}} disabled{{end}}><header><h2>Action</h2><p>Where matching requests go.</p></header>
+<div class="fields">
+{{with $f.Field "action"}}<div class="field{{if .Invalid}} invalid{{end}}"><span class="label" id="f-action-l">Route</span>
+<div class="seg action" role="radiogroup" id="f-action" tabindex="-1" aria-labelledby="f-action-l" aria-describedby="f-action-hint f-action-issues"><label><input type="radio" name="action" value="direct"{{if eq $.Data.View.Action "direct"}} checked{{end}}><span class="direct">Direct</span></label><label><input type="radio" name="action" value="upstream"{{if eq $.Data.View.Action "upstream"}} checked{{end}}{{if not $.Data.View.Upstreams}} disabled{{end}}><span class="upstream">Upstream</span></label><label><input type="radio" name="action" value="block"{{if eq $.Data.View.Action "block"}} checked{{end}}><span class="block">Block</span></label></div>
+<div class="hint act-hint" id="f-action-hint"><span class="h-direct">Direct: cuttle resolves the name and connects itself.</span> <span class="h-upstream">Upstream: the upstream proxy resolves and connects; nothing falls back to direct.</span> <span class="h-block">Block: cuttle answers 403 without any lookup or connection.</span></div>
+{{template "fissues" .}}</div>
+{{end}}{{if .Upstreams}}<div class="field if-upstream"><label for="f-upstream">Upstream</label><select class="input" id="f-upstream" name="upstream">{{range .Upstreams}}<option value="{{.Name}}"{{if eq .Name ($f.Value "upstream")}} selected{{end}}>{{.Name}}: {{.Address}}{{with .State.Lower}}, {{.}}{{end}}</option>{{end}}</select><div class="hint"><a href="{{.UpstreamsHref}}">Manage upstreams</a></div></div>
+{{else}}<p class="hint if-upstream-off">No upstream is configured. <a href="/upstreams/new">Add an upstream</a> to route through another proxy.</p>
+{{end}}<div class="fields if-direct">
+<label class="check"><input type="checkbox" name="allow_loopback" value="true"{{if $f.Checked "allow_loopback"}} checked{{end}}><span>Allow loopback and this Mac's own addresses</span><span class="hint">Local clients may reach 127.0.0.1, ::1, and names that resolve to this Mac.</span></label>
+<label class="check"><input type="checkbox" name="allow_private" value="true"{{if $f.Checked "allow_private"}} checked{{end}}><span>Allow private addresses that names resolve to</span><span class="hint">For devices on the home network by name, such as a NAS. Typed private IP addresses work without it.</span></label>
+{{with .Interfaces}}{{if not .Defined}}<input type="hidden" name="ifaces" value="{{$f.Value "ifaces"}}">
+{{end}}{{template "iflist" .}}{{end}}{{template "fissues" ($f.Field "ifaces")}}{{template "fissues" ($f.Field "ifaces_list")}}
+</div>
+</div></fieldset>
+{{if .New}}<fieldset class="fsec"{{if .ReadOnly}} disabled{{end}}><header><h2>Position</h2><p>First is usual: a new rule is often an exception to the rules below it.</p></header>
+<div class="fields">{{with $f.Field "position"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-position">Place the rule</label><select class="input" id="f-position" name="position" aria-describedby="f-position-issues">{{range $.Data.View.Positions}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select>{{template "fissues" .}}</div>{{end}}</div></fieldset>
+{{end}}<div class="form-foot">{{if not .ReadOnly}}<button class="btn primary" type="submit" name="intent" value="review" data-primary data-fragment="review" data-alt="form-issues">Review changes</button>
+{{end}}<a class="btn" href="/rules">{{if .ReadOnly}}Back to rules{{else}}Cancel{{end}}</a>
+<span class="spacer"></span>
+{{if .Delete}}<button class="btn danger" type="submit" form="rule-delete" name="intent" value="review" data-fragment="review">{{template "icon" "trash"}}Delete rule</button>
+{{end}}</div>
+</form>
+<aside class="side" aria-label="Test and traffic">
+<section class="panel" aria-labelledby="rtest-h"><div class="panel-head"><h2 id="rtest-h">Test this rule</h2></div>
+<div class="test-body">
+<div class="t-input">{{template "icon" "search"}}<input class="input mono" id="rule-test-url" name="test" form="rule-form" data-unguarded value="{{.TestInput}}" aria-label="Test a URL against this draft" aria-describedby="rule-test-hint" placeholder="https://wiki.internal.example/" autocomplete="off" autocapitalize="off" spellcheck="false" data-slash></div>
+<div class="test-row"><div class="seg sm" role="radiogroup" aria-label="Client"><label><input type="radio" name="source" value="local" form="rule-form" data-unguarded{{if not .Remote}} checked{{end}}><span>Local</span></label><label><input type="radio" name="source" value="remote" form="rule-form" data-unguarded{{if .Remote}} checked{{end}}><span>Remote</span></label></div>
+{{if not .ReadOnly}}<button class="btn sm" type="submit" form="rule-form" name="intent" value="test" data-fragment="rule-test">Test</button>{{end}}</div>
+<p class="hint" id="rule-test-hint">Tested against the configuration with this draft applied.</p>
+<div id="rule-test" class="test-out">{{template "rule-test" $}}</div>
+</div></section>
+{{if not .New}}<section class="panel" aria-labelledby="rtraffic-h"><div class="panel-head"><h2 id="rtraffic-h">Last 24 hours</h2>{{with .Traffic}}<span class="hint num">{{num .Requests}} req, {{bytes .Bytes}}</span>{{end}}</div>
+{{with .Traffic}}{{if .Hosts}}<ul class="hosts c-{{.Route.Action}}" aria-label="Top hosts of this rule">{{range .Hosts}}<li><span class="h">{{.Host}}</span><span class="v num">{{num .Requests}} req</span><span class="hb"><i class="{{bar .Requests $.Data.View.Traffic.Max}}"></i></span></li>{{end}}</ul>
+<div class="panel-foot"><a href="{{.AllHref}}">All hosts of this rule</a></div>
+{{else}}<p class="panel-foot muted">No request matched this rule in the last 24 hours.</p>
+{{end}}{{else}}<p class="panel-foot muted">{{$.Data.View.TrafficLine}}.</p>
+{{end}}</section>
+{{end}}</aside>
+</div>
+{{with .Delete}}<form id="rule-delete" method="post" action="/config/draft" class="inline-form">
+<input type="hidden" name="csrf" value="{{$.Token}}">
+{{range .Hidden}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">
+{{end}}</form>
+{{end}}{{template "review-dialog"}}{{end}}{{end}}{{end}}
+
+{{/* rule-test is the editor's test result (design 0009 D3.4): whether
+   this rule matches the target, which rule matches first when an earlier
+   one shadows it, and what the chain decides. */}}
+{{define "rule-test"}}{{with .Data.View}}<div class="test-res" data-block="rule-test">{{with .Test}}{{if or .Err .Fix}}{{template "test-result" .}}{{else}}<div class="verdict" role="status">
+<div class="v-line">{{if .Self}}<span class="yes">{{template "icon" "check"}} This rule matches</span>{{else}}<span class="no">This rule does not match</span>{{end}}</div>
+{{with .Shadow}}<div class="v-line shadow">{{template "icon" "alert"}}<span>{{template "rich" .}}</span></div>
+{{end}}</div>
+{{template "test-result" .}}{{end}}{{end}}</div>{{end}}{{end}}

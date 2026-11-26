@@ -509,6 +509,8 @@ Move resolved items to Closed with their resolving commit or evidence.
     the settings notice drops the sync warning. Z-R9 (nit): the canonical
     fixtures use `nas.lan`; prefer a reserved name. B1 also carries
     `TestAdminSettingsDirSync` over to `/config/apply` (W14).
+    Z-R3 is settled in TASK-0021: a syntax error under a key that ends in
+    `note` gives a fixed message (`TestNoteSyntaxError`).
     Z-R1, Z-R2, Z-R8, and the W14 carry-over are settled in TASK-0020:
     `testdata/canonical/inline-tables.toml`; `TestAtomicWriteDirSync`
     (0500 directory) and `TestAtomicWriteFinalRename` (immutable target)
@@ -550,6 +552,14 @@ Move resolved items to Closed with their resolving commit or evidence.
     (nit, UI): the info banner is an untinted card unlike the others, and
     applying a restore from Advanced leaves without the unsaved-changes
     prompt, losing unsaved editor text.
+    AA-R1–AA-R3, AA-R5, and AA-R6 are settled in TASK-0021: an answer to
+    the request's own target puts back what a refused review replaced in
+    the `data-alt` target (`TestAdminScreensRules`); a candidate equal to
+    the file offers no Apply, and an apply of it writes nothing, so `.bak`
+    stays (`TestAdminNoChange`); `TestAdminApplyAfterReviewAgain` applies
+    after Review again; `addOp` panics on a reserved field name
+    (`TestAddOpReservedNames`); and the 409 notice of `/settings` names
+    Review changes (`TestAdminSettingsConflictNotice`).
     Z-R4, AA-R7, U-R2, and T-R1 are settled in TASK-0022:
     `WritePasswordFile` keeps mode 0600 and reports `ErrNotSynced` when
     the new hash is in place, `EnsureStarter` reports such a file as
@@ -584,13 +594,38 @@ Move resolved items to Closed with their resolving commit or evidence.
     summary wording. AB-R10 (C or E, condition of the TASK-0022 review):
     the real rule and upstream editors use `form.IfList` and the `iflist`
     block, and W21 is proven again on them.
+    AB-R1, AB-R5, AB-R9, and AB-R10 are settled in TASK-0021: the phone
+    media query sets `dialog.editor-dialog { width: 100% }`, which both
+    editor dialogs use; the validator reserves the name `new` for rules,
+    upstreams, and interfaces, and `config.ValidName` refuses it, so
+    `/rules/new`, `/upstreams/new`, and `/interfaces/new` never hide an
+    editor (`TestReservedNewName`; 0004 D4, 0008 D2); one
+    `TestFormCoverage` derives every key of the schema from the model and
+    replaces `TestFormCoverageSettings`; and the rule and upstream
+    editors use the interface list editor with its choice
+    (`TestAdminEditorInterfaceLists`, `TestAdminScreensRules`).
+  - AC-R1–AC-R4 (from the TASK-0021 re-check; M4 tasks): AC-R1 (minor,
+    UI): the interface list hint ("Requests use only these interfaces…")
+    sits outside `.ifl-body` in `fields.html`, so it stays visible while
+    "Use the default list" or "System routing" is chosen, and for upstreams
+    it should speak of connections to the upstream. AC-R2 (nit): Discard
+    on a duplicated rule (`/rules/new?from=x`) goes to a blank
+    `/rules/new` and drops the copy's prefill. AC-R3 (orchestrator, at
+    release): reserving the name `new` makes a v0.1.0 file that uses it
+    invalid; `cuttle serve` then refuses to start after an upgrade, and
+    `cuttle check` names the fix. The release notes or the README upgrade
+    section say to run `cuttle check` before `brew services restart
+    cuttle`, together with Z-R5. AC-R4 (nit, design): 0009 D3.13 says every
+    form asks before leaving with unsaved changes, but the interface and
+    upstream editor dialogs are deliberately unguarded; add the exception.
 - Next action: orchestrator — include the open items (V5, V8, V11, V12, P1,
   W1–W3, Z2, Z4, G1–G2, P-R3–P-R7, Q-R1–Q-R4, Q-R6–Q-R8, S-R1–S-R2,
-  X-R1–X-R5, the W25 case of Y-R3, Z-R5–Z-R7, Z-R9, T-R2, AA-R1–AA-R6,
-  AA-R8, and AB-R1–AB-R10) in the briefs of the stages they affect; the
-  producer closes each item with the commit that settles it. TASK-0022
-  settles Z-R4, AA-R7, U-R2, and T-R1; TASK-0021 (in review) settles
-  AA-R1–AA-R3, AA-R5, AA-R6, and Z-R3.
+  X-R1–X-R5, the W25 case of Y-R3, Z-R5–Z-R7, Z-R9, T-R2, AA-R4, AA-R8,
+  AB-R2–AB-R4, AB-R6–AB-R8, and AC-R1–AC-R4) in the briefs of the stages
+  they affect; the producer closes each item with the commit that
+  settles it. TASK-0022 settled Z-R4, AA-R7, U-R2, and T-R1; TASK-0021
+  settled AA-R1–AA-R3, AA-R5, AA-R6, Z-R3, AB-R1, AB-R5, AB-R9, and
+  AB-R10.
   The M1.4 items, R5 with the C13 remainder, the per-request source
   recheck of 0003 D10 with N5, the bind retry of V1, Z3, W-R1, and W-R2,
   are settled in TASK-0007.

@@ -348,14 +348,41 @@ func runningDoc(c *config.Config) *config.Doc {
 		d.Interfaces = append(d.Interfaces, di)
 	}
 	for _, u := range c.Upstreams {
-		du := config.DocUpstream{Name: u.Name, Address: u.Address, Disclosure: u.Disclosure}
+		du := config.DocUpstream{Name: u.Name, Address: u.Address, Disclosure: u.Disclosure,
+			ConnectTimeout: config.Some(durText(u.ConnectTimeout)), ResponseTimeout: config.Some(durText(u.ResponseTimeout)),
+			UnreachableHold: config.Some(durText(u.UnreachableHold))}
 		if u.Interfaces != nil {
 			du.Interfaces = config.Some(slices.Clone(u.Interfaces))
 		}
 		d.Upstreams = append(d.Upstreams, du)
 	}
+	list := func(l []string) config.Opt[[]string] {
+		if len(l) == 0 {
+			return config.Opt[[]string]{}
+		}
+		return config.Some(slices.Clone(l))
+	}
+	flag := func(b bool) config.Opt[bool] {
+		if !b {
+			return config.Opt[bool]{}
+		}
+		return config.Some(true)
+	}
 	for _, r := range c.Rules {
-		dr := config.DocRule{Name: r.Name, Action: r.Route.String()}
+		dr := config.DocRule{Name: r.Name, Action: r.Route.String(), Hosts: list(r.Hosts), Domains: list(r.Domains),
+			AllowLoopback: flag(r.AllowLoopback), AllowPrivate: flag(r.AllowPrivate)}
+		var cidrs []string
+		for _, p := range r.CIDRs {
+			cidrs = append(cidrs, p.String())
+		}
+		dr.CIDRs = list(cidrs)
+		if len(r.Ports) > 0 {
+			ports := make([]int64, len(r.Ports))
+			for i, p := range r.Ports {
+				ports[i] = int64(p)
+			}
+			dr.Ports = config.Some(ports)
+		}
 		if r.Interfaces != nil {
 			dr.Interfaces = config.Some(slices.Clone(r.Interfaces))
 		}

@@ -829,3 +829,97 @@ table.detected td.def-cell .badge { text-decoration: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ===================================================================
+   Rules and upstreams pages (design 0009 D3.3–D3.5, task C). Page
+   blocks only: the shared components above stay as they are.
+   =================================================================== */
+/* Controls that exist only with the script, or only without it. */
+html:not(.js) .js-only { display: none !important; }
+html.js .nojs-only { display: none !important; }
+
+/* Test a URL: the result under the test bar, and its verdicts. */
+.test-panel .t-hint { margin-top: 8px; }
+.test-out .result { margin-top: 12px; }
+.test-res:empty { display: none; }
+.res-head > span { min-width: 0; overflow-wrap: anywhere; }
+.res-dl dd.refused { color: var(--block); font-weight: 500; }
+.res-dl dd.dd-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.res-dl .nb { white-space: normal; }
+.res-note.wrn { color: var(--warn); }
+.result .err { margin: 0; }
+
+/* The chain: the row menu is a <details>, so it opens without the
+   script; a row's position field replaces drag and keys without it. */
+details.r-menu { position: relative; }
+details.r-menu > summary { list-style: none; }
+details.r-menu > summary::-webkit-details-marker { display: none; }
+details.r-menu .menu { right: 0; top: calc(100% + 4px); }
+details.r-menu[open] > summary { background: var(--surface-2); color: var(--ink); }
+.menu .m-note { margin: 0; }
+.menu button[data-move][disabled] { color: var(--muted); cursor: default; }
+/* The handle's cell stays without the script, which hides the button,
+   so the row's other cells keep their columns. */
+.r-handle { display: flex; justify-content: center; min-width: 0; }
+.r-pos { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.r-pos .input { width: 64px; min-height: 28px; padding: 0 6px; font-variant-numeric: tabular-nums; }
+.rule.filtered-out { display: none; }
+.chain.filtering .handle { opacity: .3; cursor: default; }
+.order-foot { padding: 12px 0 0; }
+.chain-panel { overflow: visible; }
+a.badge.warn { text-decoration: none; }
+
+/* The rule editor: the stylesheet shows the groups that the chosen
+   action uses, so the page needs no script for it. Without :has every
+   group shows. */
+@supports selector(:has(*)) {
+  .rule-form .if-upstream, .rule-form .if-direct, .rule-form .if-upstream-off,
+  form .if-only, .act-hint > span { display: none; }
+  .rule-form:has(input[name="action"][value="direct"]:checked) .if-direct { display: grid; }
+  .rule-form:has(input[name="action"][value="upstream"]:checked) .if-upstream { display: grid; }
+  .rule-form:has(input[name="action"][value="upstream"]:checked) .if-upstream-off,
+  .rule-form:has(input[name="action"][value="direct"]:checked) .h-direct,
+  .rule-form:has(input[name="action"][value="upstream"]:checked) .h-upstream,
+  .rule-form:has(input[name="action"][value="block"]:checked) .h-block { display: inline; }
+  form:has(input[name="ifaces"][value="only"]:checked) .if-only { display: grid; }
+}
+.f-issues { display: grid; gap: 4px; }
+.f-issues:empty { display: none; }
+.seg.wrap span { white-space: normal; width: 100%; }
+.seg.wrap label { flex: 1 1 auto; }
+.ph-lab { display: none; }
+.test-body { display: grid; gap: 10px; padding: 4px 16px 16px; }
+.test-body .t-input { position: relative; }
+.test-body .t-input .ic { position: absolute; left: 10px; top: 9px; color: var(--muted); }
+.test-body .t-input .input { padding-left: 32px; }
+.test-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.test-body .test-res { display: grid; gap: 10px; }
+.test-body .result { margin-top: 0; }
+.verdict .v-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.verdict .ic { width: 14px; height: 14px; }
+.side .hosts { padding-top: 0; }
+
+/* The upstream editor: a dialog over the list with the script, a panel
+   on its own page without it. */
+dialog.editor-dialog { width: min(680px, calc(100% - 32px)); }
+.editor-slot, .up-editor, .upstream-form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.up-editor .dlg-body { flex: 1 1 auto; min-height: 0; align-content: start; }
+.up-page { overflow: hidden; }
+.upstream-form details.disclosure { padding-top: 12px; border-top: 1px solid var(--line); }
+.upstream-form details.disclosure .row2 { margin-top: 4px; }
+.upstream-form details.disclosure > .hint { margin-top: 8px; }
+.dlg-foot .used-by { align-self: center; }
+.e-use a { text-decoration-color: var(--line-strong); }
+
+@media (max-width: 759px) {
+  /* The shell's grid gave the free height of a short page to the top
+     bar too; the main area takes it. */
+  .app { grid-template-rows: auto minmax(0, 1fr); }
+  .ph-lab { display: inline; }
+  dialog.editor-dialog { width: 100%; }
+  .rule > .r-handle { display: none; }
+  .test-row .seg { flex: 1 1 auto; }
+  .r-pos .input { width: 56px; }
+  .test-res .res-dl { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .test-res .res-dl dd { margin-bottom: 6px; }
+}

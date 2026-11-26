@@ -232,7 +232,7 @@ func TestAdminDraftReview(t *testing.T) {
 		!strings.Contains(body, "<li><span>Rule <code>restricted</code>: domains &#43;1</span></li>") {
 		t.Errorf("form review:\n%s", body)
 	}
-	checkMarkup(t, "form review", body, true, "")
+	checkMarkup(t, "form review", body, true, "/rules")
 	want := encodeWith(t, exampleConfig, func(d *config.Doc) {
 		d.Rules[1].Domains.V = append(d.Rules[1].Domains.V, "docs.example.org")
 	})

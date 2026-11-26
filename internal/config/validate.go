@@ -37,7 +37,20 @@ var (
 // of a hardware address (design 0008 D6, 0004 D4).
 const interfaceSyntaxHint = "TOML syntax: invalid value; put it in double quotes"
 
+// noteSyntaxHint replaces a TOML syntax message about a note, which could
+// quote part of it; a note never reaches a message (design 0009 D6,
+// OI-0006 Z-R3).
+const noteSyntaxHint = "TOML syntax: invalid note; write it as one line in double quotes"
+
 var reservedRuleNames = []string{policy.RuleDefault, policy.RuleRemoteDefault, policy.RulePort, policy.RuleRemoteDirect}
+
+// NewPageName is the last part of the admin UI's page for a new rule,
+// upstream, or interface, such as /rules/new, so no rule, upstream, or
+// interface has that name (design 0009 D7, OI-0006 AB-R5).
+const NewPageName = "new"
+
+// newNameMsg refuses NewPageName as a name.
+const newNameMsg = "is reserved for the admin UI's page that adds one; choose another name"
 
 // Defaults from design 0004 D3.
 var (
@@ -53,9 +66,12 @@ const (
 )
 
 // ValidName reports whether name matches the schema pattern of a name of
-// kind: KindRule, KindUpstream, or KindInterface. The admin answers 404
-// to a page path whose name does not (design 0009 D7).
+// kind: KindRule, KindUpstream, or KindInterface, and is not reserved. The
+// admin answers 404 to a page path whose name does not (design 0009 D7).
 func ValidName(kind, name string) bool {
+	if name == NewPageName {
+		return false
+	}
 	switch kind {
 	case KindRule:
 		return ruleNameRe.MatchString(name)
@@ -99,14 +115,18 @@ func parse(data []byte, file string) (*Config, map[string]any, *Report) {
 // syntaxIssue reports a TOML syntax error with its position and the
 // parser's message. The parser quotes the start of an unquoted value, so
 // under an [[interface]] key or an interfaces list, where that value may
-// be a MAC, the message is a fixed hint instead (design 0008 D6). Other
+// be a MAC, and under a note, which no message repeats, the message is a
+// fixed hint instead (design 0008 D6, 0009 D6). Other
 // messages quote what the operator wrote, as every other message does:
 // the operator is trusted, and a pattern that hid MAC-shaped text would
 // also hide names and IPv6 addresses that the settings page must show.
 func syntaxIssue(pe toml.ParseError, file string) Issue {
 	msg := "TOML syntax: " + pe.Message
-	if interfaceKey(pe.LastKey) {
+	switch {
+	case interfaceKey(pe.LastKey):
 		msg = interfaceSyntaxHint
+	case pe.LastKey == "note" || strings.HasSuffix(pe.LastKey, ".note"):
+		msg = noteSyntaxHint
 	}
 	return Issue{File: file, Line: pe.Position.Line, Key: pe.LastKey, Msg: msg}
 }
@@ -469,6 +489,8 @@ func (v *validator) config(raw map[string]any) *Config {
 			switch {
 			case !upstreamNameRe.MatchString(name):
 				v.errf(sub(base, "name"), "%q does not match ^[a-z][a-z0-9-]{0,31}$", name)
+			case name == NewPageName:
+				v.errf(sub(base, "name"), "%q "+newNameMsg, name)
 			case upstreamNames[name]:
 				v.errf(sub(base, "name"), "duplicate upstream name %q", name)
 			default:
@@ -666,6 +688,8 @@ func (v *validator) rules(raw map[string]any, c *Config, upstreams map[string]bo
 				v.errf(namePath, "%q does not match ^[a-z0-9][a-z0-9._-]{0,63}$", name)
 			case slices.Contains(reservedRuleNames, name):
 				v.errf(namePath, "%q is reserved for decisions that no rule made", name)
+			case name == NewPageName:
+				v.errf(namePath, "%q "+newNameMsg, name)
 			default:
 				r.Name = name
 			}
@@ -875,6 +899,8 @@ func (v *validator) interfaces(raw map[string]any, c *Config) {
 				v.errf(path, "does not match ^[a-z][a-z0-9-]{0,31}$")
 			case name == "other":
 				v.errf(path, "is reserved for traffic of no defined interface")
+			case name == NewPageName:
+				v.errf(path, newNameMsg)
 			default:
 				if i, dup := names[name]; dup {
 					v.errf(path, "duplicate of %s", sub(elem("interface", i), "name"))

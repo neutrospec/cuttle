@@ -11,10 +11,11 @@
 # script's controls, the review dialog and apply, the file banners, the
 # previous version, and the pages without the script.
 # TestAdminScreensSettings does the same for the Interfaces, Proxy,
-# Remote clients, General, and Account pages and drives their flows with
-# and without the script. All three use a throwaway profile and the mock
-# keychain; Chrome opens no window and no debugging port, and its only
-# proxy is a listener that refuses every request.
+# Remote clients, General, and Account pages, and TestAdminScreensRules
+# for the Rules and Upstreams pages, and both drive their flows with and
+# without the script. All use a throwaway profile and the mock keychain;
+# Chrome opens no window and no debugging port, and its only proxy is a
+# listener that refuses every request.
 #
 #   scripts/admin-check
 #
@@ -27,6 +28,7 @@ set -x
 CUTTLE_ADMIN_CHROME=1 go test -count=1 -v -run '^TestAdminChrome$' ./cmd/cuttle
 CUTTLE_ADMIN_CHROME=1 go test -count=1 -v -run '^TestAdminScreens$' ./internal/admin
 CUTTLE_ADMIN_CHROME=1 go test -count=1 -v -run '^TestAdminScreensSettings$' ./internal/admin
+CUTTLE_ADMIN_CHROME=1 go test -count=1 -v -run '^TestAdminScreensRules$' ./internal/admin
 { set +x; } 2>/dev/null
 # Only this check's processes: the binary under cuttle-bin-* and Chrome
 # with a throwaway profile under a test's temporary directory.

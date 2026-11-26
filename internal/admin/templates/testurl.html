@@ -1,0 +1,19 @@
+{{/* test-result shows a testView (design 0009 D8): what decided, the
+   route, the target, the upstream with its live state, the direct
+   flags and address verdict, and the interface list in force. */}}
+{{define "test-result"}}{{if .Err}}<div class="result" role="status"><p class="err">{{.Err}}</p></div>
+{{else if .Fix}}<div class="result" role="status"><p class="err">Fix the errors to test this draft.</p></div>
+{{else}}<div class="result" role="status">
+<div class="res-head">{{template "route" .Route}}<span>{{template "rich" .Head}}</span></div>
+<dl class="res-dl">
+<dt>Target</dt><dd><code>{{.Target}}</code> <span class="nb">({{.Kind}})</span></dd>
+{{with .Upstream}}<dt>Upstream</dt><dd class="dd-row"><code>{{.Address}}</code> <span class="badge">disclosure {{.Disclosure}}</span>{{with .State.State}} <span class="state {{.}}">{{$.Upstream.State.Text}}</span>{{end}}</dd>
+{{end}}{{with .Direct}}<dt>Direct</dt><dd>{{.}}</dd>
+{{end}}{{with .Address}}<dt>Address</dt><dd{{if $.Refused}} class="refused"{{end}}>{{.}}</dd>
+{{end}}{{with .Answer}}<dt>Answer</dt><dd>{{.}}</dd>
+{{end}}{{with .Interfaces}}<dt>Interfaces</dt><dd>{{.}}</dd>
+{{end}}</dl>
+{{with .Note}}<p class="res-note">{{.}}</p>
+{{end}}{{with .Upstream}}{{if .State.Down}}<p class="res-note wrn">This upstream is down now, so a matching request fails at once.</p>
+{{end}}{{end}}</div>
+{{end}}{{end}}

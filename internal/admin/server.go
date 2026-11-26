@@ -193,6 +193,8 @@ func New(opt Options) *Server {
 	handle("POST /config/draft", s.authed(maxSettingsFormBytes, s.postDraft))
 	handle("POST /config/apply", s.authed(maxSettingsFormBytes, s.postApply))
 	handle("POST /config/reload", s.authed(maxFormBytes, s.postReload))
+	// The rules and upstreams pages (design 0009 task C).
+	s.addConfigPages(handle)
 	// Task D of design 0009: Interfaces, Proxy, Remote clients, General,
 	// and Account.
 	s.addPagesD(handle)

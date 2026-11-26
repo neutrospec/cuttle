@@ -217,12 +217,12 @@ func TestShellNavigation(t *testing.T) {
 	nav := body[strings.Index(body, `<nav class="nav"`):]
 	nav = nav[:strings.Index(nav, "</nav>")]
 	text := strings.Join(strings.Fields(tagRE.ReplaceAllString(nav, " ")), " ")
-	want := "Traffic Overview Domains Live Configuration Rules (not available yet) 4 Upstreams (not available yet) 2 " +
+	want := "Traffic Overview Domains Live Configuration Rules 4 Upstreams 2 " +
 		"Interfaces 2 Proxy Remote clients General Admin Account Advanced"
 	if text != want {
 		t.Errorf("navigation:\n got %q\nwant %q", text, want)
 	}
-	links := []string{"/", "/domains", "/live", "/interfaces", "/proxy", "/remote", "/general", "/account", "/settings"}
+	links := []string{"/", "/domains", "/live", "/rules", "/upstreams", "/interfaces", "/proxy", "/remote", "/general", "/account", "/settings"}
 	for _, href := range links {
 		if !strings.Contains(nav, `<a href="`+href+`"`) {
 			t.Errorf("navigation lacks a link to %s", href)
