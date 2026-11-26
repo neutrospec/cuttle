@@ -41,21 +41,24 @@ A closed task becomes one line under Closed:
 
 ## Active
 
-### TASK-0023 — M4.4 E: dashboard integration and the M4 browser check
+### TASK-0024 — v0.2.0 release preparation
 
-- Milestone: M4.4
-- Status: review
+- Milestone: M4 close
+- Status: implement
 - Iteration: 1/3
-- Workers: implementer done on branch `t3/admin-dashboard-route-host`;
-  fresh reviewer running
-- Base: `6be51e7`
-- Candidate: `3f1cad3` (tree `3ad5d43`)
-- Evidence: implementer ran `scripts/gate t0`, `t1`, and
-  `scripts/admin-check` on `3ad5d43`, all pass; W24–W26 tests, the M4
-  follow-ups settled, mutation proofs, and screenshots at 1280 and 390 px
-  in light and dark
-- Findings: none yet
-- Next action: reviewer — risk-based review of `6be51e7..3f1cad3`
+- Workers: implementer on a T3 worktree branch
+- Base: this board update
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: implementer — fix AD-R1–AD-R3 and AD-R5, add the
+  changelog with the v0.2.0 notes (Z-R5, AC-R3), update the README status
+  and admin sections, and return the candidate
+
+Decisions for TASK-0024 (2026-11-26):
+
+- M4 closed on tree `3ad5d43` (TASK-0023). The release tag and the push
+  wait for the user's confirmation, as for v0.1.0.
 
 ## Closed
 
@@ -65,6 +68,12 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0023 — M4.4 E: dashboard integration and the M4 browser check —
+  landed `af413fe`, gates: T0 T1 T2 @ `3ad5d43` (landed tree differs only in
+  tracking records); iteration 1 of 3; the implementer and the reviewer
+  each ran T0, T1, and `scripts/admin-check` (W1–W26) on `3ad5d43`, which
+  holds every M4 stage, so M4 closes on that tree; follow-ups AD-R1–AD-R5
+  in OI-0006
 - TASK-0021 — M4.2 C: rules and upstreams — landed `d784fcf`, gates: T0 T1 T2 @
   `c38c5d1` (landed tree differs only in tracking records); iteration 2 of
   3; follow-ups AC-R1–AC-R4 in OI-0006
