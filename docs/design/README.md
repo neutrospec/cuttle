@@ -16,5 +16,6 @@ to [OPEN_ISSUES.md](../OPEN_ISSUES.md) when it blocks the current scope.
 | [0006](0006-packaging-paths-and-lifecycle.md) | XDG paths, permissions, CLI, control socket, first run, signals, logging, Homebrew formula and service | Proposed |
 | [0007](0007-test-environment-and-gates.md) | Test layers, mocks, name-resolution control, chain and loop setups, safety rules, T0–T3 gates, M1 and M3 client checks | Proposed |
 | [0008](0008-interface-selection.md) | Interface definitions and matching, online state without probe traffic, change notices, interface lists, bound dials, failover and demotion, upstream binding, DNS limits, status, `cuttle interfaces`, per-interface counters, device check | Proposed |
+| [0009](0009-web-configuration.md) | Full configuration in the web admin: information architecture, screens and states, convenience features, canonical TOML writer, edit and review pipeline, Test a URL, script policy, visual system, password change; [clickable prototype](0009-prototype.html) | Proposed |
 
 Read 0002 first; the others refer to its interfaces and response table.
