@@ -44,16 +44,18 @@ A closed task becomes one line under Closed:
 ### TASK-0020 — M4.1 B1: save pipeline, review, and Advanced restore
 
 - Milestone: M4.1
-- Status: implement
+- Status: review
 - Iteration: 1/3
-- Workers: implementer on a T3 worktree branch
-- Base: this board update
-- Candidate: none
-- Evidence: none
-- Findings: none
-- Next action: implementer — build task B1 of design 0009 (W5–W12) with
-  the binding items Y-R1–Y-R5, Z-R1, Z-R2, Z-R8, and T-R3 and return the
-  candidate
+- Workers: implementer done on branch `t3/admin-save-review-pipeline`;
+  fresh reviewer running
+- Base: `59a7b3d`
+- Candidate: `690dce9` (tree `c5004d2`)
+- Evidence: implementer ran `scripts/gate t0`, `t1`, and
+  `scripts/admin-check` on `c5004d2`, all pass; W5–W12 and W14 tests, the
+  binding items, 22 mutation proofs, and review-flow screenshots at 1280
+  and 390 px in light and dark
+- Findings: none yet
+- Next action: reviewer — risk-based review of `59a7b3d..690dce9`
 
 ## Closed
 
