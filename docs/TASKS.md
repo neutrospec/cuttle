@@ -44,19 +44,19 @@ A closed task becomes one line under Closed:
 ### TASK-0017 — M4 design: full configuration in the web admin
 
 - Milestone: M4
-- Status: design
+- Status: review
 - Iteration: 3/3
-- Workers: designer on branch `t3/web-config-admin-design` (last fix round)
+- Workers: designer done on branch `t3/web-config-admin-design`; fresh
+  reviewer re-checking the last fixes
 - Base: `829a072`
-- Candidate: `e168d7b` (tree `373c157`), returned to design; F1, F2, and
-  the folded items were verified as fixed
+- Candidate: `704b11e` (tree `dc39942`); `e168d7b` (tree `373c157`) was
+  returned for N1
 - Evidence: the designer checked the prototype in light and dark and at
   390 px with no horizontal overflow; its canonical TOML example round-trips
 - Findings: N1 (medium, security): forms re-rendered from posted values
   must carry the posted rendered values, or earlier changes such as "No
   ports" drop out of the next review; N2–N7 (minor and nits) folded in
-- Next action: designer — fix N1 with the folded items; then a fresh
-  re-check, after which any remainder goes to OPEN_ISSUES
+- Next action: reviewer — re-check the fixes in `e168d7b..704b11e`
 
 Decisions for TASK-0017 (2026-11-26):
 
