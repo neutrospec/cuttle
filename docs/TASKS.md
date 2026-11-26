@@ -41,25 +41,19 @@ A closed task becomes one line under Closed:
 
 ## Active
 
-### TASK-0024 — v0.2.0 release preparation
+### TASK-0025 — Publish v0.2.0
 
 - Milestone: M4 close
-- Status: review
+- Status: approval
 - Iteration: 1/3
-- Workers: implementer done on branch `t3/prepare-v020-release`; fresh
-  reviewer running
-- Base: `87df62b`
-- Candidate: `d9e0072` (tree `dc09c81`)
-- Evidence: implementer ran `scripts/gate t0`, `t1`, and
-  `scripts/admin-check` on `dc09c81`, all pass; AD-R1–AD-R3 and AD-R5
-  with 4 mutation proofs; `CHANGELOG.md` and README updates
-- Findings: none yet
-- Next action: reviewer — review `87df62b..d9e0072`
-
-Decisions for TASK-0024 (2026-11-26):
-
-- M4 closed on tree `3ad5d43` (TASK-0023). The release tag and the push
-  wait for the user's confirmation, as for v0.1.0.
+- Workers: orchestrator on `main`
+- Base: this board update
+- Candidate: `main` with tag `v0.2.0`
+- Evidence: none yet
+- Findings: none
+- Next action: orchestrator — run `scripts/publish-scan` on a scratch bare
+  repository holding `main`, `v0.1.0`, and `v0.2.0`, then ask the user to
+  confirm the push and the tap update
 
 ## Closed
 
@@ -69,6 +63,10 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0024 — v0.2.0 release preparation — landed `924253d`, gates: T0 T1
+  T2 @ `dc09c81` (landed tree differs only in tracking records), with the
+  review's three changelog fixes in `30dcabf` (gates: none); iteration 1
+  of 3
 - TASK-0023 — M4.4 E: dashboard integration and the M4 browser check —
   landed `af413fe`, gates: T0 T1 T2 @ `3ad5d43` (landed tree differs only in
   tracking records); iteration 1 of 3; the implementer and the reviewer
