@@ -41,6 +41,20 @@ A closed task becomes one line under Closed:
 
 ## Active
 
+### TASK-0020 — M4.1 B1: save pipeline, review, and Advanced restore
+
+- Milestone: M4.1
+- Status: implement
+- Iteration: 1/3
+- Workers: implementer on a T3 worktree branch
+- Base: this board update
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: implementer — build task B1 of design 0009 (W5–W12) with
+  the binding items Y-R1–Y-R5, Z-R1, Z-R2, Z-R8, and T-R3 and return the
+  candidate
+
 ## Closed
 
 The history was rewritten on 2026-11-25 (TASK-0003) to remove local
