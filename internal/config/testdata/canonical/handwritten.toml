@@ -1,0 +1,85 @@
+# A hand-written file that sets every key of the schema, in an order and
+# with formatting that the canonical form changes: comments, literal and
+# escaped strings, inline tables, unnamed rules, and long arrays.
+
+name = 'cuttle-edge'   # end-of-line comment
+log = { level = "debug" }
+stats = { max_hosts_per_hour = 5000, retention_days = 7 }
+
+[admin]
+listen = ""
+
+[proxy]
+default = "upstream:gateway"
+max_connections = 2048
+listen = [
+  '127.0.0.1:18080',  # loopback
+  "10.8.0.6:18081",
+]
+connect_timeout = "5s"
+response_timeout = '30s'
+idle_timeout = "0s"
+interface_demotion = "0s"
+interface_attempt_timeout = "2s"
+interfaces = ["eth-a", "wifi"]
+
+[proxy.remote]
+max_connections_per_source = 64
+sources = ["10.8.0.1/32", "2001:db8::/48"]
+ports = []
+default = "upstream:gateway"
+allow_direct = false
+
+[[upstream]]
+address = "GW.example:3128"
+name = "gateway"
+note = "Gateway \"lab\" \\ path, 東京 # not a comment"
+disclosure = "via"
+connect_timeout = "3s"
+response_timeout = "45s"
+unreachable_hold = "0s"
+interfaces = ["eth-a"]
+
+[[upstream]]
+name = "egress"
+disclosure = "none"
+address = "203.0.113.20:3128"
+
+[[interface]]
+kind = "wired"
+name = "eth-a"
+note = ''
+mac = "00:00:5E:00:53:0A"
+
+[[interface]]
+name = "wifi"
+device = "en0"
+kind = "wifi"
+
+# An unnamed rule gets rule-1, which the canonical form writes.
+[[rule]]
+domains = [
+  "ads.example.net", "tracker.example", "metrics.example.org",
+  "beacon.example.com",
+]
+action = "block"
+
+[[rule]]
+name = "lan"
+note = "NAS and printers"
+action = "direct"
+cidrs = ["192.168.0.0/16", "fd00::/8"]
+hosts = ["nas.lan"]
+ports = [80, 443, 8443]
+allow_private = true
+allow_loopback = false
+interfaces = ["wifi", "eth-a"]
+
+[[rule]]
+name = "restricted"
+domains = ["internal.example"]
+action = "upstream:egress"
+
+[[rule]]
+hosts = ["update.example"]
+action = "direct"

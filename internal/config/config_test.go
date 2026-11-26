@@ -30,7 +30,9 @@ type expectation struct {
 	msg  string
 }
 
-var expectRe = regexp.MustCompile(`^# (want|warn): (\d+) ([^ :]*): (.+)$`)
+// A key may contain ":", as a quoted MAC key does; it ends at the first
+// ": ", which no key path contains (OI-0006 U-R5).
+var expectRe = regexp.MustCompile(`^# (want|warn): (\d+) (\S*): (.+)$`)
 
 // readExpectations returns the header lines of a sample and its content.
 func readExpectations(t *testing.T, path string) ([]expectation, []byte) {
@@ -424,6 +426,46 @@ func TestAtomicWrite(t *testing.T) {
 			t.Errorf("target changed to %q", got)
 		}
 	})
+}
+
+// TestAtomicWriteDirSync checks W14 of design 0009 (OI-0006 U-R1): when
+// the directory cannot be opened for the sync after the rename, the write
+// reports ErrNotSynced, and the file and .bak already hold the new and the
+// previous content. A directory with mode 0300 allows the renames but not
+// the open.
+func TestAtomicWriteDirSync(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root opens any directory")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o300); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(dir, 0o700)
+	err := WriteAtomic(path, []byte("new"), WriteOptions{ExpectSHA256: Digest([]byte("old")), Backup: true})
+	if !errors.Is(err, ErrNotSynced) || !strings.Contains(err.Error(), "permission denied") {
+		t.Fatalf("WriteAtomic: %v, want ErrNotSynced", err)
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != "new" {
+		t.Errorf("file holds %q, want the new content", got)
+	}
+	if got, _ := os.ReadFile(path + ".bak"); string(got) != "old" {
+		t.Errorf(".bak holds %q, want the previous content", got)
+	}
+	if left, _ := filepath.Glob(filepath.Join(dir, ".config.toml.tmp-*")); len(left) != 0 {
+		t.Errorf("temporary files left: %v", left)
+	}
+	// Every other failure still means that the file is unchanged.
+	if err := WriteAtomic(path, []byte("newer"), WriteOptions{ExpectSHA256: Digest([]byte("old"))}); !errors.Is(err, ErrConflict) || errors.Is(err, ErrNotSynced) {
+		t.Errorf("conflict: %v", err)
+	}
 }
 
 func TestEnsureStarter(t *testing.T) {

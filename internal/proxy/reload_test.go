@@ -305,6 +305,69 @@ func TestReloadUpstreamState(t *testing.T) {
 	}
 }
 
+// TestReloadNoteOnly checks W3 of design 0009: a reload whose only change
+// is a note on upstreams and rules keeps each upstream's runtime state, its
+// unreachable hold and its pooled connection, because a note changes no
+// behavior (0009 D6).
+func TestReloadNoteOnly(t *testing.T) {
+	e := newEnv(t, stateConfig)
+	n := e.originNet()
+	n.Map("pool.cuttle.test", "203.0.113.10")
+	rec := testenv.NewRecordingUpstream(t, testenv.UpstreamOptions{Net: n})
+	e.net.Route("10.8.0.8:3128", rec.Addr)
+	client, _ := e.goClient()
+	getPool := func() {
+		t.Helper()
+		res, err := client.Get("http://pool.cuttle.test/echo")
+		if err != nil {
+			t.Fatal(err)
+		}
+		io.Copy(io.Discard, res.Body)
+		res.Body.Close()
+		if res.StatusCode != 200 {
+			t.Fatalf("pool: %d", res.StatusCode)
+		}
+	}
+	connectKeep := func() int {
+		t.Helper()
+		res, _ := e.raw("CONNECT keep.cuttle.test:443 HTTP/1.1\r\nHost: keep.cuttle.test:443\r\n\r\n")
+		return res.StatusCode
+	}
+	if s := connectKeep(); s != http.StatusBadGateway {
+		t.Fatalf("first request %d", s)
+	}
+	getPool()
+
+	noted := stateConfig
+	for _, name := range []string{"keep", "pool"} {
+		for _, table := range []string{"[[upstream]]", "[[rule]]"} {
+			old := table + "\nname = \"" + name + "\"\n"
+			if !strings.Contains(noted, old) {
+				t.Fatalf("pattern %q not found", old)
+			}
+			noted = strings.Replace(noted, old, old+"note = \"changed only here \\u6771\"\n", 1)
+		}
+	}
+	e.reload(noted)
+
+	var keep UpstreamStatus
+	for _, u := range e.p.Upstreams() {
+		if u.Name == "keep" {
+			keep = u
+		}
+	}
+	if keep.State != StateDown || keep.DownFor <= 0 {
+		t.Errorf("keep after a note-only reload: %+v, want still down", keep)
+	}
+	if s := connectKeep(); s != http.StatusServiceUnavailable {
+		t.Errorf("keep after a note-only reload: %d, want the hold's 503", s)
+	}
+	getPool()
+	if rec.Connections() != 1 {
+		t.Errorf("pool connections %d after a note-only reload, want the pooled one reused", rec.Connections())
+	}
+}
+
 // sourceConfig lets remote clients from 10.8.0.1 reach plain.cuttle.test
 // directly.
 const sourceConfig = baseConfig + `

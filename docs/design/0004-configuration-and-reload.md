@@ -31,8 +31,11 @@ Why TOML and this library:
   parse errors, and exposes undecoded keys, so cuttle can reject unknown
   keys and typos. The implementer records `go mod graph` in the first T0
   evidence to show what it adds.
-- cuttle never encodes TOML. The settings page edits the file as text
-  ([0005 D10][d5-10]), so comments and order survive edits.
+- The text editor of the settings page writes the operator's text as
+  written ([0005 D10][d5-10]), so comments and order survive its edits.
+  The admin forms write the canonical form of [0009 D6][d9-6]: fixed
+  order and formatting with generated comments, which replace comments
+  written by hand (amended by TASK-0018).
 - YAML brings a larger dependency and implicit typing. A custom line format
   needs its own parser, error reporting, and documentation.
 
@@ -98,6 +101,7 @@ Local clients have no port policy.
 | `mac` | string | none | reload | EUI-48 hardware address; at least one of `mac` and `device` |
 | `device` | string | none | reload | BSD name such as `en0` |
 | `kind` | string | none | reload | Guard: `wired`, `wifi`, or `cellular` |
+| `note` | string | none | reload | One line for the operator, at most 120 characters ([0009 D6][d9-6]) |
 
 `[[upstream]]`, zero or more:
 
@@ -110,6 +114,7 @@ Local clients have no port policy.
 | `response_timeout` | duration | `"60s"` | reload | Response head for `CONNECT` and plain HTTP, 100 ms–10 min |
 | `unreachable_hold` | duration | `"5s"` | reload | Fail fast after a connect failure, 100 ms–5 min; `"0s"` disables ([0003 D8][d3-8]) |
 | `interfaces` | array of interface names | none | reload | Interface list for dials to this upstream's public addresses; unset follows system routing ([0008 D11][d8-11]) |
+| `note` | string | none | reload | One line for the operator, at most 120 characters ([0009 D6][d9-6]) |
 
 `[[rule]]`, zero or more, evaluated in file order:
 
@@ -124,8 +129,18 @@ Local clients have no port policy.
 | `allow_loopback` | boolean | `false` | `direct` only: local clients may reach loopback addresses, and names that resolve to this Mac's own addresses ([0003 D11][d3-11]) |
 | `allow_private` | boolean | `false` | `direct` only: local clients may reach private addresses that a name resolves to ([0003 D11][d3-11]) |
 | `interfaces` | array of interface names | none | `direct` only: this rule's interface list, which replaces `proxy.interfaces` ([0008 D6][d8-6]) |
+| `note` | string | none | One line for the operator, at most 120 characters ([0009 D6][d9-6]) |
 
 All rule keys apply on reload.
+
+`note` (added by TASK-0018, [0009 D6][d9-6]) is at most 120 characters,
+counted as Unicode code points, with no control character (U+0000 to
+U+001F and U+007F). It changes no behavior: the admin pages show it, and
+no log line, status field, statistic, or validator message repeats it, so a
+reload that changes only a note keeps every upstream's transport. A
+binary released before it, v0.1.0 included, refuses a file with a note as
+an unknown key; the release notes of the first version with `note` say so
+for operators who downgrade.
 
 `[admin]` (M2):
 
@@ -175,6 +190,8 @@ Errors:
   where a CIDR belongs gets the same plain form in its suggestion.
 - `allow_loopback` or `allow_private` on a rule whose action is not
   `direct`.
+- A `note` longer than 120 characters or with a control character; the
+  message does not repeat the note.
 - The exposure errors of [0003 D9][d3-9] and [D10][d3-10].
 - An upstream address equal to a listener ([0003 D1][d3-1]).
 - An `admin.listen` that is not a loopback literal, or whose effective
@@ -346,8 +363,11 @@ write files this way:
 4. For the configuration file, write the previous content to `<base>.bak`
    in that directory the same way, then rename it into place.
 5. Rename the temporary file over the target, then `fsync` the directory.
-6. On any failure, remove the temporary file and leave the target
-   unchanged.
+6. On any failure before that rename, remove the temporary file and leave
+   the target unchanged. When opening or syncing the directory fails after
+   the rename, the target already holds the new content: the write counts
+   as saved, and the caller logs a warning and reloads (OI-0006 U-R1,
+   [0009 D7][d9-7]).
 
 The target always exists, holding the old or the new content.
 
@@ -370,8 +390,10 @@ The target always exists, holding the old or the new content.
 - **File watching with `fsnotify`.** It adds a dependency and applies
   half-saved editor states; an explicit reload is predictable.
 - **Structured settings forms that rewrite the file.** They would lose
-  comments without a comment-preserving TOML encoder. The user chose text
-  editing.
+  comments without a comment-preserving TOML encoder. The user first chose
+  text editing; on 2026-11-26 the user chose forms that write the canonical
+  form of [0009 D6][d9-6], with generated comments and notes in place of
+  comments written by hand, beside the text editor.
 - **A global destination port list for every client.** It made
   `curl http://localhost:3000` fail and gave local clients less reach than
   no proxy; ports are limited for remote clients only.
@@ -397,3 +419,5 @@ The target always exists, holding the old or the new content.
 [d8-9]: 0008-interface-selection.md#d9-demotion
 [d8-11]: 0008-interface-selection.md#d11-upstreams
 [d8-14]: 0008-interface-selection.md#d14-reload
+[d9-6]: 0009-web-configuration.md#d6-configuration-model-and-canonical-writer
+[d9-7]: 0009-web-configuration.md#d7-edit-and-save-pipeline
