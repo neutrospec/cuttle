@@ -844,6 +844,8 @@ html.js .nojs-only { display: none !important; }
 .test-res:empty { display: none; }
 .res-head > span { min-width: 0; overflow-wrap: anywhere; }
 .res-dl dd.refused { color: var(--block); font-weight: 500; }
+.res-dl dd.dd-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.res-dl .nb { white-space: normal; }
 .res-note.wrn { color: var(--warn); }
 .result .err { margin: 0; }
 
@@ -856,6 +858,9 @@ details.r-menu .menu { right: 0; top: calc(100% + 4px); }
 details.r-menu[open] > summary { background: var(--surface-2); color: var(--ink); }
 .menu .m-note { margin: 0; }
 .menu button[data-move][disabled] { color: var(--muted); cursor: default; }
+/* The handle's cell stays without the script, which hides the button,
+   so the row's other cells keep their columns. */
+.r-handle { display: flex; justify-content: center; min-width: 0; }
 .r-pos { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .r-pos .input { width: 64px; min-height: 28px; padding: 0 6px; font-variant-numeric: tabular-nums; }
 .rule.filtered-out { display: none; }
@@ -912,6 +917,7 @@ dialog.editor-dialog { width: min(680px, calc(100% - 32px)); }
   .app { grid-template-rows: auto minmax(0, 1fr); }
   .ph-lab { display: inline; }
   dialog.editor-dialog { width: 100%; }
+  .rule > .r-handle { display: none; }
   .test-row .seg { flex: 1 1 auto; }
   .r-pos .input { width: 56px; }
   .test-res .res-dl { grid-template-columns: minmax(0, 1fr); gap: 0; }

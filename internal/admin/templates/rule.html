@@ -14,8 +14,8 @@
 <p class="lead">{{if .New}}{{with .From}}A copy of rule <code>{{.}}</code>. {{end}}A new rule is tried before the rules below the place you choose.{{else if .ReadOnly}}Position {{.Pos}} of {{.Count}}, as cuttle runs it.{{else}}Position {{.Pos}} of {{.Count}}. Changes apply after you review and apply them.{{end}}</p></div></header>
 <div id="form-issues">{{template "form-issues" $}}</div>
 <div class="editor">
-<form id="rule-form" method="post" action="/config/draft" class="rule-form" novalidate{{if not .ReadOnly}} data-guard="{{if .New}}Unsaved new rule{{else}}Unsaved changes to rule {{$f.Target}}{{end}}" data-live{{end}}>
-<input type="hidden" name="csrf" value="{{$.Token}}">
+<form id="rule-form" method="post" action="/config/draft" class="rule-form" novalidate{{if not .ReadOnly}} data-guard="{{if .New}}Unsaved new rule{{else}}Unsaved changes to rule {{$f.Target}}{{end}}" data-guard-discard="{{if .New}}/rules/new{{else}}/rules/{{$f.Target}}{{end}}" data-live{{end}}>
+{{if not .ReadOnly}}{{template "default-button"}}{{end}}<input type="hidden" name="csrf" value="{{$.Token}}">
 {{range $f.Hidden}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">
 {{end}}<fieldset class="fsec"{{if .ReadOnly}} disabled{{end}}><header><h2>Name and note</h2><p>The name appears in logs, statistics, and errors.</p></header>
 <div class="fields"><div class="row2">
@@ -40,12 +40,9 @@
 {{end}}<div class="fields if-direct">
 <label class="check"><input type="checkbox" name="allow_loopback" value="true"{{if $f.Checked "allow_loopback"}} checked{{end}}><span>Allow loopback and this Mac's own addresses</span><span class="hint">Local clients may reach 127.0.0.1, ::1, and names that resolve to this Mac.</span></label>
 <label class="check"><input type="checkbox" name="allow_private" value="true"{{if $f.Checked "allow_private"}} checked{{end}}><span>Allow private addresses that names resolve to</span><span class="hint">For devices on the home network by name, such as a NAS. Typed private IP addresses work without it.</span></label>
-{{with $f.Field "ifaces"}}<div class="field{{if .Invalid}} invalid{{end}}" id="f-ifaces" tabindex="-1"><span class="label" id="f-ifaces-l">Interfaces</span>
-{{if $.Data.View.Defined}}<div class="seg sm wrap" role="radiogroup" aria-labelledby="f-ifaces-l" aria-describedby="f-ifaces-issues"><label><input type="radio" name="ifaces" value="default"{{if ne $.Data.View.Ifaces "only"}} checked{{end}}><span>Use the default list ({{$.Data.View.DefaultList}})</span></label><label><input type="radio" name="ifaces" value="only"{{if eq $.Data.View.Ifaces "only"}} checked{{end}}><span>Only these interfaces, in this order</span></label></div>
-<div class="if-only fields">{{with $f.Field "ifaces_list"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-ifaces_list" class="sr">Interfaces, in order</label><textarea class="input list" id="f-ifaces_list" name="ifaces_list" rows="2" data-list data-bad="{{.Bad}}" autocomplete="off" spellcheck="false" aria-describedby="f-ifaces_list-hint f-ifaces_list-issues"{{if .Invalid}} aria-invalid="true"{{end}}>{{$f.Value "ifaces_list"}}</textarea><div class="hint" id="f-ifaces_list-hint">Requests use only these interfaces, in this order. Defined: {{join $.Data.View.Defined ", "}}.</div>{{template "fissues" .}}</div>{{end}}</div>
-{{else}}<input type="hidden" name="ifaces" value="default"><p class="hint">No interfaces are defined, so connections follow macOS routing.{{with $.Data.View.InterfacesHref}} <a href="{{.}}">Define interfaces</a> to choose which ones cuttle uses.{{end}}</p>
-{{end}}{{template "fissues" .}}</div>
-{{end}}</div>
+{{with .Interfaces}}{{if not .Defined}}<input type="hidden" name="ifaces" value="{{$f.Value "ifaces"}}">
+{{end}}{{template "iflist" .}}{{end}}{{template "fissues" ($f.Field "ifaces")}}{{template "fissues" ($f.Field "ifaces_list")}}
+</div>
 </div></fieldset>
 {{if .New}}<fieldset class="fsec"{{if .ReadOnly}} disabled{{end}}><header><h2>Position</h2><p>First is usual: a new rule is often an exception to the rules below it.</p></header>
 <div class="fields">{{with $f.Field "position"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-position">Place the rule</label><select class="input" id="f-position" name="position" aria-describedby="f-position-issues">{{range $.Data.View.Positions}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select>{{template "fissues" .}}</div>{{end}}</div></fieldset>
@@ -83,6 +80,6 @@
    one shadows it, and what the chain decides. */}}
 {{define "rule-test"}}{{with .Data.View}}<div class="test-res" data-block="rule-test">{{with .Test}}{{if or .Err .Fix}}{{template "test-result" .}}{{else}}<div class="verdict" role="status">
 <div class="v-line">{{if .Self}}<span class="yes">{{template "icon" "check"}} This rule matches</span>{{else}}<span class="no">This rule does not match</span>{{end}}</div>
-{{with .Shadow}}<div class="v-line shadow">{{template "icon" "alert"}} {{template "rich" .}}</div>
+{{with .Shadow}}<div class="v-line shadow">{{template "icon" "alert"}}<span>{{template "rich" .}}</span></div>
 {{end}}</div>
 {{template "test-result" .}}{{end}}{{end}}</div>{{end}}{{end}}

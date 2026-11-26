@@ -135,8 +135,8 @@ func (op *formOp) block() string {
 // reservedFields are the names of the hidden inputs that a form op's form
 // and its review post besides the fields: a field of the same name would
 // be overwritten or carried as one of them (OI-0006 AA-R5). The review's
-// form also carries every other posted name, and the rendered values use
-// the prefix r:.
+// form also carries every other posted name, the rendered values use the
+// prefix r:, and the interface list editor's Add select the prefix add:.
 var reservedFields = []string{"csrf", "intent", "op", "base", "return", "target", "text", "reviewed"}
 
 // addOp registers a form op. It panics on a second op of the same name
@@ -146,7 +146,7 @@ func (s *Server) addOp(op *formOp) {
 		panic("admin: op registered twice: " + op.Name)
 	}
 	for _, f := range op.Fields {
-		if slices.Contains(reservedFields, f.Name) || strings.HasPrefix(f.Name, "r:") || f.Name == "" {
+		if slices.Contains(reservedFields, f.Name) || strings.HasPrefix(f.Name, "r:") || strings.HasPrefix(f.Name, "add:") || f.Name == "" {
 			panic("admin: op " + op.Name + " has a field with a reserved name: " + strconv.Quote(f.Name))
 		}
 	}

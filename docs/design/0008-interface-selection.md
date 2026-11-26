@@ -73,7 +73,7 @@ configuration file.
 
 | Key | Type | Default | Applies | Meaning |
 | --- | --- | --- | --- | --- |
-| `name` | string | required | reload | `^[a-z][a-z0-9-]{0,31}$`, unique; `other` is reserved for counters (D15) |
+| `name` | string | required | reload | `^[a-z][a-z0-9-]{0,31}$`, unique; `other` is reserved for counters (D15), and `new` for the admin UI ([0004 D4][d4-4]) |
 | `mac` | string | none | reload | EUI-48 hardware address, six colon-separated hex pairs, any case |
 | `device` | string | none | reload | BSD name such as `en0` |
 | `kind` | string | none | reload | Guard: `wired`, `wifi`, or `cellular` (D3) |

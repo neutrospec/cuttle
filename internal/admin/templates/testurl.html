@@ -6,8 +6,8 @@
 {{else}}<div class="result" role="status">
 <div class="res-head">{{template "route" .Route}}<span>{{template "rich" .Head}}</span></div>
 <dl class="res-dl">
-<dt>Target</dt><dd><code>{{.Target}}</code>, {{.Kind}}</dd>
-{{with .Upstream}}<dt>Upstream</dt><dd><code>{{.Address}}</code>, disclosure {{.Disclosure}}{{with .State.State}}, <span class="state {{.}}">{{$.Upstream.State.Lower}}</span>{{end}}</dd>
+<dt>Target</dt><dd><code>{{.Target}}</code> <span class="nb">({{.Kind}})</span></dd>
+{{with .Upstream}}<dt>Upstream</dt><dd class="dd-row"><code>{{.Address}}</code> <span class="badge">disclosure {{.Disclosure}}</span>{{with .State.State}} <span class="state {{.}}">{{$.Upstream.State.Text}}</span>{{end}}</dd>
 {{end}}{{with .Direct}}<dt>Direct</dt><dd>{{.}}</dd>
 {{end}}{{with .Address}}<dt>Address</dt><dd{{if $.Refused}} class="refused"{{end}}>{{.}}</dd>
 {{end}}{{with .Answer}}<dt>Answer</dt><dd>{{.}}</dd>

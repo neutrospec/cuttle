@@ -594,6 +594,16 @@ Move resolved items to Closed with their resolving commit or evidence.
     summary wording. AB-R10 (C or E, condition of the TASK-0022 review):
     the real rule and upstream editors use `form.IfList` and the `iflist`
     block, and W21 is proven again on them.
+    AB-R1, AB-R5, AB-R9, and AB-R10 are settled in TASK-0021: the phone
+    media query sets `dialog.editor-dialog { width: 100% }`, which both
+    editor dialogs use; the validator reserves the name `new` for rules,
+    upstreams, and interfaces, and `config.ValidName` refuses it, so
+    `/rules/new`, `/upstreams/new`, and `/interfaces/new` never hide an
+    editor (`TestReservedNewName`; 0004 D4, 0008 D2); one
+    `TestFormCoverage` derives every key of the schema from the model and
+    replaces `TestFormCoverageSettings`; and the rule and upstream
+    editors use the interface list editor with its choice
+    (`TestAdminEditorInterfaceLists`, `TestAdminScreensRules`).
 - Next action: orchestrator — include the open items (V5, V8, V11, V12, P1,
   W1–W3, Z2, Z4, G1–G2, P-R3–P-R7, Q-R1–Q-R4, Q-R6–Q-R8, S-R1–S-R2,
   X-R1–X-R5, the W25 case of Y-R3, Z-R5–Z-R7, Z-R9, T-R2, AA-R1–AA-R6,

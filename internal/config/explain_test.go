@@ -134,3 +134,32 @@ func TestExplain(t *testing.T) {
 		}
 	}
 }
+
+// TestReservedNewName checks that no rule, upstream, or interface is
+// named new, the last part of the admin UI's page that adds one, such as
+// /rules/new, so that the page never hides an entity's editor (OI-0006
+// AB-R5).
+func TestReservedNewName(t *testing.T) {
+	for kind, text := range map[string]string{
+		"rule":      "name = \"t\"\n[proxy]\ndefault = \"direct\"\n[[rule]]\nname = \"new\"\nhosts = [\"a.example\"]\naction = \"block\"\n",
+		"upstream":  "name = \"t\"\n[proxy]\ndefault = \"upstream:new\"\n[[upstream]]\nname = \"new\"\naddress = \"192.0.2.1:3128\"\ndisclosure = \"via\"\n",
+		"interface": "name = \"t\"\n[proxy]\ndefault = \"direct\"\n[[interface]]\nname = \"new\"\ndevice = \"en7\"\n",
+	} {
+		_, r := Parse([]byte(text), "x.toml")
+		found := false
+		for _, e := range r.Errors {
+			if e.Key == kind+"[1].name" && strings.Contains(e.Msg, "is reserved for the admin UI's page that adds one") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%s named new: %v", kind, r.Errors)
+		}
+		if ValidName(kind, "new") {
+			t.Errorf("ValidName(%s, new) is true", kind)
+		}
+		if !ValidName(kind, "news") {
+			t.Errorf("ValidName(%s, news) is false", kind)
+		}
+	}
+}

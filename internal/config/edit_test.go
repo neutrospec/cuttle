@@ -289,9 +289,9 @@ func TestDocEdits(t *testing.T) {
 
 	t.Run("add", func(t *testing.T) {
 		d := editDoc(t)
-		d.AddUpstream(DocUpstream{Name: "new", Address: "192.0.2.9:3128", Disclosure: "via"})
+		d.AddUpstream(DocUpstream{Name: "extra", Address: "192.0.2.9:3128", Disclosure: "via"})
 		d.AddInterface(DocInterface{Name: "eth-b", MAC: Some("00:00:5e:00:53:0b")})
-		if len(d.Upstreams) != 3 || d.Upstreams[2].Name != "new" || len(d.Interfaces) != 3 || d.Interfaces[2].Name != "eth-b" {
+		if len(d.Upstreams) != 3 || d.Upstreams[2].Name != "extra" || len(d.Interfaces) != 3 || d.Interfaces[2].Name != "eth-b" {
 			t.Errorf("add: %+v %+v", d.Upstreams, d.Interfaces)
 		}
 		mustValid(t, "add", d)

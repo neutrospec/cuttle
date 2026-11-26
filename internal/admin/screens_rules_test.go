@@ -286,7 +286,7 @@ func TestAdminScreensRules(t *testing.T) {
 			s.check("rule-new-test"+sfx, "Add rule")
 			// Discard resets the form, so that leaving does not ask.
 			s.click("#savebar-discard")
-			s.wait("the reset form", `document.getElementById("savebar").hidden`)
+			s.p.WaitLoad()
 
 			// Reordering: the lifted row by keyboard at desktop width, the
 			// row menu on a phone, where the handles are hidden; then the
@@ -325,6 +325,21 @@ func TestAdminScreensRules(t *testing.T) {
 			}
 			s.check("upstream-dialog"+sfx, "Upstreams")
 			s.press("Escape", "Escape", 27, 0)
+
+			// The rule and upstream editors with the interface list
+			// editor: "Only these interfaces" and two entries added.
+			for _, ed := range []struct{ path, name, h1 string }{{"/rules/loopback", "rule-iflist", "Edit rule"}, {"/upstreams/lab", "upstream-iflist", "Edit upstream"}} {
+				s.p.Navigate(s.base + ed.path)
+				s.click(`input[name="ifaces"][value="only"]`)
+				for _, n := range []string{"wifi", "eth-a"} {
+					s.eval(`(() => { const sel = document.querySelector("select[data-ifl-add]"); sel.value = `+fmt.Sprintf("%q", n)+`;
+						sel.dispatchEvent(new Event("change", {bubbles: true})); return true })()`, nil)
+				}
+				s.wait("the list entries", `document.querySelectorAll('[data-iflist="ifaces_list"] li[data-n]').length === 2`)
+				s.check(ed.name+sfx, ed.h1)
+				s.click("#savebar-discard")
+				s.p.WaitLoad()
+			}
 
 			// The empty states.
 			file := readFile(t, s.f.be.path)
@@ -430,6 +445,32 @@ func TestAdminScreensRules(t *testing.T) {
 	}
 	s.clean("add a rule")
 
+	// The interface list editor of a rule with the script (W21): add,
+	// move, and remove in place, then one review.
+	s.p.Navigate(s.base + "/rules/loopback")
+	s.click(`input[name="ifaces"][value="only"]`)
+	for _, n := range []string{"wifi", "eth-a"} {
+		s.eval(`(() => { const sel = document.querySelector("select[data-ifl-add]"); sel.value = `+fmt.Sprintf("%q", n)+`;
+			sel.dispatchEvent(new Event("change", {bubbles: true})); return true })()`, nil)
+	}
+	s.click(`[data-iflist="ifaces_list"] li[data-n="eth-a"] [data-ifl="up"]`)
+	var entries []string
+	s.eval(`[...document.querySelectorAll('[data-iflist="ifaces_list"] li[data-n] input')].map((i) => i.value)`, &entries)
+	if strings.Join(entries, ",") != "eth-a,wifi" {
+		t.Errorf("list after Add and Move up: %q", entries)
+	}
+	s.click(`[data-iflist="ifaces_list"] li[data-n="wifi"] [data-ifl="remove"]`)
+	s.click(`[data-iflist="ifaces_list"] .iflist-add select`)
+	s.eval(`(() => { const sel = document.querySelector("select[data-ifl-add]"); sel.value = "wifi";
+		sel.dispatchEvent(new Event("change", {bubbles: true})); return true })()`, nil)
+	s.click(`#rule-form [data-primary]`)
+	s.wait("the review", `document.getElementById("review-dialog").open && document.querySelector("#review-dialog .summary")`)
+	s.apply()
+	if d, _, _ := config.DocOf([]byte(readFile(t, s.f.be.path)), "x"); d == nil || strings.Join(d.Rules[0].Interfaces.V, ",") != "eth-a,wifi" {
+		t.Errorf("rule interfaces after apply: %+v", d.Rules[0].Interfaces)
+	}
+	s.clean("rule interface list")
+
 	// A refused review leaves its errors only until a later review
 	// succeeds (OI-0006 AA-R1): on Advanced, which has no live check.
 	s.p.Navigate(s.base + "/settings")
@@ -532,15 +573,46 @@ func TestAdminScreensRules(t *testing.T) {
 	if plain.Script || plain.Pos != 5 || plain.Handles != 0 || !plain.Review {
 		t.Errorf("rules without the script: %+v", plain)
 	}
-	s.check("rules-noscript-1280-light", "Rules")
-	s.eval(`(() => { document.getElementById("pos-5").value = "1"; document.querySelector(".order-foot [data-primary]").click(); return true })()`, nil)
+	// Each cell keeps its column without the handle: the name and the
+	// position field stay clear of the route, and the main cell is wide.
+	for _, scheme := range []string{"light", "dark"} {
+		s.p.ColorScheme(scheme)
+		for _, w := range []struct {
+			px     int
+			mobile bool
+		}{{1280, false}, {390, true}} {
+			s.p.Viewport(w.px, 900, w.mobile)
+			s.p.Navigate(s.base + "/rules")
+			var bad []string
+			s.eval(`(() => { const hit = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+				return [...document.querySelectorAll("#chain .rule[data-name]")].flatMap((r) => {
+					const route = r.querySelector(".r-route").getBoundingClientRect();
+					const main = r.querySelector(".r-main").getBoundingClientRect();
+					const out = [];
+					for (const sel of [".r-name", ".r-pos", ".chips", ".r-note"]) {
+						const e = r.querySelector(sel);
+						if (e && hit(e.getBoundingClientRect(), route)) out.push(r.dataset.name + " " + sel + " overlaps the route");
+					}
+					if (main.width < `+fmt.Sprint(min(w.px/4, 240))+`) out.push(r.dataset.name + " main cell " + Math.round(main.width) + " px");
+					return out; }); })()`, &bad)
+			if len(bad) > 0 {
+				t.Errorf("rules without the script at %d px, %s: %q", w.px, scheme, bad)
+			}
+			s.check(fmt.Sprintf("rules-noscript-%d-%s", w.px, scheme), "Rules")
+		}
+	}
+	s.p.ColorScheme("light")
+	s.p.Viewport(1280, 900, false)
+	s.p.Navigate(s.base + "/rules")
+	// Move the first rule to the last position.
+	s.eval(`(() => { document.getElementById("pos-1").value = "5"; document.querySelector(".order-foot [data-primary]").click(); return true })()`, nil)
 	s.p.WaitLoad()
 	if st := s.state(); st.Path != "/config/draft" || !strings.HasPrefix(st.H1, "Review: reorder the rules") {
 		t.Errorf("order review without the script: %+v", st)
 	}
 	s.click(".review-form .btn.primary")
 	s.p.WaitLoad()
-	if st := s.state(); st.Path != "/rules" || s.fileRules() != "media.example loopback lab-net restricted ads" {
+	if st := s.state(); st.Path != "/rules" || s.fileRules() != "lab-net restricted ads media.example loopback" {
 		t.Errorf("order apply without the script: %+v, file %q", st, s.fileRules())
 	}
 	s.p.Navigate(s.base + "/rules/restricted")

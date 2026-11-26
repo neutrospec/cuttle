@@ -44,6 +44,14 @@ const noteSyntaxHint = "TOML syntax: invalid note; write it as one line in doubl
 
 var reservedRuleNames = []string{policy.RuleDefault, policy.RuleRemoteDefault, policy.RulePort, policy.RuleRemoteDirect}
 
+// NewPageName is the last part of the admin UI's page for a new rule,
+// upstream, or interface, such as /rules/new, so no rule, upstream, or
+// interface has that name (design 0009 D7, OI-0006 AB-R5).
+const NewPageName = "new"
+
+// newNameMsg refuses NewPageName as a name.
+const newNameMsg = "is reserved for the admin UI's page that adds one; choose another name"
+
 // Defaults from design 0004 D3.
 var (
 	DefaultListen      = netip.MustParseAddrPort("127.0.0.1:3128")
@@ -58,9 +66,12 @@ const (
 )
 
 // ValidName reports whether name matches the schema pattern of a name of
-// kind: KindRule, KindUpstream, or KindInterface. The admin answers 404
-// to a page path whose name does not (design 0009 D7).
+// kind: KindRule, KindUpstream, or KindInterface, and is not reserved. The
+// admin answers 404 to a page path whose name does not (design 0009 D7).
 func ValidName(kind, name string) bool {
+	if name == NewPageName {
+		return false
+	}
 	switch kind {
 	case KindRule:
 		return ruleNameRe.MatchString(name)
@@ -478,6 +489,8 @@ func (v *validator) config(raw map[string]any) *Config {
 			switch {
 			case !upstreamNameRe.MatchString(name):
 				v.errf(sub(base, "name"), "%q does not match ^[a-z][a-z0-9-]{0,31}$", name)
+			case name == NewPageName:
+				v.errf(sub(base, "name"), "%q "+newNameMsg, name)
 			case upstreamNames[name]:
 				v.errf(sub(base, "name"), "duplicate upstream name %q", name)
 			default:
@@ -675,6 +688,8 @@ func (v *validator) rules(raw map[string]any, c *Config, upstreams map[string]bo
 				v.errf(namePath, "%q does not match ^[a-z0-9][a-z0-9._-]{0,63}$", name)
 			case slices.Contains(reservedRuleNames, name):
 				v.errf(namePath, "%q is reserved for decisions that no rule made", name)
+			case name == NewPageName:
+				v.errf(namePath, "%q "+newNameMsg, name)
 			default:
 				r.Name = name
 			}
@@ -884,6 +899,8 @@ func (v *validator) interfaces(raw map[string]any, c *Config) {
 				v.errf(path, "does not match ^[a-z][a-z0-9-]{0,31}$")
 			case name == "other":
 				v.errf(path, "is reserved for traffic of no defined interface")
+			case name == NewPageName:
+				v.errf(path, newNameMsg)
 			default:
 				if i, dup := names[name]; dup {
 					v.errf(path, "duplicate of %s", sub(elem("interface", i), "name"))

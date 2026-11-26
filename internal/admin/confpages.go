@@ -80,16 +80,19 @@ func (s *Server) confState() confState {
 	return st
 }
 
-// warnings returns the file's validator warnings of the entities of kind,
-// by their 1-based index, each with its key and entry.
-func (c confState) warnings(kind string) map[int][]string {
-	out := map[int][]string{}
-	if c.readOnly || c.file.Report == nil {
+// warnings returns the file's validator warnings of the entities of kind
+// by entity name, each with its key and entry. A page that shows another
+// model, such as a reorder that renders again, finds them by name.
+func (c confState) warnings(kind string) map[string][]string {
+	out := map[string][]string{}
+	if c.readOnly || c.file.Report == nil || c.file.Doc == nil {
 		return out
 	}
 	for _, is := range c.file.Report.Warnings {
 		if ref, ok := parseIssueKey(is.Key); ok && ref.Entity == kind && ref.Index > 0 {
-			out[ref.Index] = append(out[ref.Index], issueText(ref, is.Msg))
+			if name := entityName(ref, c.file.Doc); name != "" {
+				out[name] = append(out[name], issueText(ref, is.Msg))
+			}
 		}
 	}
 	return out
@@ -367,4 +370,21 @@ func (s *Server) ruleTestView(d *draft, input string, remote bool) *testView {
 		tv.Shadow = []seg{{Text: "Rule " + strconv.Itoa(tv.MatchPos) + ", "}, {Text: tv.MatchName, Code: true}, {Text: ", matches first."}}
 	}
 	return tv
+}
+
+// ifListChoice returns the interface list editor of design 0009 D3.8 for
+// a list field and the choice that controls it, whose first option leaves
+// the key unset and whose option only uses the list (task D's
+// form.IfList). The list's own issues show in the editor's slots, which
+// the script also fills, so the list editor's message block stays empty.
+func (s *Server) ifListChoice(f *form, d *config.Doc, unset, unsetLabel, empty string) *ifListView {
+	v := f.IfList("ifaces_list", "ifaces", "only", s.ifStates(d), empty)
+	v.Label = "Interfaces"
+	chosen := f.Value("ifaces")
+	v.Choice.Options = []optionView{
+		{Value: unset, Label: unsetLabel, Checked: chosen != "only"},
+		{Value: "only", Label: "Only these interfaces, in this order", Checked: chosen == "only"},
+	}
+	v.Errors, v.Warnings = nil, nil
+	return v
 }

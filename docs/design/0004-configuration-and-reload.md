@@ -97,7 +97,7 @@ Local clients have no port policy.
 
 | Key | Type | Default | Applies | Meaning |
 | --- | --- | --- | --- | --- |
-| `name` | string | required | reload | `^[a-z][a-z0-9-]{0,31}$`, unique; `other` is reserved |
+| `name` | string | required | reload | `^[a-z][a-z0-9-]{0,31}$`, unique; `other` and `new` are reserved |
 | `mac` | string | none | reload | EUI-48 hardware address; at least one of `mac` and `device` |
 | `device` | string | none | reload | BSD name such as `en0` |
 | `kind` | string | none | reload | Guard: `wired`, `wifi`, or `cellular` |
@@ -107,7 +107,7 @@ Local clients have no port policy.
 
 | Key | Type | Default | Applies | Meaning |
 | --- | --- | --- | --- | --- |
-| `name` | string | required | reload | `^[a-z][a-z0-9-]{0,31}$`, unique |
+| `name` | string | required | reload | `^[a-z][a-z0-9-]{0,31}$`, unique; `new` is reserved |
 | `address` | `host:port` | required | reload | Plain-HTTP proxy address |
 | `disclosure` | string | required | reload | `via` for another cuttle instance; `none` for an egress proxy or any proxy that must not see an intermediary ([0003 D1][d3-1]) |
 | `connect_timeout` | duration | `"10s"` | reload | Lookup and TCP connect, across all addresses and interfaces, 100 ms–10 min |
@@ -120,7 +120,7 @@ Local clients have no port policy.
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `name` | string | `rule-<n>` (1-based) | Shown in logs, statistics, and errors; `^[a-z0-9][a-z0-9._-]{0,63}$`, unique |
+| `name` | string | `rule-<n>` (1-based) | Shown in logs, statistics, and errors; `^[a-z0-9][a-z0-9._-]{0,63}$`, unique; `new` is reserved |
 | `hosts` | array of names | `[]` | Exact names ([0002 D4][d2-4]) |
 | `domains` | array of names | `[]` | Names and their subdomains |
 | `cidrs` | array of CIDR | `[]` | IP-literal targets |
@@ -175,6 +175,10 @@ Errors:
 - Duplicate upstream or rule names, or an action naming an unknown
   upstream. The rule names `default`, `remote-default`, `port`, and
   `remote-direct` are reserved for decisions that no rule made.
+- `new` is reserved as a rule, upstream, and interface name: the admin
+  UI's page that adds one is `/rules/new`, `/upstreams/new`, or
+  `/interfaces/new`, so an entity of that name would have no editor
+  ([0009 D7][d9-7]).
 - A rule with none of `hosts`, `domains`, `cidrs`, or `ports`, judged by
   the entries the lists hold, and any of these keys set to an empty list,
   which would otherwise widen the rule. A catch-all belongs in `default`.

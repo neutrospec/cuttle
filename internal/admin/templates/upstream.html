@@ -16,8 +16,8 @@
    disclosure as two cards with nothing chosen for a new upstream, the
    timeouts in a collapsed group, and the interface list. */}}
 {{define "upstream-editor"}}{{$f := .Data.Form}}{{with .Data.View}}<div class="up-editor" data-block="upstream-editor">
-<form id="upstream-form" method="post" action="/config/draft" class="upstream-form" novalidate{{if not .ReadOnly}} data-guard="{{if .New}}Unsaved new upstream{{else}}Unsaved changes to upstream {{$f.Target}}{{end}}"{{end}}>
-<input type="hidden" name="csrf" value="{{$.Token}}">
+<form id="upstream-form" method="post" action="/config/draft" class="upstream-form" novalidate{{if and (not .ReadOnly) (not .Fragment)}} data-guard="{{if .New}}Unsaved new upstream{{else}}Unsaved changes to upstream {{$f.Target}}{{end}}" data-guard-discard="{{if .New}}/upstreams/new{{else}}/upstreams/{{$f.Target}}{{end}}"{{end}}>
+{{if not .ReadOnly}}{{template "default-button"}}{{end}}<input type="hidden" name="csrf" value="{{$.Token}}">
 {{range $f.Hidden}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">
 {{end}}{{if .Fragment}}<div class="dlg-head"><div><h2 id="editor-h">{{if .New}}Add upstream{{else}}Edit upstream <span class="name-code">{{$f.Target}}</span>{{end}}</h2>
 <p>{{if .New}}A plain-HTTP proxy that rules can send requests to.{{else}}Renaming also updates every rule and default that uses it.{{end}}</p></div>
@@ -27,7 +27,7 @@
 <fieldset class="fields"{{if .ReadOnly}} disabled{{end}}>
 <div class="row2">
 {{with $f.Field "name"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-name">Name</label><input class="input mono" id="f-name" name="name" value="{{$f.Value "name"}}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="f-name-hint f-name-issues"{{if .Invalid}} aria-invalid="true"{{end}}><div class="hint" id="f-name-hint">Lowercase letters, digits, and hyphens; actions name it as <code>upstream:&lt;name&gt;</code>.</div>{{template "fissues" .}}</div>
-{{end}}{{with $f.Field "address"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-address">Address</label><input class="input mono" id="f-address" name="address" value="{{$f.Value "address"}}" placeholder="192.0.2.6:3128" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="f-address-hint f-address-issues"{{if .Invalid}} aria-invalid="true"{{end}}><div class="hint" id="f-address-hint"><code>host:port</code> of a plain-HTTP proxy.</div>{{template "fissues" .}}</div>
+{{end}}{{with $f.Field "address"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-address">Address</label><input class="input mono" id="f-address" name="address" value="{{$f.Value "address"}}" placeholder="host:port" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="f-address-hint f-address-issues"{{if .Invalid}} aria-invalid="true"{{end}}><div class="hint" id="f-address-hint"><code>host:port</code> of a plain-HTTP proxy.</div>{{template "fissues" .}}</div>
 {{end}}</div>
 {{with $f.Field "note"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-note">Note <span class="hint">optional</span></label><input class="input" id="f-note" name="note" value="{{$f.Value "note"}}" autocomplete="off" aria-describedby="f-note-hint f-note-issues"{{if .Invalid}} aria-invalid="true"{{end}}><div class="hint" id="f-note-hint">One line, up to 120 characters.</div>{{template "fissues" .}}</div>
 {{end}}{{with $f.Field "disclosure"}}<div class="field{{if .Invalid}} invalid{{end}}"><span class="label" id="f-disclosure-l">Disclosure</span>
@@ -41,12 +41,9 @@
 {{end}}</div>
 <p class="hint">Go durations such as <code>10s</code> or <code>1m30s</code>. An empty field uses the default.</p>
 </details>
-{{with $f.Field "ifaces"}}<div class="field{{if .Invalid}} invalid{{end}}" id="f-ifaces" tabindex="-1"><span class="label" id="f-ifaces-l">Interfaces</span>
-{{if $.Data.View.Defined}}<div class="seg sm wrap" role="radiogroup" aria-labelledby="f-ifaces-l" aria-describedby="f-ifaces-issues"><label><input type="radio" name="ifaces" value="system"{{if ne $.Data.View.Ifaces "only"}} checked{{end}}><span>System routing</span></label><label><input type="radio" name="ifaces" value="only"{{if eq $.Data.View.Ifaces "only"}} checked{{end}}><span>Only these interfaces, in this order</span></label></div>
-<div class="if-only fields">{{with $f.Field "ifaces_list"}}<div class="field{{if .Invalid}} invalid{{end}}"><label for="f-ifaces_list" class="sr">Interfaces, in order</label><textarea class="input list" id="f-ifaces_list" name="ifaces_list" rows="2" data-list data-bad="{{.Bad}}" autocomplete="off" spellcheck="false" aria-describedby="f-ifaces_list-hint f-ifaces_list-issues"{{if .Invalid}} aria-invalid="true"{{end}}>{{$f.Value "ifaces_list"}}</textarea><div class="hint" id="f-ifaces_list-hint">Connections to the upstream use only these interfaces, in this order. Defined: {{join $.Data.View.Defined ", "}}.</div>{{template "fissues" .}}</div>{{end}}</div>
-{{else}}<input type="hidden" name="ifaces" value="system"><p class="hint">No interfaces are defined, so connections to the upstream follow macOS routing.{{with $.Data.View.InterfacesHref}} <a href="{{.}}">Define interfaces</a> to choose which ones it uses.{{end}}</p>
-{{end}}{{template "fissues" .}}</div>
-{{end}}</fieldset>
+{{with .Interfaces}}{{if not .Defined}}<input type="hidden" name="ifaces" value="{{$f.Value "ifaces"}}">
+{{end}}{{template "iflist" .}}{{end}}{{template "fissues" ($f.Field "ifaces")}}{{template "fissues" ($f.Field "ifaces_list")}}
+</fieldset>
 </div>
 <div class="dlg-foot">{{if not .ReadOnly}}<button class="btn primary" type="submit" name="intent" value="review" data-primary data-fragment="review" data-alt="form-issues">Review changes</button>
 {{end}}<a class="btn" href="/upstreams" data-close>{{if .ReadOnly}}Back to upstreams{{else}}Cancel{{end}}</a>

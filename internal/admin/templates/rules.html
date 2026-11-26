@@ -35,7 +35,7 @@
 <div class="panel chain-panel"><ol class="chain{{with .Test}}{{if not .Err}} tested{{end}}{{end}}" id="chain" aria-label="Rules in evaluation order"{{if .Reorder}} data-reorder{{end}}>
 {{range .Rules}}<li class="rule a-{{.Route.Action}}{{with .Mark}} {{.}}{{end}}" data-name="{{.Name}}" data-hay="{{.Hay}}">
 <div class="r-gutter"><span class="node">{{.Pos}}</span></div>
-{{if $.Data.View.Reorder}}<button class="btn quiet icon-btn handle js-only" type="button" draggable="true" aria-label="Move rule {{.Name}}, position {{.Pos}} of {{.Total}}" aria-describedby="reorder-help">{{template "icon" "grip"}}</button>{{else}}<span></span>{{end}}
+<span class="r-handle">{{if $.Data.View.Reorder}}<button class="btn quiet icon-btn handle js-only" type="button" draggable="true" aria-label="Move rule {{.Name}}, position {{.Pos}} of {{.Total}}" aria-describedby="reorder-help">{{template "icon" "grip"}}</button>{{end}}</span>
 <div class="r-main"><div class="r-title">{{if $.Data.View.Reorder}}<span class="r-pos nojs-only"><label for="pos-{{.Pos}}">Position<span class="sr"> of rule {{.Name}}</span></label><input class="input" type="number" id="pos-{{.Pos}}" name="position" value="{{.Pos}}" min="1" max="{{.Total}}" inputmode="numeric"></span>{{end}}<a class="r-name" href="{{.Href}}">{{.Name}}</a>{{if .Warnings}}<a class="badge warn" href="{{.Href}}" title="{{join .Warnings "; "}}">{{template "icon" "alert"}}{{plural (len .Warnings) "warning"}}</a>{{end}}</div>
 {{with .Note}}<div class="r-note">{{.}}</div>
 {{end}}{{if .Patterns}}<div class="chips">{{range .Patterns}}<span class="chip">{{.}}</span>{{end}}{{if .More}}<span class="chip more">+{{.More}} more</span>{{end}}</div>
@@ -56,7 +56,7 @@
 <div class="r-route"><div>Local {{template "route" .Default.Local}}</div><div>Remote {{template "route" .Default.Remote}}</div></div>
 <div class="r-traffic">{{if .Traffic}}<div><b>{{num .Default.Requests}}</b> req</div><div>{{bytes .Default.Bytes}}</div>{{end}}</div><span></span></li>
 </ol></div>
-{{if $f}}{{if .Reorder}}<div class="form-foot order-foot nojs-only"><button type="submit" class="btn primary" name="intent" value="review" data-primary data-fragment="review" data-alt="form-issues">Review changes</button><span class="hint">Change the positions, then review the new order. A moved rule goes before an unmoved one at the same position.</span></div>
+{{if $f}}{{if .Reorder}}<div class="form-foot order-foot nojs-only"><button type="submit" class="btn primary" name="intent" value="review" data-primary data-fragment="review" data-alt="form-issues">Review changes</button><span class="hint">Type the position each rule should have, then review the new order.</span></div>
 {{end}}</form>
 {{range .Rules}}{{$pos := .Pos}}{{with .Delete}}<form id="del-{{$pos}}" method="post" action="/config/draft" class="inline-form">
 <input type="hidden" name="csrf" value="{{$.Token}}">

@@ -645,14 +645,13 @@
     if (item && !item.disabled) item.closest("details").open = false;
   });
 
-  // The upstream editor dialog forgets its form when it closes, so that
-  // the save bar does not stay for a form that is gone.
+  // The upstream editor dialog drops its form when it closes. The form in
+  // the dialog is not watched for unsaved changes, as the interface
+  // editor's dialog is not; the editor's own page is.
   const slot = document.getElementById("upstream-editor");
   const dlg = slot && slot.closest("dialog");
   if (dlg) {
     dlg.addEventListener("close", () => {
-      const form = $("form", dlg);
-      if (form) form.reset();
       setTimeout(() => { if (!dlg.open) slot.replaceChildren(); }, 50);
     });
   }

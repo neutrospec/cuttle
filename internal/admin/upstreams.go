@@ -222,9 +222,9 @@ func (s *Server) upstreamsView(ctx context.Context, st confState) *upstreamsView
 	states := s.upstreamStates(s.backend.Status())
 	warn := st.warnings(config.KindUpstream)
 	delOp := s.ops[opUpstreamDelete]
-	for i, u := range st.doc.Upstreams {
+	for _, u := range st.doc.Upstreams {
 		row := upstreamRow{Name: u.Name, Note: u.Note.V, Address: u.Address, Disclosure: u.Disclosure,
-			Users: upstreamUsers(st.doc, u.Name), Warnings: warn[i+1], TrafficHref: domainsHref("route", "upstream:"+u.Name)}
+			Users: upstreamUsers(st.doc, u.Name), Warnings: warn[u.Name], TrafficHref: domainsHref("route", "upstream:"+u.Name)}
 		row.State, row.Known = states[u.Name]
 		row.UsersText = userRefsText(row.Users)
 		if tot, ok := t.routes["upstream:"+u.Name]; ok {
@@ -251,8 +251,9 @@ type upstreamEditView struct {
 	New      bool
 	Missing  string
 	// Fragment renders the editor as the content of the list's dialog.
-	Fragment       bool
-	Defined        []string
+	Fragment bool
+	// Interfaces is the interface list editor with its choice.
+	Interfaces     *ifListView
 	InterfacesHref string
 	Users          []userRef
 	UsersText      string
@@ -268,9 +269,7 @@ func (s *Server) upstreamEditView(_ *config.Doc, f *form) *upstreamEditView {
 	st := s.confState()
 	v := &upstreamEditView{ReadOnly: st.readOnly, New: f.New, InterfacesHref: pagePath("interfaces"), Ifaces: f.Value("ifaces"),
 		DefConnect: defaultUpConnect, DefResp: defaultUpResponse, DefHold: defaultUpHold}
-	for _, x := range st.doc.Interfaces {
-		v.Defined = append(v.Defined, x.Name)
-	}
+	v.Interfaces = s.ifListChoice(f, st.doc, "system", "System routing", "Add at least one interface, or choose System routing.")
 	or := func(val, def string) string {
 		if strings.TrimSpace(val) == "" {
 			return def

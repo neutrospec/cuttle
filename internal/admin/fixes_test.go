@@ -15,7 +15,7 @@ import (
 // rendered values, is refused when it is registered.
 func TestAddOpReservedNames(t *testing.T) {
 	f := newFixture(t, true)
-	for _, name := range append(append([]string{}, reservedFields...), "r:name", "") {
+	for _, name := range append(append([]string{}, reservedFields...), "r:name", "add:list", "") {
 		func() {
 			defer func() {
 				if recover() == nil {
@@ -66,6 +66,22 @@ func TestAdminNoChange(t *testing.T) {
 	if !strings.Contains(body, "No change to the configuration; applying rewrites the file in canonical form.") || !strings.Contains(body, "Apply changes") {
 		t.Errorf("untouched form on a hand-written file: %s", mainText(body))
 	}
+	// A form op on a file in canonical form whose candidate equals the
+	// file: nothing to apply.
+	canonical := encodeWith(t, exampleConfig, func(*config.Doc) {})
+	p.write(canonical)
+	for _, path := range []string{"/rules/restricted", "/upstreams/lab"} {
+		id := "rule-form"
+		if strings.HasPrefix(path, "/upstreams") {
+			id = "upstream-form"
+		}
+		body = p.review(formByID(t, p.get(path), id), http.StatusOK)
+		if !strings.Contains(summaryOf(body), "No change to the configuration.") || strings.Contains(body, "Apply changes") ||
+			strings.Contains(body, `name="reviewed"`) {
+			t.Errorf("untouched form on a canonical file (%s): %s", path, mainText(body))
+		}
+	}
+	p.write(exampleConfig)
 	// The previous version equal to the file: no Apply.
 	if err := os.WriteFile(p.f.be.path+".bak", []byte(exampleConfig), 0o600); err != nil {
 		t.Fatal(err)

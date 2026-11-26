@@ -347,3 +347,20 @@ removes entries. Append new entries at the end, oldest first.
 - What to do instead: run each mutation against the package that contains
   the mutated file, or one that imports it, and confirm with `go list
   -deps <pkg> | grep <mutated package>`.
+
+### 2026-11-26 — implementer — multi-file edit scripts that stop halfway
+
+- Task: TASK-0021 iteration 2, editing several files with one
+  `python3 - a b c <<'EOF'` script that asserted each pattern just before
+  replacing it in that file.
+- Attempts: 2 failures of the same kind.
+- What failed: a pattern copied from memory did not match (`gofmt` had
+  written `"`+fd.Name+`"` without the spaces I typed, and one test line had
+  changed in an earlier step), so the script raised `AssertionError` after
+  it had already written the files before it. The first time nothing was
+  written; the second time three of four files were changed and the run
+  looked like a total failure, so the partial state was easy to miss.
+- What to do instead: read every pattern from the file first (`grep -n`
+  or `sed -n`), and in the script check all patterns of all files before
+  writing any file; after a failure, run `git diff --stat` to see what
+  was written.

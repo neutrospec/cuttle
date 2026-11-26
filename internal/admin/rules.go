@@ -282,9 +282,11 @@ func (s *Server) addRuleOps() {
 
 // editOrder reorders the rules as the order form posts them (design 0009
 // D3.3): the names in the order of the page, and without the script a
-// position for each; rules sort by position, and a rule whose position
-// changed goes before an unmoved rule at the same position. The names
-// must still be every rule exactly once.
+// position for each. A rule lands at the position typed for it: rules
+// sort by position, and at a position that an unmoved rule also holds, a
+// rule moved up goes before it and a rule moved down after it, so that
+// moving the first of four rules to 4 makes it the last. The names must
+// still be every rule exactly once.
 func editOrder(d *config.Doc, f *form) error {
 	names := f.Values("order")
 	if pos := f.Values("position"); len(pos) > 0 {
@@ -292,9 +294,11 @@ func editOrder(d *config.Doc, f *form) error {
 			return config.ErrOrder
 		}
 		type item struct {
-			name  string
-			pos   int
-			moved bool
+			name string
+			pos  int
+			// rank orders a position's rules: moved up, unmoved, moved
+			// down.
+			rank int
 		}
 		items := make([]item, 0, len(names))
 		for i, p := range pos {
@@ -303,7 +307,14 @@ func editOrder(d *config.Doc, f *form) error {
 				f.Error("position", 0, "the position of rule "+strconv.Quote(names[i])+" must be a whole number from 1")
 				continue
 			}
-			items = append(items, item{names[i], n, n != i+1})
+			rank := 1
+			switch {
+			case n < i+1:
+				rank = 0
+			case n > i+1:
+				rank = 2
+			}
+			items = append(items, item{names[i], n, rank})
 		}
 		if f.parseErrs > 0 {
 			return nil
@@ -312,7 +323,7 @@ func editOrder(d *config.Doc, f *form) error {
 			if items[a].pos != items[b].pos {
 				return items[a].pos < items[b].pos
 			}
-			return items[a].moved && !items[b].moved
+			return items[a].rank < items[b].rank
 		})
 		names = names[:0:0]
 		for _, it := range items {
@@ -443,7 +454,7 @@ func (s *Server) rulesView(ctx context.Context, st confState, doc *config.Doc, q
 	delOp := s.ops[opRuleDelete]
 	for i, r := range doc.Rules {
 		row := ruleRow{Pos: i + 1, Total: len(doc.Rules), Name: r.Name, Note: r.Note.V, Route: routeOf(r.Action),
-			Warnings: warn[i+1], Href: "/rules/" + r.Name}
+			Warnings: warn[r.Name], Href: "/rules/" + r.Name}
 		pats := slices.Concat(r.Hosts.V, r.Domains.V, r.CIDRs.V)
 		row.Patterns = pats[:min(4, len(pats))]
 		row.More = len(pats) - len(row.Patterns)
@@ -540,9 +551,8 @@ type ruleEditView struct {
 	From       string
 	Pos, Count int
 	Upstreams  []upOption
-	// Defined lists the interface definitions; DefaultList is the list
-	// that "Use the default list" means.
-	Defined        []string
+	// Interfaces is the interface list editor with its choice.
+	Interfaces     *ifListView
 	DefaultList    string
 	InterfacesHref string
 	UpstreamsHref  string
@@ -584,13 +594,12 @@ func (s *Server) ruleEditView(ctx context.Context, d *config.Doc, f *form) *rule
 	for _, u := range cur.Upstreams {
 		v.Upstreams = append(v.Upstreams, upOption{Name: u.Name, Address: u.Address, State: states[u.Name]})
 	}
-	for _, x := range cur.Interfaces {
-		v.Defined = append(v.Defined, x.Name)
-	}
 	v.DefaultList = "system routing"
 	if l := cur.Proxy.Interfaces.V; len(l) > 0 {
 		v.DefaultList = strings.Join(l, ", ")
 	}
+	v.Interfaces = s.ifListChoice(f, cur, "default", "Use the default list ("+v.DefaultList+")",
+		"Add at least one interface, or use the default list.")
 	if f.New {
 		chosen := f.Value("position")
 		v.Positions = append(v.Positions, option{Value: "first", Label: "First", Selected: chosen == "" || chosen == "first"})

@@ -120,6 +120,16 @@ func TestAdminRulesList(t *testing.T) {
 		}
 	}
 
+	// A reorder that renders again keeps each warning badge on its rule.
+	order := formByID(t, body, "order-form")
+	order["order"] = []string{"late", "loopback", "restricted", "ads", "lab-net"}
+	order["position"] = nil
+	res, again := p.post("/config/draft", with(order, "intent", "edit"))
+	if res.StatusCode != http.StatusOK || !slices.Equal(rowNames(again), order["order"]) ||
+		!strings.Contains(rowOf(t, again, "late"), "1 warning</a>") || strings.Contains(rowOf(t, again, "lab-net"), "warning</a>") {
+		t.Errorf("warning badges after a reorder: %d %q", res.StatusCode, rowNames(again))
+	}
+
 	// The filter: name, note, pattern, and action, in any case.
 	for q, names := range map[string][]string{
 		"ADS": {"ads"}, "arrival": {"late"}, "lab.example": {"lab-net"}, "198.51.100": {"lab-net"},
@@ -371,12 +381,28 @@ func TestAdminRuleEdits(t *testing.T) {
 		t.Errorf("reorder candidate:\n%s", reordered)
 	}
 	sameRules(t, exampleConfig, reordered)
-	// Without the script: the position fields; a moved rule goes before
-	// an unmoved one at the same position.
+	// Without the script: the position fields. Each rule lands at the
+	// position typed for it: a rule moved up goes before the unmoved rule
+	// at that position, a rule moved down after it.
 	plainOrder := with(order)
-	plainOrder["position"] = []string{"1", "2", "1", "4"}
-	if got := applyForm(t, p.review(plainOrder, http.StatusOK)).Get("text"); got != reordered {
-		t.Errorf("reorder by positions:\n%s", got)
+	for _, c := range []struct {
+		pos  []string
+		want string
+	}{
+		{[]string{"1", "2", "1", "4"}, "ads loopback restricted lab-net"},
+		{[]string{"4", "2", "3", "4"}, "restricted ads lab-net loopback"},
+		{[]string{"3", "2", "3", "4"}, "restricted ads loopback lab-net"},
+		{[]string{"2", "2", "3", "4"}, "restricted loopback ads lab-net"},
+		{[]string{"1", "2", "3", "1"}, "lab-net loopback restricted ads"},
+		{[]string{"1", "2", "3", "2"}, "loopback lab-net restricted ads"},
+		{[]string{"2", "1", "3", "4"}, "restricted loopback ads lab-net"},
+		{[]string{"9", "2", "3", "4"}, "restricted ads lab-net loopback"},
+	} {
+		plainOrder["position"] = c.pos
+		got := applyForm(t, p.review(plainOrder, http.StatusOK)).Get("text")
+		if want := p.docEdit(func(d *config.Doc) { d.ReorderRules(strings.Fields(c.want)) }); got != want {
+			t.Errorf("positions %v: want %s", c.pos, c.want)
+		}
 	}
 	plainOrder["position"] = []string{"4", "3", "2", "1"}
 	got := applyForm(t, p.review(plainOrder, http.StatusOK)).Get("text")
@@ -438,95 +464,140 @@ func sameRules(t *testing.T, a, b string) {
 	}
 }
 
-// schemaKeys returns the keys of an array of tables of the schema: the
-// keys that Encode writes for an entry of the Doc type T with every key
-// set.
-func schemaKeys[T any](t *testing.T, array string) []string {
-	t.Helper()
-	var e T
-	v := reflect.ValueOf(&e).Elem()
-	for i := range v.NumField() {
-		f := v.Field(i)
-		switch f.Kind() {
-		case reflect.String:
-			f.SetString("x")
-		case reflect.Struct:
-			f.FieldByName("Set").SetBool(true)
-			val := f.FieldByName("V")
-			switch val.Kind() {
-			case reflect.String:
-				val.SetString("x")
-			case reflect.Slice:
-				val.Set(reflect.Append(reflect.MakeSlice(val.Type(), 0, 1), reflect.Zero(val.Type().Elem())))
-			case reflect.Bool:
-				val.SetBool(true)
-			}
+// fillDoc sets every key of a model value: strings and the values of
+// optional keys to a value that Encode writes, nested tables in place, and
+// one entry of each array of tables.
+func fillDoc(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.String:
+		v.SetString("x")
+	case reflect.Bool:
+		v.SetBool(true)
+	case reflect.Int64:
+		v.SetInt(1)
+	case reflect.Slice:
+		e := reflect.New(v.Type().Elem()).Elem()
+		fillDoc(e)
+		v.Set(reflect.Append(reflect.MakeSlice(v.Type(), 0, 1), e))
+	case reflect.Struct:
+		for i := range v.NumField() {
+			fillDoc(v.Field(i))
 		}
 	}
+}
+
+// schemaPaths returns every key of the 0004 D3 schema as the canonical
+// writer writes it for a model with every key set: "name",
+// "proxy.listen", "proxy.remote.ports", "rule.domains", and so on, with
+// an array of tables named by its key. The model mirrors the schema, which
+// the round-trip tests of design 0009 W1 hold.
+func schemaPaths(t *testing.T) []string {
+	t.Helper()
 	d := &config.Doc{}
-	reflect.ValueOf(d).Elem().FieldByName(map[string]string{"rule": "Rules", "upstream": "Upstreams"}[array]).Set(reflect.Append(
-		reflect.MakeSlice(reflect.TypeOf([]T{}), 0, 1), v))
+	fillDoc(reflect.ValueOf(d).Elem())
 	var raw map[string]any
 	if _, err := toml.Decode(string(d.Encode()), &raw); err != nil {
 		t.Fatal(err)
 	}
-	var keys []string
-	for k := range raw[array].([]map[string]any)[0] {
-		keys = append(keys, k)
+	var out []string
+	var walk func(prefix string, m map[string]any)
+	walk = func(prefix string, m map[string]any) {
+		for k, v := range m {
+			switch x := v.(type) {
+			case map[string]any:
+				walk(prefix+k+".", x)
+			case []map[string]any:
+				walk(prefix+k+".", x[0])
+			default:
+				out = append(out, prefix+k)
+			}
+		}
 	}
-	slices.Sort(keys)
-	return keys
+	walk("", raw)
+	slices.Sort(out)
+	return out
 }
 
-// TestFormCoverage checks W17 of design 0009: every key of [[rule]] and
-// [[upstream]], note included, has exactly one field of its editor op,
-// counting a choice and its sub-fields as one, and the editor page renders
-// a control for each field.
+// pageOf returns the op of the page that the field catalogue of design
+// 0009 D4 names for a key path.
+func pageOf(path string) string {
+	for _, p := range [][2]string{{"rule.", opRuleSave}, {"upstream.", opUpstreamSave}, {"interface.", "interface.save"},
+		{"proxy.remote.", "remote.save"}, {"proxy.", "proxy.save"}} {
+		if strings.HasPrefix(path, p[0]) {
+			return p[1]
+		}
+	}
+	return "general.save"
+}
+
+// TestFormCoverage checks W17 and W22 of design 0009 (and OI-0006
+// AB-R9): every key of the 0004 D3 schema, note included, is controlled by
+// exactly one form field, on the page that the D4 table names, and no
+// field controls anything else. A choice controls its own key and the keys
+// of its options' sub-fields. The rule and upstream editors also render a
+// control for each of their fields.
 func TestFormCoverage(t *testing.T) {
 	f := newFixture(t, true)
 	f.withExample()
+	paths := schemaPaths(t)
+	if len(paths) < 40 || !slices.Contains(paths, "rule.note") || !slices.Contains(paths, "proxy.remote.ports") ||
+		!slices.Contains(paths, "interface.kind") {
+		t.Fatalf("schema paths: %q", paths)
+	}
+	controls := map[string][]string{}
+	for _, name := range []string{opRuleSave, opUpstreamSave, "interface.save", "proxy.save", "remote.save", "general.save"} {
+		op := f.s.ops[name]
+		if op == nil {
+			t.Fatalf("op %s is not registered", name)
+		}
+		prefix := ""
+		if op.Kind != "" {
+			prefix = op.Kind + "."
+		}
+		for _, fd := range op.Fields {
+			if fd.Under != "" {
+				continue
+			}
+			keys := []string{fd.Key}
+			for _, o := range fd.Options {
+				for _, sub := range o.Fields {
+					sd, _ := op.field(sub)
+					keys = append(keys, sd.Key)
+				}
+			}
+			slices.Sort(keys)
+			for _, k := range slices.Compact(keys) {
+				if k != "" {
+					controls[prefix+k] = append(controls[prefix+k], name+"/"+fd.Name)
+				}
+			}
+		}
+	}
+	for _, key := range paths {
+		if c := controls[key]; len(c) != 1 || !strings.HasPrefix(c[0], pageOf(key)+"/") {
+			t.Errorf("%s: controlled by %q, want one field of %s", key, c, pageOf(key))
+		}
+	}
+	for key, c := range controls {
+		if !slices.Contains(paths, key) {
+			t.Errorf("%q controls %s, which is not a key of the schema", c, key)
+		}
+	}
 	b := f.browser()
 	b.login()
-	for _, c := range []struct {
-		array, op, page, nav, path, form string
-		keys                             []string
-	}{
-		{"rule", opRuleSave, "rule", "rules", "/rules/new", "rule-form", schemaKeys[config.DocRule](t, "rule")},
-		{"upstream", opUpstreamSave, "upstream", "upstreams", "/upstreams/new", "upstream-form", schemaKeys[config.DocUpstream](t, "upstream")},
+	for _, c := range []struct{ op, page, nav, path string }{
+		{opRuleSave, "rule", "rules", "/rules/new"},
+		{opUpstreamSave, "upstream", "upstreams", "/upstreams/new"},
 	} {
-		if len(c.keys) < 8 || !slices.Contains(c.keys, "note") {
-			t.Fatalf("%s keys: %q", c.array, c.keys)
-		}
 		op := f.s.ops[c.op]
 		if op.Page != c.page || op.Nav != c.nav {
 			t.Errorf("%s: page %s, nav %s", c.op, op.Page, op.Nav)
 		}
-		groups := map[string]map[string]bool{}
-		for _, fd := range op.Fields {
-			if fd.Key == "" {
-				continue
-			}
-			group := fd.Name
-			if fd.Under != "" {
-				group = fd.Under
-			}
-			if groups[fd.Key] == nil {
-				groups[fd.Key] = map[string]bool{}
-			}
-			groups[fd.Key][group] = true
-		}
-		for _, k := range c.keys {
-			if len(groups[k]) != 1 {
-				t.Errorf("%s.%s: fields %v, want exactly one", c.array, k, groups[k])
-			}
-			delete(groups, k)
-		}
-		for k := range groups {
-			t.Errorf("%s: a field edits %q, which is not a key of the schema", c.op, k)
-		}
 		body := bodyOf(t, b.get(c.path))
 		for _, fd := range op.Fields {
-			if !regexp.MustCompile(`<(input|textarea|select)\b[^>]* name="`+fd.Name+`"`).MatchString(body) && fd.Name != "upstream" {
+			// A list of the interface list editor is its Add select while
+			// it holds no entry.
+			if !regexp.MustCompile(`<(input|textarea|select)\b[^>]* name="(add:)?`+fd.Name+`"`).MatchString(body) && fd.Name != "upstream" {
 				t.Errorf("%s: no control for field %s", c.path, fd.Name)
 			}
 		}
@@ -631,7 +702,7 @@ func TestAdminTestURL(t *testing.T) {
 			t.Fatalf("%s: no result:\n%s", c.target, mainText(body))
 		}
 		got := textOf(m[2])
-		for _, want := range []string{c.head, "Target " + e.Target.String() + ", ", e.Source.String() + " client"} {
+		for _, want := range []string{c.head, "Target " + e.Target.String() + " (", e.Source.String() + " client"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("%s (%s): result %q lacks %q", c.target, c.source, got, want)
 			}
@@ -665,11 +736,11 @@ func TestAdminTestURL(t *testing.T) {
 	}
 	// The upstream's address, disclosure, and live state.
 	body := p.get("/rules?test=" + url.QueryEscape("https://wiki.internal.example/"))
-	if got := textOf(resultRE.FindStringSubmatch(body)[2]); !strings.Contains(got, "Upstream 192.0.2.6:3128, disclosure via, up since 11:11") {
+	if got := textOf(resultRE.FindStringSubmatch(body)[2]); !strings.Contains(got, "Upstream 192.0.2.6:3128 disclosure via Up since 11:11") {
 		t.Errorf("upstream in the result: %q", got)
 	}
 	// A bare host and a refused target.
-	if got := textOf(resultRE.FindStringSubmatch(p.get("/rules?test=Example.COM"))[2]); !strings.Contains(got, "Target example.com:443, tunnel") ||
+	if got := textOf(resultRE.FindStringSubmatch(p.get("/rules?test=Example.COM"))[2]); !strings.Contains(got, "Target example.com:443 (tunnel, local client)") ||
 		!strings.Contains(got, "Read as https://Example.COM.") {
 		t.Errorf("bare host: %q", got)
 	}
@@ -737,4 +808,85 @@ func mainText(body string) string {
 		body = body[i:]
 	}
 	return textOf(body)
+}
+
+// TestAdminEditorInterfaceLists checks W21 of design 0009 on the real
+// rule and upstream editors (OI-0006 AB-R10): task D's interface list
+// editor adds, moves, and removes entries without the script, each
+// button posting the form for editing with the change in the query, and
+// as the script posts the list; "Only these interfaces" with the list
+// sets the key, and "Use the default list" or "System routing" unsets it.
+func TestAdminEditorInterfaceLists(t *testing.T) {
+	p := newPipeline(t)
+	for _, c := range []struct {
+		path, form, unset, key string
+		entity                 func(d *config.Doc) config.Opt[[]string]
+	}{
+		{"/rules/loopback", "rule-form", "default", "rule", func(d *config.Doc) config.Opt[[]string] { return d.Rules[0].Interfaces }},
+		{"/upstreams/lab", "upstream-form", "system", "upstream", func(d *config.Doc) config.Opt[[]string] { return d.Upstreams[1].Interfaces }},
+	} {
+		p.write(exampleConfig)
+		edit := func(form url.Values, do, at string, kv ...string) url.Values {
+			t.Helper()
+			q := url.Values{"list": {"ifaces_list"}, "do": {do}, "at": {at}}
+			res, body := p.post("/config/draft?"+q.Encode(), with(form, append([]string{"intent", "edit"}, kv...)...))
+			if res.StatusCode != http.StatusOK {
+				t.Fatalf("%s: %s %s: %d: %s", c.path, do, at, res.StatusCode, mainText(body))
+			}
+			if !strings.Contains(body, `data-iflist="ifaces_list"`) || !strings.Contains(body, `<button type="submit" class="sr default-btn"`) {
+				t.Fatalf("%s: the editor lacks the list editor or the default button", c.path)
+			}
+			return formByID(t, body, c.form)
+		}
+		list := func(form url.Values) string {
+			return strings.Join(splitList(strings.Join(form["ifaces_list"], "\n")), ",")
+		}
+		page := p.get(c.path)
+		checkMarkup(t, c.path, page, true, "/"+c.key+"s")
+		form := formByID(t, page, c.form)
+		if form.Get("ifaces") != c.unset || list(form) != "" {
+			t.Fatalf("%s: form %v", c.path, form)
+		}
+		form = edit(form, "add", "", "ifaces", "only", "add:ifaces_list", "wifi")
+		form = edit(form, "add", "", "add:ifaces_list", "eth-a")
+		if got := list(form); got != "wifi,eth-a" || form.Get("ifaces") != "only" {
+			t.Fatalf("%s: Add: %q %v", c.path, got, form["ifaces"])
+		}
+		form = edit(form, "up", "2")
+		if got := list(form); got != "eth-a,wifi" {
+			t.Errorf("%s: Move up: %q", c.path, got)
+		}
+		form = edit(form, "down", "1")
+		form = edit(form, "remove", "1")
+		if got := list(form); got != "eth-a" {
+			t.Errorf("%s: Move down, Remove: %q", c.path, got)
+		}
+		form = edit(form, "add", "", "add:ifaces_list", "wifi")
+		body := p.review(form, http.StatusOK)
+		d, _, _ := config.DocOf([]byte(applyForm(t, body).Get("text")), "x")
+		if got := c.entity(d); !got.Set || strings.Join(got.V, ",") != "eth-a,wifi" {
+			t.Errorf("%s: candidate list %+v", c.path, got)
+		}
+		p.apply(body)
+		// As the script posts it: the hidden inputs in their new order.
+		form = formByID(t, p.get(c.path), c.form)
+		form["ifaces_list"] = []string{"wifi", "eth-a"}
+		d, _, _ = config.DocOf([]byte(applyForm(t, p.review(form, http.StatusOK)).Get("text")), "x")
+		if got := c.entity(d); strings.Join(got.V, ",") != "wifi,eth-a" {
+			t.Errorf("%s: the script's order %+v", c.path, got)
+		}
+		// The choice that leaves the key unset, with the list still posted.
+		form = with(formByID(t, p.get(c.path), c.form), "ifaces", c.unset)
+		d, _, _ = config.DocOf([]byte(applyForm(t, p.review(form, http.StatusOK)).Get("text")), "x")
+		if got := c.entity(d); got.Set {
+			t.Errorf("%s: %s kept the list %+v", c.path, c.unset, got)
+		}
+		// Only these with an empty list: the validator's error, in place.
+		form = formByID(t, p.get(c.path), c.form)
+		form.Del("ifaces_list")
+		body = p.review(form, http.StatusUnprocessableEntity)
+		if slot := body[strings.Index(body, `id="f-ifaces-issues"`):]; !strings.HasPrefix(slot, `id="f-ifaces-issues"><p class="err">`) {
+			t.Errorf("%s: an empty list: %s", c.path, mainText(body))
+		}
+	}
 }
