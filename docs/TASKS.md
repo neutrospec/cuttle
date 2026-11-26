@@ -44,15 +44,18 @@ A closed task becomes one line under Closed:
 ### TASK-0017 — M4 design: full configuration in the web admin
 
 - Milestone: M4
-- Status: design
+- Status: review
 - Iteration: 1/3
-- Workers: designer on a T3 worktree branch
-- Base: this board update
-- Candidate: none
-- Evidence: none
-- Findings: none
-- Next action: designer — write design record 0009 for M4.1–M4.4 with
-  acceptance criteria and return the candidate
+- Workers: designer done on branch `t3/web-config-admin-design`; fresh
+  reviewer running
+- Base: `829a072`
+- Candidate: `6421b01` (tree `faf6387`): design 0009 and its prototype
+- Evidence: the designer checked the prototype in light and dark and at
+  390 px with no horizontal overflow; its canonical TOML example round-trips
+- Findings: none yet; open user questions: the `note` key, the shared
+  login backoff for password changes, and prototype approval
+- Next action: reviewer — design review of `829a072..6421b01`; the user
+  approves the prototype
 
 Decisions for TASK-0017 (2026-11-26):
 
