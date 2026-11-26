@@ -41,22 +41,6 @@ A closed task becomes one line under Closed:
 
 ## Active
 
-### TASK-0022 — M4.3 D: interfaces, proxy, remote clients, general, account
-
-- Milestone: M4.3
-- Status: review
-- Iteration: 1/3
-- Workers: implementer done on branch `t3/admin-settings-pages`; fresh
-  reviewer running
-- Base: `e5ff391`
-- Candidate: `1b08d67` (tree `412f9d0`)
-- Evidence: implementer ran `scripts/gate t0`, `t1`, and
-  `scripts/admin-check` on `412f9d0`, all pass; W20–W23 tests, Z-R4,
-  AA-R7, U-R2, and T-R1 settled, 26 mutation proofs, and screenshots at
-  1280 and 390 px in light and dark
-- Findings: none yet
-- Next action: reviewer — risk-based review of `e5ff391..1b08d67`
-
 ### TASK-0021 — M4.2 C: rules and upstreams
 
 - Milestone: M4.2
@@ -81,6 +65,9 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0022 — M4.3 D: interfaces, proxy, remote clients, general, account —
+  landed `68d788c`, gates: T0 T1 T2 @ `412f9d0` (landed tree differs only in
+  tracking records); iteration 1 of 3; follow-ups AB-R1–AB-R10 in OI-0006
 - TASK-0020 — M4.1 B1: save pipeline, review, and Advanced restore —
   landed `e99f703`, gates: T0 T1 T2 @ `c5004d2` (landed tree differs only
   in tracking records); iteration 1 of 3; follow-ups AA-R1–AA-R8 in
