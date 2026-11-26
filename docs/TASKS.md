@@ -44,20 +44,24 @@ A closed task becomes one line under Closed:
 ### TASK-0026 — Prebuilt bottles from the tap's CI
 
 - Milestone: none (packaging follow-up to M3.1)
-- Status: review
+- Status: blocked — user approval for the tap pushes and dispatches
 - Iteration: 2/3
 - Workers: infra on `t3/homebrew-bottle-workflows` and tap branches
   `bottle-workflows` and `bump-cuttle-0.2.0`
 - Base: `fd5f615`; tap `bcec56d`
-- Candidate: `3a1cffb` (tree `31f4c01`) on `03db298`; tap `c9e0b51`
-  (workflows) and `48e6583` (formula header)
+- Candidate: `18d2396` (tree `0abe6a1`) on `3a1cffb` and `03db298`; tap
+  `c9e0b51` (workflows) and `48e6583` (formula header)
 - Evidence: `gates: none` (docs and formula comment only); actionlint
   1.7.12 with `brew style`'s ignores, a YAML parse, `brew style` on both
   formula copies, a link check, 17 stubbed precheck cases, and the tap
-  pre-push check on synthetic repositories pass; CI evidence follows the
-  approved pushes
-- Findings: F1–F4 and the nit fixed, awaiting re-check
-- Next action: reviewer — re-check the F1–F4 fixes
+  pre-push check on synthetic repositories pass; the re-check approved;
+  the tap pre-push check passes for both tap branches; CI evidence
+  follows the approved pushes
+- Findings: re-check R2-1 (merge commits pass the tap check) and R2-2
+  (xcode-27 date wording) fixed by the orchestrator in `18d2396`
+- Next action: orchestrator — on approval, push the tap workflows, open
+  the `bump-cuttle-0.2.0` pull request, dispatch `publish.yml` and
+  `install-check.yml`, then land the cuttle branch
 
 ## Closed
 
