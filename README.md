@@ -24,8 +24,9 @@ ordered rules on host name, domain, IP prefix, and port:
   priority order, with per-rule lists that pin a destination to one of
   them.
 - Live counters, a decision log, hourly per-domain statistics in SQLite, and
-  a password-protected dashboard and settings page on loopback show where
-  traffic went.
+  a password-protected admin UI on loopback show where traffic went. The
+  admin UI also edits the whole configuration and shows each change for
+  review before it is applied.
 - cuttle installs from a Homebrew tap, runs under `brew services`, and
   follows the XDG Base Directory specification ([Install](#install)).
 
@@ -45,10 +46,10 @@ cuttle admin passwd           # then sign in at http://127.0.0.1:3129/
 The first start writes the starter configuration to
 `~/.config/cuttle/config.toml`, with the proxy on `127.0.0.1:3128` and the
 admin UI on `http://127.0.0.1:3129/`; point clients at
-`http://127.0.0.1:3128`. Edit the configuration on the admin Advanced page,
-or by hand followed by `cuttle check` and `cuttle reload`. Sign-in stays
-disabled until `cuttle admin passwd` has set a password; a new password
-needs no restart. `cuttle paths` lists every file the CLI uses.
+`http://127.0.0.1:3128`. Edit the configuration on the admin settings
+pages, or by hand followed by `cuttle check` and `cuttle reload`. Sign-in
+stays disabled until `cuttle admin passwd` has set a password; a new
+password needs no restart. `cuttle paths` lists every file the CLI uses.
 
 The service sees no `XDG_*` variable from your shell. If your shell sets
 `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, or `XDG_RUNTIME_DIR`
@@ -76,7 +77,15 @@ Logs:
   opens, and crashes. launchd restarts cuttle after a crash and, while the
   configuration is invalid, every 10 s until the file is fixed.
 
-After `brew upgrade cuttle`, run `brew services restart cuttle`.
+After an upgrade, check the configuration before restarting the service,
+because a new version can refuse a file that the old one accepted; the
+[changelog](CHANGELOG.md) lists such changes under "Upgrading":
+
+```sh
+brew upgrade cuttle
+cuttle check                  # fix what it reports before restarting
+brew services restart cuttle
+```
 
 To remove cuttle and everything it created:
 
@@ -97,10 +106,15 @@ password, statistics, and logs in place.
 
 ## Status
 
-Milestone stages M1.1 to M1.5 are implemented: `direct`, `block`, and
-`upstream:<name>` routes, the starter configuration, the decision log with
-rotation, and `cuttle init`, `check`, `explain`, and `paths`, for local
-clients and for remote clients on non-loopback listeners. Remote clients
+Milestones M1, M2, and M4 and stage M3.1 are implemented, with the
+device check of M1.5 still open; Safari and the client matrix (M3.2) and
+a verified chained deployment (M3.3) remain ([roadmap](docs/ROADMAP.md)).
+The [changelog](CHANGELOG.md) lists the changes of each release.
+
+Stages M1.1 to M1.5 provide `direct`, `block`, and `upstream:<name>`
+routes, the starter configuration, the decision log with rotation, and
+`cuttle init`, `check`, `explain`, and `paths`, for local clients and for
+remote clients on non-loopback listeners. Remote clients
 need an address in `proxy.remote.sources` and get their own ports, default,
 and connection limits
 ([0003 D9–D12](docs/design/0003-upstream-chaining-and-exposure.md#d9-listeners)).
@@ -127,30 +141,44 @@ non-loopback listener that cannot bind, for example while a private link
 is down, is retried every 30 s and shows as `retrying`. `SIGTERM` drains
 in-flight requests for up to 5 s and closes tunnels.
 
-The admin UI covers stages M2.2 to M2.4
-([0005 D5–D10](docs/design/0005-statistics-and-admin.md#d5-admin-listener-and-host-allowlist)).
+The admin UI covers stages M2.2 to M2.4 and milestone M4
+([0005 D5–D10](docs/design/0005-statistics-and-admin.md#d5-admin-listener-and-host-allowlist),
+[0009](docs/design/0009-web-configuration.md)).
 `cuttle admin passwd` stores an Argon2id hash of the admin password in
 `~/.local/share/cuttle/admin-password`, and `cuttle serve` answers on
 `admin.listen`, `http://127.0.0.1:3129/` by default, with a sign-in page.
-Once signed in, the overview shows which domains went to each upstream,
-which went direct, and which were blocked over the last hour, 24 hours,
-7 days, 30 days, or a date range, with totals per route and interface,
-upstream and interface states, and the configuration and statistics
-status. The domain table filters by route, source, and interface; the
-live page lists open tunnels; and the Advanced page edits the
-configuration as TOML text, validates it with line numbers, shows the
-change as a diff for review, applies it atomically with a `.bak` copy that
-the page can restore, refuses to apply when the file changed meanwhile,
-and reloads without dropping tunnels. The pages are rendered
-on the server; one same-origin script adds conveniences, and every page
-works without it. Only the Host values
-`127.0.0.1:<port>` and `localhost:<port>` are served. `cuttle status`
-shows whether the admin listener is listening, unavailable with the bind
-error, or disabled.
-Sessions live in memory and end after 30 idle minutes, after 12 hours, at
-logout, when the password changes, and when cuttle restarts. After three
-failed sign-ins in a row, each attempt must wait, from 1 s doubling up to
-300 s.
+Once signed in, the overview says in one sentence where traffic went over
+the last hour, 24 hours, 7 days, 30 days, or a date range, splits the
+bytes by route in a bar, and lists the top hosts sent direct, through each
+upstream, and blocked, with totals per interface, upstream and interface
+states, a configuration summary, and the statistics status. The domain
+table filters by route, rule, source, and interface, and the live page
+lists open tunnels. "Route…" beside a host on these pages sends it direct,
+through an upstream, or to block, with a new rule or by adding it to an
+existing one.
+
+The settings pages edit everything the configuration holds: rules, which
+are added, edited, duplicated, deleted, and reordered, with "Test a URL"
+showing the matching rule as `cuttle explain` does; upstreams with their
+live state; interfaces defined from the ones detected on this Mac; the
+proxy, remote-client, and general settings; and, on the Account page, the
+admin password, changed with the current one. Every change opens a review
+with the diff of the file, and nothing is written before Apply changes.
+A save rewrites the whole file in canonical form with short generated
+comments, so comments written by hand are not kept. It is written
+atomically with the previous file kept as `config.toml.bak`, refused when
+the file changed after the review, and reloaded without dropping tunnels.
+The Advanced page edits the file as TOML text, validates it with line
+numbers, applies it through the same review, and restores the previous
+version. The pages are rendered on the server; one same-origin script
+adds dialogs and other conveniences, and every page works without it.
+
+Only the Host values `127.0.0.1:<port>` and `localhost:<port>` are
+served. `cuttle status` shows whether the admin listener is listening,
+unavailable with the bind error, or disabled. Sessions live in memory
+and end after 30 idle minutes, after 12 hours, at logout, when the
+password changes, and when cuttle restarts. After three failed sign-ins
+in a row, each attempt must wait, from 1 s doubling up to 300 s.
 
 Stage M2.1 records hourly per-host statistics in
 `~/.local/state/cuttle/stats.db`: requests, failures, and bytes per host,
@@ -246,6 +274,7 @@ go run ./tools/mockenv serve                     # the mocks alone, for manual c
 
 ## Documentation
 
+- [Changelog](CHANGELOG.md), with the upgrade steps of each release
 - [Roadmap and milestones](docs/ROADMAP.md)
 - [Design records](docs/design/README.md), starting with
   [0002 — Proxy core and routing](docs/design/0002-proxy-core-and-routing.md)

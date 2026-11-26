@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/neutrospec/cuttle/internal/stats"
 )
 
 // TestAdminScreensRoute is the browser check of task E of design 0009
@@ -12,7 +14,8 @@ import (
 // bar, the domains page with its rule filter, Route a host in the dialog
 // of the domains and live pages, and the Account error summary, each at
 // 1280 and 390 px in light and dark appearance without sideways scrolling
-// or console errors; Route a host in four activations with the script,
+// or console errors; the overview of a window whose requests all failed
+// (OI-0006 AD-R1); Route a host in four activations with the script,
 // with "Where" showing only the chosen route's rules; /live not
 // refreshing while the dialog is open; and Route a host as pages without
 // the script.
@@ -191,5 +194,33 @@ func TestAdminScreensRoute(t *testing.T) {
 	s.clean("route without the script")
 	s.chrome.Call(s.p.Session, "Emulation.setScriptExecutionDisabled", map[string]any{"value": false}, nil)
 	s.write(file)
+
+	// A window whose requests all failed and moved no bytes (OI-0006
+	// AD-R1): the sentence and the legend, not the empty state.
+	st := s.f.withStats()
+	record(st, stats.RowKey{Host: "video.example", Action: "direct", Rule: "default", Source: "local"}, 4, true, true, 0, 0)
+	record(st, stats.RowKey{Host: "www.example.com", Action: "direct", Rule: "default", Source: "local"}, 1, true, true, 0, 0)
+	record(st, stats.RowKey{Host: "wiki.internal.example", Action: "upstream", Upstream: "gateway", Rule: "restricted", Source: "local"}, 3, true, true, 0, 0)
+	flush(t, st)
+	for _, v := range []struct {
+		px     int
+		mobile bool
+		scheme string
+	}{{1280, false, "light"}, {390, true, "dark"}} {
+		s.p.ColorScheme(v.scheme)
+		s.p.Viewport(v.px, 900, v.mobile)
+		s.p.Navigate(s.base + "/")
+		sfx := fmt.Sprintf("-%d-%s", v.px, v.scheme)
+		if got := s.text(".hero-sentence"); got != "In the last 24 hours, no traffic went out. 5 requests went direct and 3 through gateway but moved no bytes." {
+			t.Errorf("overview without bytes%s: %q", sfx, got)
+		}
+		var empty, legend int
+		s.eval(`document.querySelectorAll("main .empty").length`, &empty)
+		s.eval(`document.querySelectorAll(".hero .legend li").length`, &legend)
+		if empty != 0 || legend != 2 {
+			t.Errorf("overview without bytes%s: %d empty states, %d legend entries", sfx, empty, legend)
+		}
+		s.check("overview-no-bytes"+sfx, "Overview")
+	}
 	s.chrome.Close()
 }

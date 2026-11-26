@@ -153,7 +153,9 @@ Changes to the [0005 D9][d5-9] overview, delivered in M4.4:
   24 hours, 61 % of traffic went direct, 38 % through gateway, and 2,310
   requests were blocked." Under it, one stacked bar splits the bytes by
   route in the route colors (D11), with a legend that names each route,
-  its bytes, and its share.
+  its bytes, and its share. Shares are whole percents that add up to
+  100; next to a route below half a percent, which shows "<1%", no
+  route shows more than 99 % (OI-0006 AD-R2).
 - The per-route top-host tables stay, each host with a "Route…" action
   (D3.12). As the prototype draws them, they are compact lists side by
   side, each host with its bytes, or requests on `block`, and a bar;
@@ -167,9 +169,13 @@ Changes to the [0005 D9][d5-9] overview, delivered in M4.4:
 - The live counters and the status table stay below.
 
 States: statistics unavailable replaces the sentence, bar, and host
-tables with the reason and "The proxy serves without statistics"; an
-empty window says "No traffic in this window" and offers the 7-day
-window.
+tables with the reason and "The proxy serves without statistics"; a
+window without any route says "No traffic in this window" and offers
+the 7-day window. Routes whose requests moved no bytes, for example
+because every request failed, get a sentence of their own after the
+first, such as "5 requests went direct and 3 through gateway but moved
+no bytes.", and legend entries with their requests; when no route moved
+bytes, the first sentence says "no traffic went out" (OI-0006 AD-R1).
 
 #### D3.2 Domains and Live
 

@@ -518,6 +518,9 @@ Move resolved items to Closed with their resolving commit or evidence.
     the toast and the settings notice keep the sync warning when the
     reload refuses the file, and `TestAdminApply` covers both on
     `/config/apply`.
+    Z-R5 is settled in TASK-0024: the "Upgrading" section of the 0.2.0
+    entry in `CHANGELOG.md` says that 0.1.0 refuses a file with `note`
+    keys, so a downgrade needs the notes removed.
   - T-R1–T-R3 (from the TASK-0019 reviews; M4 tasks): T-R1 (minor, UI):
     `overflow-wrap: break-word` on `td.host` (`admin.css:435`) also
     applies to host cells that are not the lead of a phone row (Overview
@@ -643,6 +646,9 @@ Move resolved items to Closed with their resolving commit or evidence.
     editor (`TestAdminInterfaceListHint`, AC-R1); Discard on a duplicate
     loads the copy again (`TestAdminDuplicateDiscard`, AC-R2); and 0009
     D3.13 names the unguarded editor dialogs (AC-R4).
+    AC-R3 is settled in TASK-0024: the "Upgrading" section of the 0.2.0
+    entry in `CHANGELOG.md` and the README upgrade steps say to run
+    `cuttle check` before `brew services restart cuttle`.
   - AD-R1–AD-R5 (from the TASK-0023 review): AD-R1 (minor, UI): when
     every request in the window failed and moved no bytes, the Overview
     says "No traffic in this window" while the top-host panels list the
@@ -658,12 +664,24 @@ Move resolved items to Closed with their resolving commit or evidence.
     px; the orchestrator accepted it on 2026-11-26. AD-R5 (nit): the W26
     interface flow's failure message should name its cause (no
     non-loopback interface with a six-byte hardware address).
+    AD-R1–AD-R3 and AD-R5 are settled in TASK-0024: the overview shows
+    the empty state only for a window without any route, and routes whose
+    requests moved no bytes get a sentence of their own and legend entries
+    with their requests (`TestRouteHero`, `TestAdminOverviewNoBytes`,
+    `TestAdminScreensRoute`; 0009 D3.1); no share shows more than 99 %
+    next to a route below half a percent (`TestRouteHero`); Route a host
+    falls back to `/rules` for a return path that `cleanReturn` refuses,
+    `https://evil.example/` included (`TestAdminRouteHostReturn`); and the
+    W26 interface flow says that the Mac needs an interface that is not
+    loopback and has a six-byte hardware address, or that the table could
+    not be read.
 - Next action: orchestrator — include the open items (V5, V8, V11, V12, P1,
   W1–W3, Z2, Z4, G1–G2, P-R3–P-R7, Q-R1–Q-R4, Q-R6–Q-R8, S-R1–S-R2,
-  X-R1–X-R5, Z-R5–Z-R7, Z-R9, AC-R3, AD-R1–AD-R3, and AD-R5) in the
-  briefs of the stages they affect; the producer closes each item with
-  the commit that settles it. TASK-0023 settled the W25 case of Y-R3, T-R2, AA-R4, AA-R8,
-  AB-R2–AB-R4, AB-R6–AB-R8, AC-R1, AC-R2, and AC-R4; TASK-0022 settled
+  X-R1–X-R5, Z-R6, Z-R7, and Z-R9) in the briefs of the stages they
+  affect; the producer closes each item with the commit that settles it.
+  TASK-0024 settled Z-R5, AC-R3, AD-R1–AD-R3, and AD-R5; TASK-0023
+  settled the W25 case of Y-R3, T-R2, AA-R4, AA-R8, AB-R2–AB-R4,
+  AB-R6–AB-R8, AC-R1, AC-R2, and AC-R4; TASK-0022 settled
   Z-R4, AA-R7, U-R2, and T-R1; TASK-0021 settled AA-R1–AA-R3, AA-R5,
   AA-R6, Z-R3, AB-R1, AB-R5, AB-R9, and AB-R10.
   The M1.4 items, R5 with the C13 remainder, the per-request source
