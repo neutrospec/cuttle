@@ -468,15 +468,30 @@ flow, from the workflows that `brew tap-new` generates (Homebrew 7.0.16,
   `Formula/cuttle.rb` and keeps the bottles as workflow artifacts. Pushes
   to the tap's `main` do not run it.
 - `publish.yml` is dispatched by hand with the pull request number and
-  head commit. It refuses unless the pull request is open against `main`,
-  changes no formula besides `Formula/cuttle.rb`, and has a green
-  `tests.yml` run for that commit; `brew pr-pull` alone takes the newest
-  completed run, passed or failed. It then runs `brew pr-pull --no-upload`,
-  attests the bottles with `actions/attest`, uploads them with
-  `brew pr-upload`, pushes the pull request's commits and the bottle commit
-  to `main`, and deletes the pull request branch if it still points at the
-  published commit, which leaves the pull request closed. Attesting before
-  the upload is what homebrew-core's own publish workflow does.
+  its head commit, both required. `brew pr-pull` and `brew pr-upload` load
+  the pull request's formula in a job that holds `contents: write`,
+  `id-token: write`, and `attestations: write`, so a first step refuses
+  the run unless all of these hold:
+  - the head commit is given as 40 hex digits and is the pull request's
+    current head;
+  - the pull request is open against `main` and comes from a branch
+    `bump-cuttle-X.Y.Z` of the tap itself, not from a fork, whose author
+    could push a new head after the checks;
+  - the pull request changes `Formula/cuttle.rb` and no other file, both
+    in its full file list, read across all pages, and in each of its
+    commits. No other file then reaches `main`, and `tests.yml` ran as it
+    is on `main`, so its artifacts are the bottles that `brew test-bot`
+    built;
+  - the newest `tests.yml` run for the head commit has completed and
+    succeeded. `brew pr-pull` alone takes the newest completed run,
+    passed or failed.
+
+  It then runs `brew pr-pull --no-upload`, attests the bottles with
+  `actions/attest`, uploads them with `brew pr-upload`, pushes the pull
+  request's commits and the bottle commit to `main`, and deletes the pull
+  request branch if it still points at the published commit, which leaves
+  the pull request closed. Attesting before the upload is what
+  homebrew-core's own publish workflow does.
 - `install-check.yml` is dispatched by hand with the release version and
   reproduces an install on another computer (release procedure, step 5).
 
@@ -491,15 +506,19 @@ for Apple Silicon macOS 15 and 26, which give the bottle tags
   bottle, and `brew test-bot` bottles a formula only when its build
   dependencies are bottled for the runner's macOS, so an Intel runner
   would yield no bottle. Intel Macs build from source.
-- The only macOS 27 runner, `xcode-27`, is a public preview with possible
-  queueing and unstable software (actions/runner-images announcement
-  14404), so it does not gate publishing. It runs the install check, where
-  it proves the fallback.
+- The only macOS 27 runner, `xcode-27`, generally available since
+  2026-11-23 (actions/runner-images announcement 15397), is also the only
+  runner newer than every bottle tag. It therefore stays out of the build
+  matrix and runs the install check, where it proves the older-OS
+  fallback below (C5), the path that macOS 27 and any later macOS take
+  until a bottle exists for them. A native `arm64_golden_gate` bottle
+  would add nothing for a binary whose minimum macOS is 13.
 - The labels are pinned, because `macos-latest` moves to new macOS
   versions on GitHub's schedule and would change the tags silently. When a
-  runner image retires, as macOS 14 did on 2026-11-02, or a macOS 27 image
-  becomes generally available, change the `tests.yml` matrix and the
-  expected tags in `install-check.yml` together.
+  runner image retires, as macOS 14 did on 2026-11-02, or a runner for a
+  macOS newer than 27 appears, revisit the matrix: keep one runner newer
+  than every bottle tag for the install check, and change the `tests.yml`
+  matrix and the expected tags in `install-check.yml` together.
 
 On a Mac with no bottle for its macOS, Homebrew pours the newest bottle
 for an older macOS on the same architecture (`find_older_compatible_tag`
@@ -552,7 +571,7 @@ does not run the tap's `audit.yml`.
 The tap also carries `Formula/canopy.rb`, which canopy's release bot
 pushes to `main` and which builds from source by design. Because
 `tests.yml` runs only for pull requests that change `Formula/cuttle.rb`
-and `publish.yml` refuses pull requests that change another formula,
+and `publish.yml` refuses pull requests that change any other file,
 canopy still runs `audit.yml` alone and gets no bottles. The dependency
 runs the other way: `brew test-bot --only-tap-syntax` runs `brew style`,
 whose actionlint step covers every workflow, `brew readall`, and
@@ -564,19 +583,75 @@ whose actionlint step covers every workflow, `brew readall`, and
 Each step that pushes to a remote or dispatches a workflow needs the
 user's approval.
 
+The workflows must be on the tap's `main` before any release pull
+request: GitHub dispatches `publish.yml` only from the default branch, and
+`publish.yml` accepts only pull requests that change `Formula/cuttle.rb`
+alone. The one-time bootstrap (TASK-0026) therefore first pushes the
+workflows commit to the tap's `main`, and only then pushes
+`bump-cuttle-0.2.0` and opens its pull request. That branch changes only
+the header comment, because 0.2.0 is already in the tap; from there on
+the steps below apply.
+
+Before each push to the tap, the orchestrator runs this check from the
+main checkout's root, which holds `.env`. `scripts/publish-scan` does not
+fit the tap: it scans everything a remote serves, and the tap serves
+GitHub's `refs/pull/*` refs and canopy's bot commits. The check applies
+the same pattern and the same `grep` to exactly what the push sends: the
+patches and messages of `origin/main..<ref>` and the branch name. It also
+requires every author and committer of those commits to be one of
+`CUTTLE_PUBLISH_IDENTITIES`. Save it in a scratch directory and run
+`sh <file> <tap clone> <local ref>`, for example
+`sh tap-push-check.sh <tap clone> bump-cuttle-X.Y.Z`. It prints
+`tap push check: pass` and exits 0 only when every count is 0:
+
+```sh
+set -eu
+export LC_ALL=C
+tap=$1 ref=$2
+test -f .env || { echo "run from the main checkout's root, which holds .env" >&2; exit 1; }
+git -C "$tap" fetch --quiet origin
+range="origin/main..$ref"
+p=$(. ./.env >/dev/null 2>&1 && printf '%s' "${CUTTLE_PUBLISH_SCAN_PATTERNS-}")
+ids=$(. ./.env >/dev/null 2>&1 && printf '%s' "${CUTTLE_PUBLISH_IDENTITIES-}")
+test -n "$p" || { echo "no CUTTLE_PUBLISH_SCAN_PATTERNS in ./.env" >&2; exit 1; }
+test -n "$ids" || { echo "no CUTTLE_PUBLISH_IDENTITIES in ./.env" >&2; exit 1; }
+d=$(mktemp -d)
+trap 'rm -rf "$d"' EXIT
+git -C "$tap" rev-list "$range" >"$d/commits"
+test -s "$d/commits" || { echo "$range is empty" >&2; exit 1; }
+git -C "$tap" -c core.quotePath=false log -p --text --no-ext-diff --no-textconv \
+	--no-use-mailmap --no-show-signature --format=%B "$range" >"$d/text"
+printf '%s\n' "$ref" >>"$d/text"
+n=$(/usr/bin/grep -a -i -E -c -e "$p" "$d/text" || test $? -eq 1)
+git -C "$tap" log --no-use-mailmap --format='%an <%ae>%n%cn <%ce>' "$range" >"$d/ids-raw"
+sort -u "$d/ids-raw" >"$d/ids"
+printf '%s\n' "$ids" | tr ';' '\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' |
+	sort -u >"$d/allowed"
+comm -23 "$d/ids" "$d/allowed" >"$d/unexpected"
+echo "commits $(wc -l <"$d/commits" | tr -d ' '), matches $n," \
+	"unexpected identities $(wc -l <"$d/unexpected" | tr -d ' ')"
+test "$n" -eq 0
+test ! -s "$d/unexpected"
+echo "tap push check: pass"
+```
+
 1. After the tag `vX.Y.Z` is published in `neutrospec/cuttle`, take the
    sha256 of
    `https://github.com/neutrospec/cuttle/archive/refs/tags/vX.Y.Z.tar.gz`.
    Copy `packaging/homebrew/cuttle.rb` to `Formula/cuttle.rb` on a new
-   branch `cuttle-X.Y.Z` of the tap from its `main`, change only `url` and
-   `sha256`, and commit as `cuttle vX.Y.Z`. The copy drops the previous
-   version's `bottle do` block.
-2. Push the branch and open a pull request against `main`.
+   branch `bump-cuttle-X.Y.Z` of the tap from its `main`, change only
+   `url` and `sha256`, and commit as `cuttle vX.Y.Z`. The copy drops the
+   previous version's `bottle do` block. The branch follows Homebrew's
+   `bump-<formula>-<version>` convention, which also keeps its name apart
+   from the release tag `cuttle-X.Y.Z`.
+2. Run the check above for `bump-cuttle-X.Y.Z`, push the branch, and open
+   a pull request against `main`.
 3. Wait until `tests.yml` is green for the pull request's head commit on
    both runners, with the artifacts `bottles_macos-15` and
-   `bottles_macos-26`. Fix failures with further commits on the branch.
-4. Dispatch `publish.yml` with the pull request number and head commit.
-   Check that the release `cuttle-X.Y.Z` holds
+   `bottles_macos-26`. Fix failures with further commits on the branch
+   that also change only `Formula/cuttle.rb`, each pushed after the check.
+4. Dispatch `publish.yml` with the pull request number and the full head
+   commit SHA, both required. Check that the release `cuttle-X.Y.Z` holds
    `cuttle-X.Y.Z.arm64_sequoia.bottle.tar.gz` and
    `cuttle-X.Y.Z.arm64_tahoe.bottle.tar.gz`; that `main` ends with the pull
    request's commit and `cuttle: add X.Y.Z bottle.`, whose `bottle do`
@@ -608,7 +683,8 @@ for `neutrospec/cuttle` in AGENTS.md:
 - `main`: changes the user approves, such as to the tap's workflows,
   canopy's release bot commits, and `publish.yml`'s push of each
   release's commits and bottle commit;
-- one branch `cuttle-X.Y.Z` per release, which `publish.yml` deletes;
+- one branch `bump-cuttle-X.Y.Z` per release, which `publish.yml`
+  deletes;
 - tags `cuttle-X.Y.Z`, which GitHub creates when `publish.yml` publishes
   the release of that name with its bottles and their attestations.
 
