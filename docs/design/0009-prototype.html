@@ -1,0 +1,2152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rules · cuttle (prototype)</title>
+<style>
+/* Design 0009 D11 tokens. The product puts these in admin.css. */
+:root {
+  color-scheme: light;
+  --paper: #F3F5F4;
+  --surface: #FFFFFF;
+  --surface-2: #EBEFED;
+  --ink: #13202A;
+  --ink-2: #3B4853;
+  --muted: #5F6B75;
+  --line: #D6DDD9;
+  --line-strong: #848F8A;
+  --on-ink: #FFFFFF;
+  --direct: #0B6E7F;
+  --upstream: #4A45BF;
+  --block: #B3302A;
+  --warn: #8A5600;
+  --ok: #28743A;
+  --direct-soft: #ECF3F5;
+  --upstream-soft: #F0F0FA;
+  --block-soft: #F9EEEE;
+  --warn-soft: #FAF1DF;
+  --ok-soft: #EEF4EF;
+  --shadow-1: 0 1px 2px rgba(19, 32, 42, .06), 0 8px 24px rgba(19, 32, 42, .12);
+  --shadow-2: 0 24px 64px rgba(19, 32, 42, .24);
+  --backdrop: rgba(19, 32, 42, .4);
+  --sans: -apple-system, BlinkMacSystemFont, "Helvetica Neue", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #0D1316;
+    --surface: #141B1F;
+    --surface-2: #1B2429;
+    --ink: #E5EBE9;
+    --ink-2: #BBC6CA;
+    --muted: #8D9AA2;
+    --line: #263138;
+    --line-strong: #5E6C74;
+    --on-ink: #0D1316;
+    --direct: #4CBAC7;
+    --upstream: #A39CFF;
+    --block: #FF7F72;
+    --warn: #E6AE4C;
+    --ok: #5EC57B;
+    --direct-soft: #1E383D;
+    --upstream-soft: #2E3247;
+    --block-soft: #3E2D2E;
+    --warn-soft: #3A3627;
+    --ok-soft: #213A30;
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .4);
+    --shadow-2: 0 24px 64px rgba(0, 0, 0, .55);
+    --backdrop: rgba(0, 0, 0, .55);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #0D1316;
+  --surface: #141B1F;
+  --surface-2: #1B2429;
+  --ink: #E5EBE9;
+  --ink-2: #BBC6CA;
+  --muted: #8D9AA2;
+  --line: #263138;
+  --line-strong: #5E6C74;
+  --on-ink: #0D1316;
+  --direct: #4CBAC7;
+  --upstream: #A39CFF;
+  --block: #FF7F72;
+  --warn: #E6AE4C;
+  --ok: #5EC57B;
+  --direct-soft: #1E383D;
+  --upstream-soft: #2E3247;
+  --block-soft: #3E2D2E;
+  --warn-soft: #3A3627;
+  --ok-soft: #213A30;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .4);
+  --shadow-2: 0 24px 64px rgba(0, 0, 0, .55);
+  --backdrop: rgba(0, 0, 0, .55);
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 14px/1.5 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+a:hover { text-decoration-color: currentColor; }
+code, .mono { font-family: var(--mono); font-size: 13px; }
+h1, h2, h3 { margin: 0; line-height: 1.25; }
+h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.015em; }
+h2 { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+h3 { font-size: 14px; font-weight: 600; }
+p { margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+[hidden] { display: none !important; }
+.disclosure summary { cursor: pointer; font-weight: 500; }
+.disclosure[open] summary { margin-bottom: 12px; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.ic { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.ic-lg { width: 20px; height: 20px; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.skip { position: absolute; left: 8px; top: -48px; padding: 8px 12px; background: var(--ink); color: var(--on-ink); border-radius: 6px; z-index: 50; }
+.skip:focus { top: 8px; }
+
+/* Prototype chrome, not part of the product. */
+.proto {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px;
+  padding: 6px 16px; font-size: 12px; color: var(--ink-2);
+  background: repeating-linear-gradient(-45deg, var(--surface-2), var(--surface-2) 8px, var(--paper) 8px, var(--paper) 16px);
+  border-bottom: 1px dashed var(--line-strong);
+}
+.proto strong { font-weight: 600; }
+.proto label { display: inline-flex; align-items: center; gap: 6px; }
+.proto select { font-size: 12px; padding: 2px 4px; border-radius: 4px; border: 1px solid var(--line-strong); background: var(--surface); }
+
+/* Shell */
+.app { display: grid; grid-template-columns: 232px minmax(0, 1fr); align-items: stretch; }
+.sidebar { background: var(--surface); border-right: 1px solid var(--line); }
+.side-inner { position: sticky; top: 0; display: flex; flex-direction: column; gap: 18px; padding: 18px 12px 20px; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 2px 8px; }
+.brand .ic { width: 26px; height: 26px; stroke-width: 1.6; color: var(--ink); }
+.brand b { display: block; font-size: 17px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.1; }
+.brand span { display: block; font-size: 12px; color: var(--muted); }
+.nav { display: grid; gap: 16px; }
+.nav-group { display: grid; gap: 1px; }
+.nav-group > span { padding: 0 8px 4px; font-size: 12px; font-weight: 500; color: var(--muted); }
+.nav a {
+  display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 8px;
+  border-radius: 6px; text-decoration: none; color: var(--ink-2);
+}
+.nav a:hover { background: var(--surface-2); color: var(--ink); }
+.nav a[aria-current="page"] { background: var(--surface-2); color: var(--ink); font-weight: 600; }
+.nav a .count { margin-left: auto; font-size: 12px; color: var(--muted); font-weight: 400; }
+.side-foot { display: grid; gap: 2px; padding: 12px 8px 0; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.side-foot .btn { margin-top: 8px; justify-self: start; }
+.topbar { display: none; }
+main { min-width: 0; padding: 24px 32px 120px; }
+.page { max-width: 1120px; }
+.banners { display: grid; gap: 8px; max-width: 1120px; margin-bottom: 20px; }
+.banners:empty { display: none; }
+
+/* Page header */
+.crumbs { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.page-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; margin-bottom: 20px; }
+.page-head .lead { margin-top: 6px; color: var(--ink-2); max-width: 62ch; }
+.page-head .actions { display: flex; gap: 8px; }
+.name-code { font-family: var(--mono); font-size: 0.92em; font-weight: 600; letter-spacing: 0; }
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 32px; padding: 0 12px; border-radius: 6px;
+  border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink);
+  font-weight: 500; white-space: nowrap; cursor: pointer; text-decoration: none;
+}
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
+.btn.primary:hover { opacity: .9; }
+.btn.quiet { border-color: transparent; background: transparent; color: var(--ink-2); }
+.btn.quiet:hover { background: var(--surface-2); color: var(--ink); }
+.btn.danger { color: var(--block); border-color: var(--block); background: transparent; }
+.btn.danger:hover { background: var(--block-soft); }
+.btn[disabled], .btn[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.btn[aria-disabled="true"] { pointer-events: none; }
+.icon-btn { width: 32px; padding: 0; }
+.btn.sm { min-height: 28px; padding: 0 10px; font-size: 13px; }
+.icon-btn.sm { width: 28px; padding: 0; }
+
+/* Panels and lists */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.panel-pad { padding: 16px; }
+.section { margin-top: 32px; }
+.section-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; margin-bottom: 12px; }
+.section-head p { color: var(--muted); font-size: 13px; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+
+/* Badges, states, chips */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px;
+  border-radius: 4px; font-size: 12px; font-weight: 500; line-height: 1; white-space: nowrap;
+  background: var(--surface-2); color: var(--ink-2);
+}
+.badge .sw { width: 8px; height: 8px; border-radius: 2px; background: currentColor; }
+.badge.direct { color: var(--direct); background: var(--direct-soft); }
+.badge.upstream { color: var(--upstream); background: var(--upstream-soft); }
+.badge.block { color: var(--block); background: var(--block-soft); }
+.badge.warn { color: var(--warn); background: var(--warn-soft); }
+.badge.restart { color: var(--warn); background: var(--warn-soft); }
+.badge b { font-weight: 600; }
+.state { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; }
+.state::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.state.up::before, .state.online::before { background: var(--ok); }
+.state.down::before, .state.offline::before { background: var(--block); }
+.state.probing::before, .state.demoted::before { background: var(--warn); }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font: 12px/20px var(--mono); padding: 0 6px; border-radius: 4px; background: var(--surface-2); color: var(--ink-2); overflow-wrap: anywhere; }
+.chip.more { font-family: var(--sans); color: var(--muted); background: transparent; padding: 0 2px; }
+.flag { font-size: 12px; color: var(--ink-2); }
+
+/* Banners and toasts */
+.banner {
+  display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px;
+  background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--muted); border-radius: 8px;
+}
+.banner .ic { margin-top: 2px; }
+.banner.warn { background: var(--warn-soft); border-left-color: var(--warn); }
+.banner.warn .ic { color: var(--warn); }
+.banner.error { background: var(--block-soft); border-left-color: var(--block); }
+.banner.error .ic { color: var(--block); }
+.banner .b-body { display: grid; gap: 4px; flex: 1; min-width: 0; }
+.banner .b-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.toasts { position: fixed; top: 16px; right: 16px; z-index: 40; display: grid; gap: 8px; width: min(400px, calc(100% - 32px)); }
+.toast {
+  display: flex; gap: 10px; align-items: flex-start; padding: 12px 12px 12px 14px;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-left: 3px solid var(--ok);
+  border-radius: 8px; box-shadow: var(--shadow-1); animation: toast-in .16s ease-out;
+}
+.toast .ic { color: var(--ok); margin-top: 2px; }
+.toast.warn { border-left-color: var(--warn); }
+.toast.warn .ic { color: var(--warn); }
+.toast .t-body { flex: 1; display: grid; gap: 2px; }
+.toast .t-body span { color: var(--ink-2); font-size: 13px; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } }
+
+/* Unsaved-changes bar */
+.savebar {
+  position: fixed; left: 232px; right: 0; bottom: 0; z-index: 30;
+  display: flex; align-items: center; gap: 12px; padding: 12px 32px;
+  background: var(--ink); color: var(--on-ink);
+}
+.savebar[hidden] { display: none; }
+.savebar .s-msg { flex: 1; min-width: 0; font-weight: 500; }
+.savebar .btn.quiet { color: var(--on-ink); }
+.savebar .btn.quiet:hover { background: transparent; text-decoration: underline; }
+.savebar .btn.inv { background: var(--on-ink); color: var(--ink); border-color: var(--on-ink); }
+
+/* Forms */
+.fields { display: grid; gap: 18px; }
+.field { display: grid; gap: 6px; min-width: 0; align-content: start; }
+.field > label, .field > .label { font-weight: 500; display: flex; align-items: center; gap: 8px; }
+.hint { color: var(--muted); font-size: 13px; }
+.input {
+  width: 100%; min-height: 34px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 6px;
+  background: var(--surface); color: var(--ink);
+}
+.input::placeholder { color: var(--muted); }
+.input.mono { font-family: var(--mono); font-size: 13px; }
+select.input { padding-right: 28px; }
+.field.invalid .input, .field.invalid .tokens { border-color: var(--block); box-shadow: inset 0 0 0 1px var(--block); }
+.err { color: var(--block); font-size: 13px; display: flex; gap: 6px; }
+.err::before { content: "!"; flex: none; display: inline-grid; place-items: center; width: 16px; height: 16px; margin-top: 2px; border-radius: 50%; background: var(--block); color: var(--surface); font: 700 11px/1 var(--sans); }
+.wrn { color: var(--warn); font-size: 13px; }
+.row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px 16px; }
+.check { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 2px 8px; align-items: start; }
+.check input { width: 16px; height: 16px; margin: 3px 0 0; accent-color: var(--ink); }
+.check .hint { grid-column: 2; }
+.fsec { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 16px 32px; padding: 24px 0; border-top: 1px solid var(--line); }
+.fsec:first-child { border-top: 0; padding-top: 4px; }
+.fsec > header p { margin-top: 6px; color: var(--muted); font-size: 13px; }
+.fsec .fields { max-width: 560px; }
+.form-foot { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 20px; border-top: 1px solid var(--line); }
+.form-foot .spacer { flex: 1; }
+.error-summary { margin-bottom: 20px; padding: 12px 16px; border: 1px solid var(--block); border-radius: 8px; background: var(--block-soft); }
+.error-summary h2 { font-size: 14px; color: var(--block); }
+.error-summary ul { margin: 6px 0 0; padding-left: 18px; }
+.error-summary a { color: var(--block); }
+
+/* Segmented control on radios */
+.seg { justify-self: start; display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); }
+.seg label { position: relative; display: inline-flex; }
+.seg input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.seg span { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 12px; border-radius: 5px; color: var(--ink-2); cursor: pointer; white-space: nowrap; }
+.seg span:hover { background: var(--surface-2); }
+.seg input:disabled + span { opacity: .4; cursor: not-allowed; }
+.seg input:disabled + span:hover { background: transparent; }
+.seg input:checked + span { background: var(--ink); color: var(--on-ink); }
+.seg input:focus-visible + span { outline: 2px solid var(--ink); outline-offset: 2px; }
+.seg.action input:checked + span.direct { background: var(--direct-soft); color: var(--direct); box-shadow: inset 0 0 0 1.5px var(--direct); }
+.seg.action input:checked + span.upstream { background: var(--upstream-soft); color: var(--upstream); box-shadow: inset 0 0 0 1.5px var(--upstream); }
+.seg.action input:checked + span.block { background: var(--block-soft); color: var(--block); box-shadow: inset 0 0 0 1.5px var(--block); }
+.seg.sm span { min-height: 26px; padding: 0 10px; font-size: 13px; }
+
+/* Radio cards */
+.rcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.rcard { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 2px 10px; padding: 12px; border: 1px solid var(--line-strong); border-radius: 8px; cursor: pointer; background: var(--surface); }
+.rcard input { margin: 3px 0 0; accent-color: var(--ink); }
+.rcard b { font-weight: 600; }
+.rcard .hint { grid-column: 2; }
+.rcard:has(input:checked) { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+
+/* List input (chips over a textarea in the product) */
+.tokens { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 36px; padding: 5px 6px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); cursor: text; }
+.tokens:focus-within { outline: 2px solid var(--ink); outline-offset: 2px; }
+.tok { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; min-height: 24px; padding: 0 2px 0 8px; border-radius: 4px; background: var(--surface-2); font: 12.5px/1.4 var(--mono); overflow-wrap: anywhere; }
+.tok button { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 3px; background: transparent; color: var(--muted); cursor: pointer; }
+.tok button:hover { color: var(--ink); background: var(--line); }
+.tok button .ic { width: 12px; height: 12px; }
+.tok.bad { background: var(--block-soft); color: var(--block); box-shadow: inset 0 0 0 1px var(--block); }
+.tok.bad button { color: var(--block); }
+.tokens input { flex: 1 1 140px; min-width: 120px; height: 24px; border: 0; outline: 0; background: transparent; font: 13px var(--mono); color: var(--ink); }
+
+/* Interface list editor */
+.iflist { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 8px; }
+.iflist li { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 6px 6px 6px 10px; border-top: 1px solid var(--line); }
+.iflist li:first-child { border-top: 0; }
+.iflist .pos { color: var(--muted); font-size: 12px; }
+.iflist .moves { display: flex; gap: 2px; }
+.iflist-add { display: flex; gap: 8px; margin-top: 8px; }
+.iflist-add select { max-width: 240px; }
+
+/* Test a URL */
+.testbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.testbar .t-input { position: relative; flex: 1 1 280px; min-width: 0; }
+.testbar .t-input .ic { position: absolute; left: 10px; top: 9px; color: var(--muted); }
+.testbar .t-input .input { padding-left: 32px; font-family: var(--mono); font-size: 13px; }
+.result { margin-top: 12px; padding: 14px 16px; border-radius: 8px; background: var(--surface-2); display: grid; gap: 10px; }
+.result[hidden] { display: none; }
+.res-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; font-weight: 600; }
+.res-dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 16px; margin: 0; font-size: 13px; }
+.res-dl dt { color: var(--muted); }
+.res-dl dd { margin: 0; overflow-wrap: anywhere; }
+.res-note { font-size: 13px; color: var(--ink-2); }
+kbd { font: 12px/1 var(--mono); padding: 2px 5px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 4px; background: var(--surface); }
+
+/* The rule chain */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 28px 0 12px; }
+.toolbar .filter { position: relative; flex: 0 1 300px; }
+.toolbar .filter .ic { position: absolute; left: 10px; top: 9px; color: var(--muted); }
+.toolbar .filter .input { padding-left: 32px; }
+.toolbar .meta { color: var(--muted); font-size: 13px; }
+.toolbar .meta + .meta { margin-left: auto; }
+ol.chain { list-style: none; margin: 0; padding: 0; }
+.rule {
+  --c: var(--line-strong);
+  position: relative;
+  display: grid; grid-template-columns: 52px 28px minmax(0, 1fr) minmax(150px, 210px) 104px 32px;
+  align-items: start; gap: 0 12px; padding: 14px 10px 14px 0;
+  border-top: 1px solid var(--line);
+}
+.rule:first-child { border-top: 0; }
+.rule.a-direct { --c: var(--direct); }
+.rule.a-upstream { --c: var(--upstream); }
+.rule.a-block { --c: var(--block); }
+.rule::before, .rule::after { content: ""; position: absolute; left: 25px; width: 2px; top: 0; bottom: 0; background: var(--line); }
+.rule::after { background: var(--trace, var(--ink)); bottom: auto; height: 0; transition: height .1s linear; }
+.rule:first-child::before, .rule:first-child::after { top: 27px; }
+.rule.default::before { bottom: auto; height: 27px; }
+.r-gutter { position: relative; z-index: 1; display: flex; justify-content: center; padding-top: 1px; }
+.node {
+  display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%;
+  border: 2px solid var(--c); background: var(--surface); font-size: 12px; font-weight: 600; color: var(--ink);
+  transition: background .12s, color .12s, box-shadow .12s, transform .12s;
+}
+.node.end { border-radius: 6px; border-color: var(--ink-2); width: 22px; height: 22px; margin-top: 2px; }
+.handle { color: var(--muted); cursor: grab; }
+.handle[disabled] { opacity: .3; cursor: default; }
+.rule.lifted { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--ink); }
+.rule.dragging { opacity: .5; }
+.rule.drop-before { box-shadow: inset 0 2px 0 var(--ink); }
+.r-main { min-width: 0; display: grid; gap: 4px; }
+.r-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.r-name { font-weight: 600; font-family: var(--mono); font-size: 13.5px; text-decoration: none; }
+a.r-name:hover { text-decoration: underline; }
+.r-note { color: var(--ink-2); font-size: 13px; }
+.r-main .chips { margin-top: 4px; }
+.r-route { display: grid; gap: 6px; justify-items: start; padding-top: 2px; }
+.r-route .flags { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.r-traffic { text-align: right; font-size: 13px; padding-top: 2px; }
+.r-traffic b { font-weight: 500; }
+.r-traffic div:last-child { color: var(--muted); }
+.r-menu { margin-top: -3px; }
+.rule.default .r-route { gap: 4px; }
+.rule.default .r-route div { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.pos-input { display: none; }
+
+/* Test trace states (D11: shapes differ, not only color) */
+.chain.tested .rule.passed .node { transform: scale(.62); background: var(--surface-2); border-color: var(--muted); color: transparent; }
+.chain.tested .rule.matched .node { background: var(--c); border-color: var(--c); color: var(--surface); box-shadow: 0 0 0 5px var(--surface), 0 0 0 7px var(--c); }
+.chain.tested .rule.passed::after { height: 100%; }
+.chain.tested .rule.matched::after { height: 27px; }
+.chain.tested .rule:first-child.passed::after { height: calc(100% - 27px); }
+.chain.tested .rule:first-child.matched::after { height: 0; }
+.chain.tested .rule.unreached > *:not(.r-gutter) { opacity: .45; }
+.chain.tested .rule.unreached .node { opacity: .45; }
+.chain.tested .rule.matched { background: linear-gradient(90deg, var(--surface-2), transparent 70%); }
+.chain.filtered .rule.default { display: none; }
+.rule.hidden { display: none; }
+
+/* Entity lists (upstreams, interfaces) */
+.ents { list-style: none; margin: 0; padding: 0; }
+.ent { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.1fr) 104px 32px; gap: 8px 16px; align-items: start; padding: 14px 10px 14px 16px; border-top: 1px solid var(--line); }
+.ent:first-child { border-top: 0; }
+.ent .e-name { font-family: var(--mono); font-weight: 600; font-size: 13.5px; text-decoration: none; }
+.ent .e-note { color: var(--ink-2); font-size: 13px; }
+.ent .e-col { display: grid; gap: 4px; justify-items: start; min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
+.ent .e-col .hint { font-size: 12px; }
+.ent .r-traffic { padding-top: 0; }
+.ent-head { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.1fr) 104px 32px; gap: 16px; padding: 10px 10px 8px 16px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); }
+.ent-head span:nth-child(5) { text-align: right; }
+
+/* Tables */
+.tablewrap { overflow-x: auto; }
+table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.data th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 10px 12px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.data td { padding: 10px 12px; border-top: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
+table.data tr:first-child td { border-top: 0; }
+table.data .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.data td.host { font-family: var(--mono); font-size: 12.5px; }
+
+/* Overview */
+.hero { display: grid; gap: 14px; padding: 20px; }
+.hero-sentence { font-size: 18px; font-weight: 500; line-height: 1.45; max-width: 64ch; }
+.hero-sentence .rt { white-space: nowrap; }
+.hero-sentence .rt::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin: 0 6px 1px 0; background: var(--sw); }
+.rt.direct, .lg.direct { --sw: var(--direct); }
+.rt.upstream, .lg.upstream { --sw: var(--upstream); }
+.rt.upstream2, .lg.upstream2 { --sw: var(--upstream); }
+.rt.block, .lg.block { --sw: var(--block); }
+.routebar { display: flex; gap: 2px; height: 14px; border-radius: 4px; overflow: hidden; background: var(--surface-2); }
+.routebar i { display: block; min-width: 2px; }
+.routebar i.direct { background: var(--direct); }
+.routebar i.upstream { background: var(--upstream); }
+.routebar i.upstream2 { background: var(--upstream); opacity: .5; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 24px; list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.legend li { display: flex; align-items: baseline; gap: 8px; }
+.legend .lg::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; background: var(--sw); }
+.legend .lg.upstream2::before { opacity: .5; }
+.hosts { list-style: none; margin: 0; padding: 0 16px 8px; }
+.hosts li { display: grid; grid-template-columns: minmax(0, 1fr) auto 28px; gap: 4px 10px; align-items: center; padding: 8px 0 6px; border-top: 1px solid var(--line); }
+.hosts li:first-child { border-top: 0; }
+.hosts .h { font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; }
+.hosts .v { font-size: 13px; color: var(--ink-2); }
+.hosts .hb { grid-column: 1 / 3; height: 3px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
+.hosts .hb i { display: block; height: 100%; background: var(--c, var(--ink)); }
+.hosts.direct { --c: var(--direct); }
+.hosts.upstream { --c: var(--upstream); }
+.hosts.block { --c: var(--block); }
+.kv.flush { padding: 0; }
+.hosts .act { grid-row: 1 / 3; grid-column: 3; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 16px 6px; }
+.panel-head h3 { display: flex; align-items: center; gap: 8px; }
+.panel-foot { padding: 8px 16px 14px; font-size: 13px; }
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; margin: 0; padding: 4px 16px 14px; font-size: 13px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+.w0 { width: 0; } .w1 { width: 5%; } .w2 { width: 10%; } .w3 { width: 15%; } .w4 { width: 20%; } .w5 { width: 25%; } .w6 { width: 30%; }
+.w7 { width: 35%; } .w8 { width: 40%; } .w9 { width: 45%; } .w10 { width: 50%; } .w11 { width: 55%; } .w12 { width: 60%; } .w13 { width: 65%; }
+.w14 { width: 70%; } .w15 { width: 75%; } .w16 { width: 80%; } .w17 { width: 85%; } .w18 { width: 90%; } .w19 { width: 95%; } .w20 { width: 100%; }
+
+/* Rule editor */
+.editor { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; }
+.editor .side { position: sticky; top: 16px; display: grid; gap: 16px; }
+.editor .fsec { grid-template-columns: 140px minmax(0, 1fr); }
+.side .panel-head { padding-bottom: 10px; }
+.side .test-body { padding: 0 16px 16px; display: grid; gap: 10px; }
+.verdict { display: grid; gap: 6px; padding: 12px 14px; border-radius: 8px; background: var(--surface-2); font-size: 13px; }
+.verdict .v-line { line-height: 1.7; }
+.verdict .v-line .ic { vertical-align: -3px; margin-right: 4px; }
+.verdict .yes { color: var(--ok); font-weight: 600; }
+.verdict .no { color: var(--ink-2); font-weight: 600; }
+.verdict .shadow { color: var(--warn); }
+.direct-only[hidden] { display: none; }
+
+/* Empty states */
+.empty { display: grid; gap: 10px; justify-items: start; padding: 28px; border: 1px dashed var(--line-strong); border-radius: 10px; background: var(--surface); }
+.empty h3 { font-size: 16px; }
+.empty p { color: var(--ink-2); max-width: 60ch; }
+
+/* Dialogs */
+dialog {
+  width: min(780px, calc(100% - 32px)); max-height: calc(100% - 48px); padding: 0;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-2);
+}
+dialog[open] { display: flex; flex-direction: column; animation: dlg-in .16s ease-out; }
+dialog::backdrop { background: var(--backdrop); }
+@keyframes dlg-in { from { opacity: 0; transform: translateY(8px) scale(.99); } }
+.dlg-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 20px 12px; border-bottom: 1px solid var(--line); }
+.dlg-head p { margin-top: 4px; color: var(--ink-2); font-size: 13px; }
+.dlg-body { padding: 16px 20px; overflow: auto; display: grid; gap: 16px; }
+.dlg-foot { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 20px 16px; border-top: 1px solid var(--line); }
+.dlg-foot .spacer { flex: 1; }
+.summary { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.summary li { display: flex; gap: 8px; align-items: baseline; }
+.summary li::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--ink-2); transform: translateY(-2px); }
+.notices { display: grid; gap: 8px; }
+.notice { display: flex; gap: 8px; padding: 10px 12px; border-radius: 8px; font-size: 13px; background: var(--surface-2); }
+.notice.warn { background: var(--warn-soft); }
+.notice.warn .ic { color: var(--warn); }
+.notice .ic { margin-top: 1px; color: var(--ink-2); }
+
+/* Diff */
+.diff { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; font: 12px/1.6 var(--mono); }
+.diff-file { display: flex; justify-content: space-between; gap: 8px; padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid var(--line); font-family: var(--sans); font-size: 12px; color: var(--ink-2); }
+.dl { display: grid; grid-template-columns: 38px 38px 18px minmax(0, 1fr); }
+.dl > span { padding: 0 4px; }
+.dl .n { color: var(--muted); text-align: right; user-select: none; }
+.dl .m { text-align: center; user-select: none; color: var(--muted); }
+.dl .t { white-space: pre-wrap; overflow-wrap: anywhere; padding-right: 12px; }
+.dl.add { background: var(--ok-soft); }
+.dl.add .m { color: var(--ok); font-weight: 700; }
+.dl.del { background: var(--block-soft); }
+.dl.del .m { color: var(--block); font-weight: 700; }
+.gap { border-top: 1px dashed var(--line); border-bottom: 1px dashed var(--line); }
+.gap summary { padding: 4px 12px 4px 92px; color: var(--muted); font-family: var(--sans); font-size: 12px; cursor: pointer; list-style: none; }
+.gap summary::-webkit-details-marker { display: none; }
+.gap summary:hover { color: var(--ink); background: var(--surface-2); }
+
+/* Popover menu */
+.menu { position: absolute; z-index: 45; min-width: 190px; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow-1); }
+.menu[hidden] { display: none; }
+.menu button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 0 10px; border: 0; border-radius: 5px; background: transparent; text-align: left; cursor: pointer; }
+.menu button:hover, .menu button:focus-visible { background: var(--surface-2); outline: none; }
+.menu button.danger { color: var(--block); }
+.menu button[disabled] { color: var(--muted); cursor: not-allowed; }
+.menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+.menu .m-note { padding: 6px 10px; font-size: 12px; color: var(--muted); max-width: 240px; }
+
+.spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--ink); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Responsive */
+@media (max-width: 1099px) {
+  .editor { grid-template-columns: minmax(0, 1fr); }
+  .editor .side { position: static; }
+  .rule { grid-template-columns: 52px 28px minmax(0, 1fr) minmax(130px, 180px) 32px; }
+  .rule .r-traffic { grid-column: 3 / 5; grid-row: 2; text-align: left; display: flex; gap: 12px; padding-top: 8px; }
+  .ent, .ent-head { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr) 32px; }
+  .ent .e-use, .ent .r-traffic { grid-column: 1 / 4; }
+  .ent .r-traffic { text-align: left; display: flex; gap: 12px; }
+  .ent-head span:nth-child(4), .ent-head span:nth-child(5) { display: none; }
+}
+@media (max-width: 759px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .sidebar { display: none; }
+  .topbar { display: block; position: sticky; top: 0; z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+  .topbar-row { display: flex; align-items: center; gap: 10px; padding: 8px 16px; min-height: 52px; }
+  .topbar .brand { padding: 0; }
+  .topbar .brand .ic { width: 22px; height: 22px; }
+  .topbar .t-title { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar details > summary { list-style: none; }
+  .topbar details > summary::-webkit-details-marker { display: none; }
+  .topbar details[open] .nav { display: grid; }
+  .topbar .nav { display: none; gap: 14px; padding: 8px 12px 16px; border-top: 1px solid var(--line); }
+  .topbar .nav a { height: 40px; }
+  main { padding: 16px 16px 140px; }
+  h1 { font-size: 22px; }
+  .page-head { align-items: flex-start; }
+  .fsec, .editor .fsec { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .savebar { left: 0; padding: 10px 16px; flex-wrap: wrap; }
+  .savebar .s-msg { flex-basis: 100%; }
+  .rule { grid-template-columns: 44px minmax(0, 1fr) 32px; padding-right: 4px; }
+  .rule::before, .rule::after { left: 21px; }
+  .rule .handle, .rule.default > span:empty { display: none; }
+  .rule .r-gutter { grid-column: 1; grid-row: 1; }
+  .rule .r-main { grid-column: 2; grid-row: 1; }
+  .rule .r-menu { grid-column: 3; grid-row: 1; }
+  .rule .r-route { grid-column: 2 / 4; grid-row: 2; padding-top: 10px; }
+  .rule .r-traffic { grid-column: 2 / 4; grid-row: 3; }
+  .rule.default .r-route { grid-row: 2; }
+  .ent, .ent-head { grid-template-columns: minmax(0, 1fr) 32px; }
+  .ent-head { display: none; }
+  .ent > * { grid-column: 1; }
+  .ent .r-menu { grid-column: 2; grid-row: 1; }
+  .ent .e-use, .ent .r-traffic { grid-column: 1; }
+  table.resp thead { display: none; }
+  table.resp, table.resp tbody, table.resp tr, table.resp td { display: block; }
+  table.resp tr { padding: 10px 0; border-top: 1px solid var(--line); }
+  table.resp tr:first-child { border-top: 0; }
+  table.resp td { border: 0; padding: 2px 12px; }
+  table.resp td.n { text-align: left; }
+  table.resp td[data-label]::before { content: attr(data-label) " "; color: var(--muted); font-family: var(--sans); }
+  dialog { width: 100%; max-width: 100%; height: 100%; max-height: 100%; border-radius: 0; border: 0; }
+  .dlg-head, .dlg-body, .dlg-foot { padding-left: 16px; padding-right: 16px; }
+  .dl { grid-template-columns: 28px 28px 14px minmax(0, 1fr); }
+  .gap summary { padding-left: 70px; }
+  .toasts { top: auto; bottom: 16px; right: 16px; left: 16px; width: auto; }
+  .testbar .btn.primary { flex: 1; }
+  .toolbar .filter { flex: 1 1 100%; }
+  .toolbar .meta + .meta { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body data-start="rules" data-state="normal" data-open="">
+<svg width="0" height="0" class="sr" aria-hidden="true">
+  <symbol id="i-mark" viewBox="0 0 24 24"><path d="M2.5 12c2.6-4.4 6-6.5 9.5-6.5s6.9 2.1 9.5 6.5c-2.6 4.4-6 6.5-9.5 6.5S5.1 16.4 2.5 12z"/><path d="M7.2 10.4c.9 2.6 2.4 2.6 3.2.2.5 1.9 2.7 1.9 3.2-.2.8 2.4 2.3 2.4 3.2-.2"/></symbol>
+  <symbol id="i-overview" viewBox="0 0 24 24"><path d="M4 20V13M10 20V5M16 20v-9M21 20H3"/></symbol>
+  <symbol id="i-domains" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.6 2.6 14.4 0 17M12 3.5c-2.6 2.6-2.6 14.4 0 17"/></symbol>
+  <symbol id="i-live" viewBox="0 0 24 24"><path d="M3 12h4l2.5-6 5 12 2.5-6h4"/></symbol>
+  <symbol id="i-rules" viewBox="0 0 24 24"><circle cx="6" cy="5.5" r="2"/><circle cx="6" cy="12" r="2"/><circle cx="6" cy="18.5" r="2"/><path d="M11 5.5h9M11 12h9M11 18.5h6"/></symbol>
+  <symbol id="i-upstreams" viewBox="0 0 24 24"><rect x="4" y="14" width="16" height="6" rx="1.5"/><path d="M12 14V4M8 8l4-4 4 4"/></symbol>
+  <symbol id="i-interfaces" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="10" rx="1.5"/><path d="M8 15v4M16 15v4M5.5 19h13M8 9v2M12 9v2M16 9v2"/></symbol>
+  <symbol id="i-proxy" viewBox="0 0 24 24"><path d="M5 4v16M12 4v16M19 4v16"/><path d="M3 9h4M10 15h4M17 7h4"/></symbol>
+  <symbol id="i-remote" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="10" rx="1.5"/><path d="M3 19h18"/></symbol>
+  <symbol id="i-general" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></symbol>
+  <symbol id="i-account" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M16 7l2 2M14 9l2 2"/></symbol>
+  <symbol id="i-advanced" viewBox="0 0 24 24"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14"/></symbol>
+  <symbol id="i-grip" viewBox="0 0 24 24"><g fill="currentColor" stroke="none"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></g></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><g fill="currentColor" stroke="none"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></g></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+  <symbol id="i-route" viewBox="0 0 24 24"><path d="M4 12h6l4-6h6M14 18h6M10 12l4 6M17 3l3 3-3 3M17 15l3 3-3 3"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17v.5"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8v.5"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 10-2.3 5.7M20 5v6h-6"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+</svg>
+
+<div class="proto" role="region" aria-label="Prototype controls">
+  <strong>Prototype of design 0009.</strong>
+  <span>Not part of the product; it shows the states the pages must handle.</span>
+  <label>State
+    <select id="proto-state">
+      <option value="normal">Normal</option>
+      <option value="restart">Restart required</option>
+      <option value="nostats">Statistics unavailable</option>
+      <option value="empty">Empty configuration</option>
+      <option value="fileerror">File has errors</option>
+    </select>
+  </label>
+  <label>Appearance
+    <select id="proto-theme">
+      <option value="">System</option>
+      <option value="light">Light</option>
+      <option value="dark">Dark</option>
+    </select>
+  </label>
+</div>
+
+<a class="skip" href="#main">Skip to content</a>
+<div class="app">
+  <aside class="sidebar" aria-label="Navigation">
+    <div class="side-inner">
+      <div class="brand"><svg class="ic" aria-hidden="true"><use href="#i-mark"/></svg><div><b>cuttle</b><span>cuttle-edge</span></div></div>
+      <nav class="nav" aria-label="Pages" id="nav-side"></nav>
+      <div class="side-foot">
+        <span>Version 0.2.0, up 3 days</span>
+        <span>Configuration loaded at 09:42</span>
+        <button class="btn quiet sm" type="button">Sign out</button>
+      </div>
+    </div>
+  </aside>
+  <header class="topbar">
+    <details>
+      <summary class="topbar-row">
+        <span class="brand"><svg class="ic" aria-hidden="true"><use href="#i-mark"/></svg></span>
+        <span class="t-title" id="top-title">Rules</span>
+        <span class="btn quiet sm"><svg class="ic" aria-hidden="true"><use href="#i-menu"/></svg>Menu</span>
+      </summary>
+      <nav class="nav" aria-label="Pages" id="nav-top"></nav>
+    </details>
+  </header>
+  <main id="main" tabindex="-1">
+    <div class="banners" id="banners"></div>
+    <div class="page" id="page"></div>
+  </main>
+</div>
+
+<div class="savebar" id="savebar" hidden>
+  <span class="s-msg" id="savebar-msg">Unsaved changes</span>
+  <button class="btn quiet" type="button" id="savebar-discard">Discard</button>
+  <button class="btn inv" type="button" id="savebar-review">Review changes</button>
+</div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<div class="sr" id="announce" aria-live="polite"></div>
+<div class="menu" id="menu" role="menu" hidden></div>
+
+<dialog id="review" aria-labelledby="review-title">
+  <div class="dlg-head">
+    <div><h2 id="review-title">Review changes</h2><p>Nothing is written until you apply. The previous file stays in <code>config.toml.bak</code>.</p></div>
+    <button class="btn quiet icon-btn" type="button" data-close aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+  </div>
+  <div class="dlg-body" id="review-body"></div>
+  <div class="dlg-foot">
+    <button class="btn primary" type="button" id="review-apply">Apply changes</button>
+    <button class="btn" type="button" id="review-back">Back to editing</button>
+    <span class="spacer"></span>
+    <button class="btn quiet" type="button" data-close>Cancel</button>
+  </div>
+</dialog>
+
+<dialog id="editor" aria-labelledby="editor-title">
+  <div class="dlg-head">
+    <div><h2 id="editor-title">Edit</h2><p id="editor-sub"></p></div>
+    <button class="btn quiet icon-btn" type="button" data-close aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+  </div>
+  <div class="dlg-body" id="editor-body"></div>
+  <div class="dlg-foot">
+    <button class="btn primary" type="button" id="editor-review">Review changes</button>
+    <span class="spacer"></span>
+    <button class="btn quiet" type="button" data-close>Cancel</button>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+/* ------------------------------------------------------------------ data */
+const INITIAL = {
+  name: "cuttle-edge",
+  proxy: { listen: ["127.0.0.1:3128"], default: "direct", interfaces: ["eth-a", "wifi"] },
+  remote: {},
+  admin: { listen: "127.0.0.1:3129" },
+  stats: {},
+  log: {},
+  interfaces: [
+    { name: "eth-a", note: "USB Ethernet adapter at the desk", mac: "00:00:5e:00:53:0a" },
+    { name: "wifi", device: "en0", kind: "wifi" },
+    { name: "phone-a", note: "Tethered phone", mac: "00:00:5e:00:53:21" },
+  ],
+  upstreams: [
+    { name: "gateway", note: "Gateway instance over the private link", address: "10.8.0.6:3128", disclosure: "via" },
+    { name: "lab", address: "192.0.2.40:3128", disclosure: "via", unreachable_hold: "10s" },
+  ],
+  rules: [
+    { name: "loopback", note: "localhost and loopback addresses, any port", hosts: ["localhost"], cidrs: ["127.0.0.0/8", "::1/128"], action: "direct", allow_loopback: true },
+    { name: "home-lan", note: "NAS and printers by name", domains: ["lan", "local", "home.arpa"], action: "direct", allow_private: true },
+    { name: "restricted", note: "Only reachable inside the gateway network", domains: ["internal.example", "build.example"], action: "upstream:gateway" },
+    { name: "ads", domains: ["ads.example.net", "tracker.example", "metrics.example.org", "pixel.example.com", "beacon.example.net", "adserver.example"], action: "block" },
+    { name: "video", note: "Large streams prefer the wired adapter", domains: ["video.example", "stream.example.net", "metrics.example.org"], action: "direct", interfaces: ["eth-a", "wifi"] },
+    { name: "system-updates", hosts: ["updates.example.com"], ports: [443], action: "direct", interfaces: ["eth-a"] },
+    { name: "lab-net", note: "Lab network behind the second gateway", cidrs: ["198.51.100.0/24"], action: "upstream:lab" },
+  ],
+};
+// The file on disk before the first form save: written by hand, with comments.
+const HAND = [
+  "# cuttle configuration. Check changes with `cuttle check` and apply them",
+  "# with `cuttle reload`. Rules are tried in order; the first match wins.",
+  "",
+  'name = "cuttle-edge"  # unique per instance; appears in Via headers',
+  "",
+  "[proxy]",
+  'listen = ["127.0.0.1:3128"]',
+  'default = "direct"  # direct, block, or upstream:<name>',
+  'interfaces = ["eth-a", "wifi"]',
+  "",
+  "[admin]",
+  'listen = "127.0.0.1:3129"  # set a password with `cuttle admin passwd`',
+  "",
+  "# Desk adapter first, then Wi-Fi.",
+  "[[interface]]",
+  'name = "eth-a"',
+  'note = "USB Ethernet adapter at the desk"',
+  'mac = "00:00:5e:00:53:0a"',
+  "",
+  "[[interface]]",
+  'name = "wifi"',
+  'device = "en0"',
+  'kind = "wifi"',
+  "",
+  "[[interface]]",
+  'name = "phone-a"',
+  'note = "Tethered phone"',
+  'mac = "00:00:5e:00:53:21"',
+  "",
+  "[[upstream]]",
+  'name = "gateway"',
+  'note = "Gateway instance over the private link"',
+  'address = "10.8.0.6:3128"',
+  'disclosure = "via"',
+  "",
+  "[[upstream]]",
+  'name = "lab"',
+  'address = "192.0.2.40:3128"',
+  'disclosure = "via"',
+  'unreachable_hold = "10s"',
+  "",
+  "[[rule]]",
+  'name = "loopback"',
+  'note = "localhost and loopback addresses, any port"',
+  'hosts = ["localhost"]',
+  'cidrs = ["127.0.0.0/8", "::1/128"]',
+  'action = "direct"',
+  "allow_loopback = true",
+  "",
+  "[[rule]]",
+  'name = "home-lan"',
+  'note = "NAS and printers by name"',
+  'domains = ["lan", "local", "home.arpa"]',
+  'action = "direct"',
+  "allow_private = true",
+  "",
+  "# Work sites go through the gateway.",
+  "[[rule]]",
+  'name = "restricted"',
+  'note = "Only reachable inside the gateway network"',
+  'domains = ["internal.example", "build.example"]',
+  'action = "upstream:gateway"',
+  "",
+  "[[rule]]",
+  'name = "ads"',
+  'domains = ["ads.example.net", "tracker.example", "metrics.example.org", "pixel.example.com", "beacon.example.net", "adserver.example"]',
+  'action = "block"',
+  "",
+  "[[rule]]",
+  'name = "video"',
+  'note = "Large streams prefer the wired adapter"',
+  'domains = ["video.example", "stream.example.net", "metrics.example.org"]',
+  'action = "direct"',
+  'interfaces = ["eth-a", "wifi"]',
+  "",
+  "[[rule]]",
+  'name = "system-updates"',
+  'hosts = ["updates.example.com"]',
+  "ports = [443]",
+  'action = "direct"',
+  'interfaces = ["eth-a"]',
+  "",
+  "[[rule]]",
+  'name = "lab-net"',
+  'note = "Lab network behind the second gateway"',
+  'cidrs = ["198.51.100.0/24"]',
+  'action = "upstream:lab"',
+  "",
+].join("\n");
+
+const TRAFFIC = {
+  rules: {
+    loopback: [1204, 19084288], "home-lan": [96, 1181116006], restricted: [3512, 432013312], ads: [2310, 0],
+    video: [488, 2576980378], "system-updates": [12, 671088640], "lab-net": [0, 0], default: [21752, 1893728256],
+  },
+  upstreams: { gateway: [3512, 432013312], lab: [0, 0] },
+  interfaces: { "eth-a": [18740, 4724464025], wifi: [5288, 1610612736], "phone-a": [0, 0] },
+};
+const STATUS = {
+  upstreams: {
+    gateway: { state: "up", text: "Up since 09:12" },
+    lab: { state: "down", text: "Down for 42 s, 17 failed fast", error: "connection_timeout" },
+  },
+  interfaces: {
+    "eth-a": { state: "online", device: "en7", text: "Online, IPv4" },
+    wifi: { state: "online", device: "en0", text: "Online, IPv4 and IPv6" },
+    "phone-a": { state: "offline", device: "", text: "Offline: absent" },
+  },
+};
+const DETECTED = [
+  { device: "en0", kind: "wifi", mac: "00:00:5e:00:53:01", media: "active", ipv4: "192.0.2.21", ipv6: "2001:db8::21", def: "scoped" },
+  { device: "en7", kind: "wired", mac: "00:00:5e:00:53:0a", media: "active", ipv4: "192.0.2.20", ipv6: "-", def: "primary" },
+  { device: "en8", kind: "wired", mac: "00:00:5e:00:53:0b", media: "active", ipv4: "198.51.100.7", ipv6: "-", def: "scoped" },
+  { device: "en3", kind: "wired", mac: "00:00:5e:00:53:03", media: "inactive", ipv4: "-", ipv6: "-", def: "none" },
+];
+const TOPHOSTS = {
+  direct: [["video.example", 2040109466], ["www.example.com", 851443712], ["cdn.example.net", 671088640], ["updates.example.com", 639631360], ["nas.home.arpa", 421527552]],
+  gateway: [["wiki.internal.example", 197132288], ["git.internal.example", 126877696], ["ci.build.example", 67108864], ["docs.internal.example", 23068672], ["chat.internal.example", 9542041]],
+  block: [["tracker.example", 1204], ["ads.example.net", 688], ["metrics.example.org", 301], ["pixel.example.com", 97], ["beacon.example.net", 20]],
+};
+const RULEHOSTS = {
+  restricted: [["wiki.internal.example", 1840], ["git.internal.example", 1102], ["ci.build.example", 388], ["docs.internal.example", 141], ["chat.internal.example", 41]],
+  video: [["video.example", 402], ["stream.example.net", 86]],
+  ads: [["tracker.example", 1204], ["ads.example.net", 688], ["pixel.example.com", 97]],
+};
+
+const clone = (o) => JSON.parse(JSON.stringify(o));
+let model = clone(INITIAL);
+let disk = HAND;
+let protoState = "normal";
+let restartKeys = [];
+
+/* ------------------------------------------------------------------ helpers */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const icon = (n, cls = "") => `<svg class="ic ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+const fmtNum = (n) => n.toLocaleString("en-US");
+function fmtBytes(n) {
+  if (!n) return "0 B";
+  const u = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return (i ? n.toFixed(1) : n) + " " + u[i];
+}
+const bar = (v, max) => "w" + (max > 0 && v > 0 ? Math.min(20, Math.ceil((v * 20) / max)) : 0);
+function routeOf(action) {
+  if (action === "direct") return { kind: "direct", label: "direct" };
+  if (action === "block") return { kind: "block", label: "block" };
+  return { kind: "upstream", label: "upstream", name: action.slice(9) };
+}
+function routeBadge(action) {
+  const r = routeOf(action);
+  return `<span class="badge ${r.kind}"><span class="sw"></span>${r.label}${r.name ? ` <b>${esc(r.name)}</b>` : ""}</span>`;
+}
+const statsOn = () => protoState !== "nostats";
+const readOnly = () => protoState === "fileerror";
+function announce(t) { const a = $("#announce"); a.textContent = ""; setTimeout(() => { a.textContent = t; }, 30); }
+
+/* ------------------------------------------------------- canonical writer (D6) */
+const ORDER = {
+  proxy: ["listen", "default", "connect_timeout", "response_timeout", "idle_timeout", "max_connections", "interfaces", "interface_attempt_timeout", "interface_demotion"],
+  remote: ["sources", "ports", "default", "allow_direct", "max_connections_per_source"],
+  admin: ["listen"], stats: ["retention_days", "max_hosts_per_hour"], log: ["level"],
+  interface: ["name", "note", "mac", "device", "kind"],
+  upstream: ["name", "note", "address", "disclosure", "connect_timeout", "response_timeout", "unreachable_hold", "interfaces"],
+  rule: ["name", "note", "hosts", "domains", "cidrs", "ports", "action", "allow_loopback", "allow_private", "interfaces"],
+};
+const HEADER = [
+  "# cuttle configuration. The admin UI writes this file in this form and",
+  "# replaces comments with these generated ones; the previous version is",
+  "# kept as config.toml.bak. Check hand edits with `cuttle check` and apply",
+  "# them with `cuttle reload`.",
+];
+const tq = (s) => '"' + String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+const tv = (v) => (typeof v === "string" ? tq(v) : String(v));
+function kv(k, v) {
+  if (Array.isArray(v)) {
+    const items = v.map(tv);
+    const one = `${k} = [${items.join(", ")}]`;
+    return one.length <= 80 ? [one] : [`${k} = [`, ...items.map((i) => `  ${i},`), "]"];
+  }
+  return [`${k} = ${tv(v)}`];
+}
+function body(obj, keys) {
+  const out = [];
+  for (const k of keys) if (obj && obj[k] !== undefined && obj[k] !== null) out.push(...kv(k, obj[k]));
+  return out;
+}
+function encode(m) {
+  const out = [...HEADER, "", `name = ${tq(m.name)}`];
+  const table = (comment, header, lines) => { if (!lines.length) return; out.push(""); if (comment) out.push(...comment); out.push(header, ...lines); };
+  table(["# Listeners and the route for requests that no rule matches."], "[proxy]", body(m.proxy, ORDER.proxy));
+  table(["# Clients on other machines: allowed sources, ports, and their default."], "[proxy.remote]", body(m.remote, ORDER.remote));
+  table(["# Admin UI; set the first password with `cuttle admin passwd`."], "[admin]", body(m.admin, ORDER.admin));
+  table(null, "[stats]", body(m.stats, ORDER.stats));
+  table(null, "[log]", body(m.log, ORDER.log));
+  m.interfaces.forEach((d, i) => table(i ? null : ["# Network interfaces, named for interface lists; `cuttle interfaces`", "# lists this Mac's interfaces."], "[[interface]]", body(d, ORDER.interface)));
+  m.upstreams.forEach((u, i) => table(i ? null : ['# Upstream proxies. disclosure: "via" for another cuttle instance,', '# "none" for an egress proxy.'], "[[upstream]]", body(u, ORDER.upstream)));
+  m.rules.forEach((r, i) => table(i ? null : ["# Rules, tried in this order; the first match wins."], "[[rule]]", body(r, ORDER.rule)));
+  return out.join("\n") + "\n";
+}
+
+/* ------------------------------------------------------------------ diff */
+function lineDiff(a, b) {
+  const A = a.replace(/\n$/, "").split("\n"), B = b.replace(/\n$/, "").split("\n");
+  const n = A.length, m = B.length;
+  const L = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = A[i] === B[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const ops = []; let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (A[i] === B[j]) { ops.push({ t: " ", a: i + 1, b: j + 1, s: A[i] }); i++; j++; }
+    else if (L[i + 1][j] >= L[i][j + 1]) { ops.push({ t: "-", a: i + 1, s: A[i] }); i++; }
+    else { ops.push({ t: "+", b: j + 1, s: B[j] }); j++; }
+  }
+  while (i < n) { ops.push({ t: "-", a: i + 1, s: A[i] }); i++; }
+  while (j < m) { ops.push({ t: "+", b: j + 1, s: B[j] }); j++; }
+  return ops;
+}
+function renderDiff(a, b) {
+  const ops = lineDiff(a, b);
+  const keep = ops.map(() => false);
+  ops.forEach((o, k) => { if (o.t !== " ") for (let d = -3; d <= 3; d++) if (ops[k + d]) keep[k + d] = true; });
+  const line = (o) => `<div class="dl ${o.t === "+" ? "add" : o.t === "-" ? "del" : ""}"><span class="n">${o.a || ""}</span><span class="n">${o.b || ""}</span><span class="m">${o.t === " " ? "" : o.t === "-" ? "−" : "+"}</span><span class="t">${esc(o.s) || " "}</span></div>`;
+  let html = "", k = 0, adds = 0, dels = 0;
+  ops.forEach((o) => { if (o.t === "+") adds++; if (o.t === "-") dels++; });
+  while (k < ops.length) {
+    if (keep[k]) { html += line(ops[k]); k++; continue; }
+    let e = k; while (e < ops.length && !keep[e]) e++;
+    const run = ops.slice(k, e);
+    html += `<details class="gap"><summary>${run.length} unchanged line${run.length === 1 ? "" : "s"}</summary>${run.map(line).join("")}</details>`;
+    k = e;
+  }
+  return `<div class="diff" role="region" aria-label="Changes to config.toml"><div class="diff-file"><span>config.toml</span><span>${adds} added, ${dels} removed</span></div>${html}</div>`;
+}
+
+/* ------------------------------------------------------- change summary (D7) */
+function summarize(oldM, newM, hint) {
+  const out = [];
+  const show = (v) => (v === undefined ? "default" : Array.isArray(v) ? v.join(", ") : String(v));
+  const group = (kind, label, keys) => {
+    const a = oldM[kind], b = newM[kind];
+    const an = a.map((x) => x.name), bn = b.map((x) => x.name);
+    if (hint && hint.rename && hint.kind === kind) out.push(`${label} renamed <code>${esc(hint.rename[0])}</code> to <code>${esc(hint.rename[1])}</code>${hint.refs ? `; ${hint.refs}` : ""}`);
+    b.forEach((x, i) => {
+      if (hint && hint.rename && hint.kind === kind && x.name === hint.rename[1]) return;
+      if (!an.includes(x.name)) out.push(`${label} <code>${esc(x.name)}</code> added at position ${i + 1}`);
+    });
+    a.forEach((x) => {
+      if (hint && hint.rename && hint.kind === kind && x.name === hint.rename[0]) return;
+      if (!bn.includes(x.name)) out.push(`${label} <code>${esc(x.name)}</code> removed`);
+    });
+    b.forEach((x) => {
+      const o = a.find((y) => y.name === (hint && hint.rename && hint.kind === kind && x.name === hint.rename[1] ? hint.rename[0] : x.name));
+      if (!o) return;
+      const changed = keys.filter((k) => k !== "name" && JSON.stringify(o[k]) !== JSON.stringify(x[k]));
+      if (!changed.length) return;
+      const parts = changed.map((k) => {
+        if (k === "mac") return "hardware address changed";
+        if (Array.isArray(o[k]) && Array.isArray(x[k])) {
+          const add = x[k].filter((v) => !o[k].includes(v)).length, rem = o[k].filter((v) => !x[k].includes(v)).length;
+          return `${k} ${add ? "+" + add : ""}${add && rem ? " " : ""}${rem ? "−" + rem : ""}${!add && !rem ? "reordered" : ""}`;
+        }
+        return `${k} ${esc(show(o[k]))} → ${esc(show(x[k]))}`;
+      });
+      out.push(`${label} <code>${esc(x.name)}</code>: ${parts.join(", ")}`);
+    });
+    if (kind === "rules") {
+      const common = bn.filter((n) => an.includes(n));
+      const oldOrder = an.filter((n) => common.includes(n));
+      // names outside the longest common subsequence moved
+      const N = oldOrder.length, L = Array.from({ length: N + 1 }, () => new Array(N + 1).fill(0));
+      for (let i = N - 1; i >= 0; i--) for (let j = N - 1; j >= 0; j--) L[i][j] = oldOrder[i] === common[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+      const stay = new Set(); let i = 0, j = 0;
+      while (i < N && j < N) { if (oldOrder[i] === common[j]) { stay.add(oldOrder[i]); i++; j++; } else if (L[i + 1][j] >= L[i][j + 1]) i++; else j++; }
+      common.forEach((n) => { if (!stay.has(n)) out.push(`Moved rule <code>${esc(n)}</code> from ${an.indexOf(n) + 1} to ${bn.indexOf(n) + 1}`); });
+    }
+  };
+  group("rules", "Rule", ORDER.rule);
+  group("upstreams", "Upstream", ORDER.upstream);
+  group("interfaces", "Interface", ORDER.interface);
+  for (const [t, keys, path] of [["proxy", ORDER.proxy, "proxy."], ["remote", ORDER.remote, "proxy.remote."], ["admin", ORDER.admin, "admin."], ["stats", ORDER.stats, "stats."], ["log", ORDER.log, "log."]]) {
+    keys.forEach((k) => {
+      const a = (oldM[t] || {})[k], b = (newM[t] || {})[k];
+      if (JSON.stringify(a) !== JSON.stringify(b)) out.push(`<code>${path}${k}</code>: ${esc(show(a))} → ${esc(show(b))}`);
+    });
+  }
+  if (oldM.name !== newM.name) out.push(`<code>name</code>: ${esc(oldM.name)} → ${esc(newM.name)}`);
+  return out;
+}
+function handComments(text) {
+  let full = 0, eol = 0;
+  text.split("\n").forEach((l) => { const t = l.trim(); if (t.startsWith("#")) full++; else if (/\s#\s/.test(l) && !/^\s*[a-z_]+\s*=\s*"[^"]*#/.test(l)) eol++; });
+  return { full, eol };
+}
+function restartFor(oldM, newM) {
+  const keys = [];
+  if (JSON.stringify(oldM.proxy.listen) !== JSON.stringify(newM.proxy.listen)) keys.push("proxy.listen");
+  if (JSON.stringify(oldM.admin.listen) !== JSON.stringify(newM.admin.listen)) keys.push("admin.listen");
+  return keys;
+}
+
+/* ------------------------------------------------------------- explain (D8) */
+function parseTarget(raw) {
+  let s = raw.trim();
+  if (!s) return null;
+  let kind = "tunnel", note = "", host, port;
+  const m = s.match(/^(https?):\/\/([^/?#]+)/i);
+  let auth;
+  if (m) { kind = m[1].toLowerCase() === "http" ? "plain HTTP" : "tunnel"; auth = m[2]; }
+  else if (/^\[[0-9a-f:.]+\]:\d+$/i.test(s) || /^[^\s:/[\]]+:\d+$/.test(s)) { auth = s; }
+  else if (/^[^\s/]+$/.test(s)) { auth = s; note = `Read as https://${s}`; }
+  else return { error: "Enter a URL such as https://example.com/, a host:port, or a host name." };
+  const v6 = auth.match(/^\[([^\]]+)\](?::(\d+))?$/);
+  if (v6) { host = v6[1]; port = v6[2]; }
+  else if (/^[0-9a-f:]+$/i.test(auth) && auth.includes("::")) { host = auth; }
+  else { const k = auth.lastIndexOf(":"); if (k > 0) { host = auth.slice(0, k); port = auth.slice(k + 1); } else host = auth; }
+  host = host.toLowerCase().replace(/\.$/, "");
+  port = port ? Number(port) : kind === "plain HTTP" ? 80 : 443;
+  if (!(port >= 1 && port <= 65535)) return { error: "The port must be 1–65535." };
+  return { host, port, kind, note };
+}
+const isV4 = (h) => /^\d{1,3}(\.\d{1,3}){3}$/.test(h);
+const isIP = (h) => isV4(h) || h.includes(":");
+function v4int(ip) { return ip.split(".").reduce((a, o) => a * 256 + Number(o), 0); }
+function inCidr(ip, cidr) {
+  const [net, bits] = cidr.split("/");
+  if (isV4(ip) && isV4(net)) { const b = Number(bits); const mask = b === 0 ? 0 : 2 ** 32 - 2 ** (32 - b); return (v4int(ip) & mask) >>> 0 === (v4int(net) & mask) >>> 0; }
+  if (!isV4(ip) && !isV4(net)) return bits === "128" && ip === net;
+  return false;
+}
+function ruleMatches(r, t) {
+  const pats = (r.hosts || []).length + (r.domains || []).length + (r.cidrs || []).length;
+  let dest = pats === 0;
+  if (!isIP(t.host)) {
+    if ((r.hosts || []).includes(t.host)) dest = true;
+    if ((r.domains || []).some((d) => t.host === d || t.host.endsWith("." + d))) dest = true;
+  } else if ((r.cidrs || []).some((c) => inCidr(t.host, c))) dest = true;
+  return dest && (!r.ports || r.ports.includes(t.port));
+}
+function explain(m, t, source) {
+  if (source === "remote") {
+    const ports = m.remote.ports || [80, 443];
+    if (!ports.includes(t.port)) return { rule: "port", index: 0, action: "block", why: `port ${t.port} is not in proxy.remote.ports` };
+  }
+  for (let i = 0; i < m.rules.length; i++) {
+    const r = m.rules[i];
+    if (ruleMatches(r, t)) {
+      if (source === "remote" && r.action === "direct" && !m.remote.allow_direct) return { rule: "remote-direct", index: i + 1, action: "block", why: "direct needs proxy.remote.allow_direct", shadowRule: r.name };
+      return { rule: r.name, index: i + 1, action: r.action, r };
+    }
+  }
+  if (source === "remote") {
+    const d = m.remote.default || "block";
+    return { rule: "remote-default", index: 0, action: d, why: "no rule matched; proxy.remote.default" };
+  }
+  return { rule: "default", index: 0, action: m.proxy.default || "direct", why: "no rule matched; proxy.default" };
+}
+function ifaceLine(m, d) {
+  const route = routeOf(d.action);
+  if (route.kind === "direct") {
+    if (d.r && d.r.interfaces) return `${d.r.interfaces.join(", ")} (rule ${d.r.name}); public addresses only`;
+    if ((m.proxy.interfaces || []).length) return `${m.proxy.interfaces.join(", ")} (proxy.interfaces); public addresses only`;
+  }
+  if (route.kind === "upstream") {
+    const u = m.upstreams.find((x) => x.name === route.name);
+    if (u && u.interfaces) return `${u.interfaces.join(", ")} (upstream ${u.name}); public addresses only`;
+  }
+  return "system routing";
+}
+function resultHTML(m, t, source, d) {
+  const route = routeOf(d.action);
+  const where = d.index ? `Rule ${d.index}, <span class="name-code">${esc(d.rule)}</span>` : `<span class="name-code">${esc(d.rule)}</span>, ${esc(d.why)}`;
+  let rows = `<dt>Target</dt><dd><code>${esc(t.host.includes(":") ? "[" + t.host + "]" : t.host)}:${t.port}</code>, ${t.kind}, ${source} client</dd>`;
+  if (route.kind === "upstream") {
+    const u = m.upstreams.find((x) => x.name === route.name) || {};
+    const st = STATUS.upstreams[route.name] || { state: "up", text: "Up" };
+    rows += `<dt>Upstream</dt><dd><code>${esc(u.address || "")}</code>, disclosure ${esc(u.disclosure || "")}, <span class="state ${st.state}">${esc(st.text)}</span></dd>`;
+  }
+  if (route.kind === "direct" && d.r) {
+    const f = [d.r.allow_loopback && "allow_loopback", d.r.allow_private && "allow_private"].filter(Boolean);
+    if (f.length) rows += `<dt>Direct</dt><dd>${f.join(", ")}</dd>`;
+  }
+  if (route.kind === "block") rows += `<dt>Answer</dt><dd>403, no lookup and no connection</dd>`;
+  if (route.kind !== "block") rows += `<dt>Interfaces</dt><dd>${esc(ifaceLine(m, d))}</dd>`;
+  const note = t.note ? `<p class="res-note">${esc(t.note)}.</p>` : "";
+  const warn = route.kind === "upstream" && (STATUS.upstreams[route.name] || {}).state === "down" ? `<p class="res-note wrn">This upstream is down, so a matching request fails at once with 503.</p>` : "";
+  return `<div class="res-head">${routeBadge(d.action)}<span>${where}</span></div><dl class="res-dl">${rows}</dl>${note}${warn}`;
+}
+
+/* ------------------------------------------------------------------ shell */
+const NAV = [
+  ["Traffic", [["overview", "Overview", "overview"], ["domains", "Domains", "domains"], ["live", "Live", "live"]]],
+  ["Configuration", [["rules", "Rules", "rules"], ["upstreams", "Upstreams", "upstreams"], ["interfaces", "Interfaces", "interfaces"], ["proxy", "Proxy", "proxy"], ["remote", "Remote clients", "remote"], ["general", "General", "general"]]],
+  ["Admin", [["account", "Account", "account"], ["advanced", "Advanced", "advanced"]]],
+];
+function renderNav(current) {
+  const counts = { rules: model.rules.length, upstreams: model.upstreams.length, interfaces: model.interfaces.length };
+  const html = NAV.map(([g, items]) => `<div class="nav-group"><span>${g}</span>${items.map(([id, label, ic]) =>
+    `<a href="#${id}"${id === current ? ' aria-current="page"' : ""}>${icon(ic)}${label}${counts[id] !== undefined ? `<span class="count">${counts[id]}</span>` : ""}</a>`).join("")}</div>`).join("");
+  $("#nav-side").innerHTML = html;
+  $("#nav-top").innerHTML = html;
+}
+function renderBanners() {
+  const b = [];
+  if (protoState === "fileerror") b.push(`<div class="banner error" role="alert">${icon("alert")}<div class="b-body"><strong>The configuration file has errors, so these pages are read-only.</strong><span>line 58: <code>rule[3].domains[2]</code>: "*.internal.example" is not a domain; write internal.example, which already matches its subdomains. The running configuration from 09:42 stays in force.</span><div class="b-actions"><a class="btn sm" href="#advanced">Fix in Advanced</a><button class="btn sm" type="button">Restore the previous version</button></div></div></div>`);
+  if (restartKeys.length || protoState === "restart") {
+    const keys = restartKeys.length ? restartKeys : ["proxy.listen"];
+    b.push(`<div class="banner warn" role="status">${icon("alert")}<div class="b-body"><strong>${keys.map((k) => `<code>${k}</code>`).join(" and ")} ${keys.length > 1 ? "apply" : "applies"} at the next start.</strong><span>Restart cuttle to use the new value: <code>brew services restart cuttle</code></span></div></div>`);
+  }
+  $("#banners").innerHTML = b.join("");
+}
+function pageHead(title, lead, actions = "", crumbs = "") {
+  return `${crumbs ? `<div class="crumbs">${crumbs}</div>` : ""}<header class="page-head"><div><h1>${title}</h1>${lead ? `<p class="lead">${lead}</p>` : ""}</div>${actions ? `<div class="actions">${actions}</div>` : ""}</header>`;
+}
+
+/* --------------------------------------------------------------- savebar */
+let saveHandlers = null;
+function showSavebar(msg, onReview, onDiscard) {
+  if (readOnly()) return;
+  saveHandlers = { onReview, onDiscard };
+  $("#savebar-msg").textContent = msg;
+  $("#savebar").hidden = false;
+}
+function hideSavebar() { $("#savebar").hidden = true; saveHandlers = null; }
+$("#savebar-review").addEventListener("click", () => saveHandlers && saveHandlers.onReview());
+$("#savebar-discard").addEventListener("click", () => { if (saveHandlers) saveHandlers.onDiscard(); hideSavebar(); });
+
+/* ---------------------------------------------------------------- toasts */
+function toast(kind, title, detail) {
+  const el = document.createElement("div");
+  el.className = "toast" + (kind === "warn" ? " warn" : "");
+  el.setAttribute("role", kind === "warn" ? "alert" : "status");
+  el.innerHTML = `${icon(kind === "warn" ? "alert" : "check")}<div class="t-body"><strong>${esc(title)}</strong>${detail ? `<span>${detail}</span>` : ""}</div><button class="btn quiet icon-btn sm" type="button" aria-label="Close">${icon("x")}</button>`;
+  el.querySelector("button").addEventListener("click", () => el.remove());
+  $("#toasts").appendChild(el);
+  if (kind !== "warn") setTimeout(() => el.remove(), 8000);
+}
+
+/* ---------------------------------------------------------------- review */
+let pending = null;
+function openReview({ title, next, hint, back }) {
+  const before = encode(model);
+  const candidate = encode(next);
+  const summary = summarize(model, next, hint);
+  const notices = [];
+  if (disk !== before) {
+    const c = handComments(disk);
+    notices.push(`<div class="notice">${icon("info")}<span>This save rewrites the file in canonical form: ${c.full} comment lines and ${c.eol} end-of-line comments written by hand are removed. Use a note on a rule, upstream, or interface to keep a description.</span></div>`);
+  }
+  const rk = restartFor(model, next);
+  if (rk.length) notices.push(`<div class="notice warn">${icon("alert")}<span>${rk.map((k) => `<code>${k}</code>`).join(" and ")} ${rk.length > 1 ? "apply" : "applies"} only at the next start. The other changes apply when you apply them.</span></div>`);
+  (hint && hint.warnings || []).forEach((w) => notices.push(`<div class="notice warn">${icon("alert")}<span>${w}</span></div>`));
+  pending = { next, hint, back, rk, summary };
+  $("#review-title").textContent = title;
+  $("#review-body").innerHTML =
+    `<section><h3>Summary</h3><ul class="summary">${(summary.length ? summary : ["No change to the configuration"]).map((s) => `<li><span>${s}</span></li>`).join("")}</ul></section>` +
+    (notices.length ? `<section class="notices">${notices.join("")}</section>` : "") +
+    `<section>${renderDiff(disk, candidate)}</section>`;
+  $("#review-back").hidden = !back;
+  hideSavebar();
+  $("#review").showModal();
+  $("#review-apply").focus();
+}
+$("#review-apply").addEventListener("click", () => {
+  if (!pending) return;
+  const p = pending;
+  model = clone(p.next);
+  disk = encode(model);
+  if (p.rk.length) restartKeys = Array.from(new Set([...restartKeys, ...p.rk]));
+  $("#review").close();
+  pending = null;
+  dirty = null;
+  route();
+  renderBanners();
+  const first = p.summary[0] ? p.summary[0].replace(/<[^>]+>/g, "") : "";
+  if (p.rk.length) toast("warn", "Saved and reloaded. Restart required.", `${p.rk.join(", ")} applies at the next start: <code>brew services restart cuttle</code>`);
+  else toast("ok", p.hint && p.hint.done ? p.hint.done : "Saved and reloaded.", esc(first) + (p.summary.length > 1 ? ` and ${p.summary.length - 1} more change${p.summary.length > 2 ? "s" : ""}` : ""));
+});
+$("#review-back").addEventListener("click", () => { $("#review").close(); if (pending && pending.back) pending.back(); });
+$$("dialog [data-close]").forEach((b) => b.addEventListener("click", () => b.closest("dialog").close()));
+$("#review").addEventListener("close", () => { if (dirty && saveHandlers === null && dirty.msg) showSavebar(dirty.msg, dirty.review, dirty.discard); });
+
+/* ------------------------------------------------------------ list input */
+function patternError(kind, v) {
+  if (kind === "ports") {
+    if (!/^\d+$/.test(v)) return `"${v}" must be an integer port`;
+    const n = Number(v);
+    return n < 1 || n > 65535 ? `port ${n} is out of range 1-65535` : "";
+  }
+  if (kind === "listen") {
+    return /^(\d{1,3}(\.\d{1,3}){3}|\[[0-9a-f:]+\]):\d{1,5}$/i.test(v) ? "" : `"${v}" is not an IP:port literal; host names are not allowed`;
+  }
+  if (kind === "cidrs") {
+    const m = v.match(/^(\d{1,3}(?:\.\d{1,3}){3})(?:\/(\d{1,2}))?$/);
+    if (m && !m[2]) return `"${v}" is an address, not a CIDR; use "${v}/32"`;
+    if (m) { const b = Number(m[2]); if (b > 32) return `invalid CIDR "${v}"`; const mask = b === 0 ? 0 : 2 ** 32 - 2 ** (32 - b); const net = (v4int(m[1]) & mask) >>> 0; if (net !== v4int(m[1])) { const o = [24, 16, 8, 0].map((s) => (net >>> s) & 255).join("."); return `CIDR "${v}" has host bits set; use "${o}/${b}"`; } return ""; }
+    if (/^[0-9a-f:]+\/\d{1,3}$/i.test(v)) return "";
+    return `invalid CIDR "${v}"`;
+  }
+  if (v.startsWith("*.")) return kind === "domains" ? `"${v}": write ${v.slice(2)}; a domain already matches its subdomains` : `"${v}": wildcards are not allowed; put ${v.slice(2)} in domains`;
+  if (v.startsWith(".")) return `"${v}": remove the leading dot`;
+  if (isV4(v)) return `"${v}" is an IP address; put "${v}/32" in cidrs`;
+  if (/[A-Z]/.test(v)) return `"${v}": use lowercase`;
+  if (!/^[a-z0-9_-]+(\.[a-z0-9_-]+)*$/.test(v)) return `"${v}" is not a host name; use the A-label (xn--) form for international names`;
+  return "";
+}
+function tokenField(id, kind, label, hint, values) {
+  return `<div class="field" data-tokens="${id}" data-kind="${kind}"><label for="${id}-in">${label}</label>
+    <div class="tokens" data-for="${id}">${values.map((v) => tokHTML(kind, v)).join("")}<input id="${id}-in" autocomplete="off" spellcheck="false" aria-describedby="${id}-hint ${id}-err" placeholder="${values.length ? "" : "Type or paste, one per line"}"></div>
+    <div class="hint" id="${id}-hint">${hint}</div><div id="${id}-err"></div></div>`;
+}
+function tokHTML(kind, v) {
+  const bad = patternError(kind, v);
+  return `<span class="tok${bad ? " bad" : ""}" data-v="${esc(v)}">${esc(v)}<button type="button" aria-label="Remove ${esc(v)}">${icon("x")}</button></span>`;
+}
+function tokValues(field) { return $$(".tok", field).map((t) => t.dataset.v); }
+function bindTokens(root, onChange) {
+  $$("[data-tokens]", root).forEach((field) => {
+    const box = $(".tokens", field), input = $("input", box), kind = field.dataset.kind;
+    const add = (text) => {
+      const parts = text.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
+      const have = tokValues(field);
+      parts.forEach((p) => { if (!have.includes(p)) { input.insertAdjacentHTML("beforebegin", tokHTML(kind, p)); have.push(p); } });
+      input.value = ""; input.placeholder = "";
+      onChange();
+    };
+    box.addEventListener("click", (e) => {
+      const rm = e.target.closest(".tok button");
+      if (rm) { rm.parentElement.remove(); onChange(); input.focus(); return; }
+      if (e.target === box) input.focus();
+    });
+    input.addEventListener("keydown", (e) => {
+      if ((e.key === "Enter" || e.key === "," || e.key === " ") && input.value.trim()) { e.preventDefault(); add(input.value); }
+      else if (e.key === "Enter") e.preventDefault();
+      else if (e.key === "Backspace" && !input.value) { const last = $$(".tok", box).pop(); if (last) { last.remove(); onChange(); } }
+    });
+    input.addEventListener("paste", (e) => { const t = e.clipboardData.getData("text"); if (/[\s,]/.test(t.trim())) { e.preventDefault(); add(t); } });
+    input.addEventListener("blur", () => { if (input.value.trim()) add(input.value); });
+  });
+}
+function showTokenErrors(field) {
+  const kind = field.dataset.kind, id = field.dataset.tokens;
+  const errs = tokValues(field).map((v, i) => [i + 1, patternError(kind, v)]).filter((e) => e[1]);
+  $(`#${id}-err`).innerHTML = errs.map(([i, e]) => `<div class="err">Entry ${i}: ${esc(e)}</div>`).join("");
+  field.classList.toggle("invalid", errs.length > 0);
+  return errs.length;
+}
+
+/* ------------------------------------------------- interface list editor */
+function ifEditor(id, mode, list) {
+  const defs = model.interfaces.map((d) => d.name);
+  if (!defs.length) return `<div class="field"><span class="label">Interfaces</span><p class="hint">No interfaces are defined, so connections follow macOS routing. <a href="#interfaces">Define interfaces</a> to choose which ones cuttle uses.</p></div>`;
+  const unsetLabel = mode === "rule" ? `Use the default list${(model.proxy.interfaces || []).length ? ` (${model.proxy.interfaces.join(", ")})` : " (system routing)"}` : "Follow macOS routing";
+  const set = Array.isArray(list);
+  const items = set ? list : [];
+  return `<div class="field" data-ifl="${id}" data-mode="${mode}"><span class="label" id="${id}-l">Interfaces</span>
+    ${mode === "proxy" ? "" : `<div class="seg sm" role="radiogroup" aria-labelledby="${id}-l"><label><input type="radio" name="${id}-mode" value="unset"${set ? "" : " checked"}><span>${esc(unsetLabel)}</span></label><label><input type="radio" name="${id}-mode" value="set"${set ? " checked" : ""}><span>Only these, in order</span></label></div>`}
+    <div class="ifl-body"${set || mode === "proxy" ? "" : " hidden"}>
+      <ol class="iflist">${items.map((n, i) => ifRow(n, i, items.length)).join("") || `<li><span></span><span class="hint">${mode === "proxy" ? "Empty: direct connections follow macOS routing." : "Add at least one interface."}</span></li>`}</ol>
+      <div class="iflist-add"><select class="input" aria-label="Interface to add"><option value="">Add interface…</option>${defs.filter((d) => !items.includes(d)).map((d) => `<option>${esc(d)}</option>`).join("")}</select></div>
+    </div>
+    <div class="hint">Requests use only these interfaces, in this order; the first that is online carries the connection.</div></div>`;
+}
+function ifRow(n, i, len) {
+  const st = STATUS.interfaces[n] || { state: "online", text: "Online" };
+  return `<li data-n="${esc(n)}"><span class="pos">${i + 1}</span><span><span class="name-code">${esc(n)}</span> <span class="state ${st.state}">${esc(st.text)}</span></span>
+    <span class="moves"><button class="btn quiet icon-btn sm" type="button" data-mv="-1" aria-label="Move ${esc(n)} up"${i === 0 ? " disabled" : ""}>${icon("up")}</button><button class="btn quiet icon-btn sm" type="button" data-mv="1" aria-label="Move ${esc(n)} down"${i === len - 1 ? " disabled" : ""}>${icon("down")}</button></span>
+    <button class="btn quiet icon-btn sm" type="button" data-rm aria-label="Remove ${esc(n)}">${icon("x")}</button></li>`;
+}
+function ifValue(field) {
+  const mode = field.dataset.mode;
+  const items = $$(".iflist li[data-n]", field).map((li) => li.dataset.n);
+  if (mode === "proxy") return items.length ? items : undefined;
+  const m = $(`input[name="${field.dataset.ifl}-mode"]:checked`, field);
+  return m && m.value === "set" ? items : undefined;
+}
+function bindIf(root, onChange) {
+  $$("[data-ifl]", root).forEach((field) => {
+    const rerender = (list) => { const wrap = document.createElement("div"); wrap.innerHTML = ifEditor(field.dataset.ifl, field.dataset.mode, list); const nf = wrap.firstElementChild; field.replaceWith(nf); bindIf(nf.parentElement, onChange); onChange(); return nf; };
+    field.addEventListener("change", (e) => {
+      if (e.target.matches("select")) { const v = e.target.value; if (!v) return; const cur = $$(".iflist li[data-n]", field).map((li) => li.dataset.n); rerender([...cur, v]); }
+      else if (e.target.matches("input[type=radio]")) { $(".ifl-body", field).hidden = e.target.value !== "set"; onChange(); }
+    });
+    field.addEventListener("click", (e) => {
+      const b = e.target.closest("button"); if (!b) return;
+      const li = b.closest("li"); const cur = $$(".iflist li[data-n]", field).map((x) => x.dataset.n); const i = cur.indexOf(li.dataset.n);
+      if (b.hasAttribute("data-rm")) { cur.splice(i, 1); rerender(cur); }
+      else if (b.dataset.mv) { const j = i + Number(b.dataset.mv); [cur[i], cur[j]] = [cur[j], cur[i]]; const nf = rerender(cur); const nb = $(`li[data-n="${CSS.escape(li.dataset.n)}"] [data-mv="${b.dataset.mv}"]`, nf); (nb && !nb.disabled ? nb : $(`li[data-n="${CSS.escape(li.dataset.n)}"] [data-rm]`, nf)).focus(); }
+    });
+  });
+}
+
+/* ------------------------------------------------------------ dirty state */
+let dirty = null;
+
+/* =============================================================== screens */
+function screenOverview() {
+  const routes = [
+    { kind: "direct", label: "direct", bytes: 5103529164, share: 58 },
+    { kind: "upstream", label: "gateway", bytes: 3435973837, share: 39 },
+    { kind: "upstream2", label: "lab", bytes: 264241152, share: 3 },
+  ];
+  const top = (key, kind, title, byReq) => {
+    const list = TOPHOSTS[key]; const max = list[0][1];
+    return `<section class="panel"><div class="panel-head"><h3>${title}</h3>${routeBadge(kind === "upstream" ? "upstream:gateway" : kind)}</div>
+      <ul class="hosts ${kind}">${list.map(([h, v]) => `<li><span class="h">${esc(h)}</span><span class="v num">${byReq ? fmtNum(v) + " req" : fmtBytes(v)}</span><span class="hb"><i class="${bar(v, max)}"></i></span><button class="btn quiet icon-btn sm act" type="button" data-route-host="${esc(h)}" aria-label="Route ${esc(h)}">${icon("route")}</button></li>`).join("")}</ul>
+      <div class="panel-foot"><a href="#domains">All ${byReq ? 31 : key === "direct" ? 412 : 58} hosts</a></div></section>`;
+  };
+  const stats = statsOn()
+    ? `<section class="panel hero"><p class="hero-sentence">In the last 24 hours, 58% of traffic went <span class="rt direct">direct</span>, 39% through <span class="rt upstream">gateway</span>, 3% through <span class="rt upstream2">lab</span>, and 2,310 requests were <span class="rt block">blocked</span>.</p>
+        <div class="routebar" role="img" aria-label="Bytes by route: direct 58%, gateway 39%, lab 3%">${routes.map((r) => `<i class="${r.kind}" data-grow="${r.share}"></i>`).join("")}</div>
+        <ul class="legend">${routes.map((r) => `<li><span class="lg ${r.kind}">${r.label}</span><span class="num">${fmtBytes(r.bytes)}</span><span class="muted num">${r.share}%</span></li>`).join("")}<li><span class="lg block">block</span><span class="num">2,310 requests</span></li></ul></section>
+       <div class="section"><div class="section-head"><h2>Top hosts by route</h2><p>Route… adds a rule for a host.</p></div><div class="grid3">${top("direct", "direct", "Sent direct")}${top("gateway", "upstream", "Sent to gateway")}${top("block", "block", "Blocked", true)}</div></div>`
+    : `<div class="banner warn">${icon("alert")}<div class="b-body"><strong>Statistics are unavailable: the database is locked by another program.</strong><span>The proxy serves without them. Live counters below still update.</span></div></div>`;
+  const ups = model.upstreams.map((u) => { const s = STATUS.upstreams[u.name] || { state: "up", text: "Up" }; return `<dt><a class="name-code" href="#upstreams">${esc(u.name)}</a></dt><dd><span class="state ${s.state}">${esc(s.text)}</span></dd>`; }).join("");
+  const ifs = model.interfaces.map((d) => { const s = STATUS.interfaces[d.name] || { state: "online", text: "Online" }; return `<dt><a class="name-code" href="#interfaces">${esc(d.name)}</a></dt><dd><span class="state ${s.state}">${esc(s.text)}</span></dd>`; }).join("");
+  return pageHead("Overview", "Where traffic went, and the state of the routes it took.", `<div class="seg sm" role="radiogroup" aria-label="Window"><label><input type="radio" name="win"><span>1h</span></label><label><input type="radio" name="win" checked><span>24h</span></label><label><input type="radio" name="win"><span>7d</span></label><label><input type="radio" name="win"><span>30d</span></label></div>`) +
+    stats +
+    `<div class="section grid3">
+      <section class="panel"><div class="panel-head"><h3>Upstreams</h3></div><dl class="kv">${ups || "<dt></dt><dd class='muted'>None configured</dd>"}</dl></section>
+      <section class="panel"><div class="panel-head"><h3>Interfaces</h3></div><dl class="kv">${ifs || "<dt></dt><dd class='muted'>None defined</dd>"}</dl></section>
+      <section class="panel"><div class="panel-head"><h3>Configuration</h3></div><dl class="kv"><dt>Rules</dt><dd><a href="#rules">${model.rules.length}</a></dd><dt>Upstreams</dt><dd><a href="#upstreams">${model.upstreams.length}</a></dd><dt>Interfaces</dt><dd><a href="#interfaces">${model.interfaces.length}</a></dd><dt>Saved</dt><dd>Today at 09:41</dd></dl></section>
+    </div>`;
+}
+function afterOverview() {
+  $$(".routebar i").forEach((i) => { i.style.flexGrow = i.dataset.grow; });
+}
+
+/* -------------------------------------------------------------- rules list */
+let order = null;
+let lifted = null;
+function ruleRow(r, i, n) {
+  const a = routeOf(r.action).kind;
+  const pats = [...(r.hosts || []), ...(r.domains || []), ...(r.cidrs || [])];
+  const shown = pats.slice(0, 4);
+  const chips = shown.map((p) => `<span class="chip">${esc(p)}</span>`).join("") + (pats.length > 4 ? `<span class="chip more">+${pats.length - 4} more</span>` : "");
+  const flags = [];
+  if (r.ports) flags.push(`ports ${r.ports.join(", ")}`);
+  if (r.allow_loopback) flags.push("allows loopback");
+  if (r.allow_private) flags.push("allows private");
+  if (r.interfaces) flags.push(`via ${r.interfaces.join(", ")}`);
+  const warn = r.name === "video" && model.rules.findIndex((x) => x.name === "ads") > -1 && model.rules.findIndex((x) => x.name === "ads") < i && (r.domains || []).includes("metrics.example.org")
+    ? `<span class="badge warn" title='"metrics.example.org" repeats rule "ads", which matches first, so it can never match'>${icon("alert")}1 warning</span>` : "";
+  const t = TRAFFIC.rules[r.name] || [0, 0];
+  const traffic = statsOn() ? `<div class="r-traffic num"><div><b>${fmtNum(t[0])}</b> req</div><div>${fmtBytes(t[1])}</div></div>` : `<div class="r-traffic"></div>`;
+  return `<li class="rule a-${a}" data-name="${esc(r.name)}">
+    <div class="r-gutter"><span class="node">${i + 1}</span></div>
+    <button class="btn quiet icon-btn handle" type="button" draggable="true" aria-label="Move rule ${esc(r.name)}, position ${i + 1} of ${n}" aria-describedby="reorder-help"${readOnly() ? " disabled" : ""}>${icon("grip")}</button>
+    <div class="r-main"><div class="r-title"><a class="r-name" href="#rule/${encodeURIComponent(r.name)}">${esc(r.name)}</a>${warn}</div>${r.note ? `<div class="r-note">${esc(r.note)}</div>` : ""}${chips ? `<div class="chips">${chips}</div>` : ""}</div>
+    <div class="r-route">${routeBadge(r.action)}${flags.length ? `<div class="flags">${flags.map((f) => `<span class="flag">${esc(f)}</span>`).join("")}</div>` : ""}</div>
+    ${traffic}
+    <button class="btn quiet icon-btn r-menu" type="button" aria-haspopup="menu" aria-label="Actions for rule ${esc(r.name)}" data-menu="${esc(r.name)}">${icon("more")}</button>
+  </li>`;
+}
+function screenRules() {
+  if (!order) order = model.rules.map((r) => r.name);
+  const rules = order.map((n) => model.rules.find((r) => r.name === n));
+  const t = TRAFFIC.rules.default;
+  const defRow = `<li class="rule default">
+    <div class="r-gutter"><span class="node end" aria-hidden="true"></span></div><span></span>
+    <div class="r-main"><div class="r-title"><span class="r-name">No rule matched</span></div><div class="r-note">The default route applies. <a href="#proxy">Local default</a>, <a href="#remote">remote default</a>.</div></div>
+    <div class="r-route"><div>Local ${routeBadge(model.proxy.default || "direct")}</div><div>Remote ${routeBadge(model.remote.default || "block")}</div></div>
+    ${statsOn() ? `<div class="r-traffic num"><div><b>${fmtNum(t[0])}</b> req</div><div>${fmtBytes(t[1])}</div></div>` : `<div class="r-traffic"></div>`}<span></span></li>`;
+  const list = rules.length
+    ? `<ol class="chain" id="chain" aria-label="Rules in evaluation order">${rules.map((r, i) => ruleRow(r, i, rules.length)).join("")}${defRow}</ol>`
+    : `<div class="empty"><h3>No rules yet</h3><p>Every request takes the default route: <b>${esc(model.proxy.default || "direct")}</b> for local clients and <b>${esc(model.remote.default || "block")}</b> for remote clients. Add a rule to send some destinations elsewhere.</p><a class="btn primary" href="#rule-new">${icon("plus")}Add rule</a></div>`;
+  return pageHead("Rules", "Tried from top to bottom; the first rule that matches decides the route.", `<a class="btn primary" href="#rule-new"${readOnly() ? ' aria-disabled="true"' : ""}>${icon("plus")}Add rule</a>`) +
+    `<section class="panel panel-pad" aria-labelledby="test-h"><h2 id="test-h" class="sr">Test a URL</h2>
+      <form class="testbar" id="testform" role="search">
+        <div class="t-input">${icon("search")}<input class="input" id="test-url" aria-label="Test a URL" placeholder="Test a URL, such as https://wiki.internal.example/" autocomplete="off" spellcheck="false"></div>
+        <div class="seg sm" role="radiogroup" aria-label="Client"><label><input type="radio" name="src" value="local" checked><span>Local</span></label><label><input type="radio" name="src" value="remote"><span>Remote</span></label></div>
+        <button class="btn primary" type="submit">Test</button>
+      </form>
+      <div class="result" id="test-result" role="status" aria-live="polite" hidden></div>
+    </section>
+    <div class="toolbar"${rules.length ? "" : " hidden"}>
+      <div class="filter">${icon("search")}<input class="input" id="filter" aria-label="Filter rules" placeholder="Filter by name, pattern, or action"></div>
+      <span class="meta" id="filter-meta">${rules.length} rules</span>
+      <span class="meta">${statsOn() ? "Traffic: last 24 hours" : "Statistics unavailable"}</span>
+    </div>
+    <p class="sr" id="reorder-help">Press Space to pick the rule up, the arrow keys to move it, Space to drop it, and Escape to cancel.</p>
+    ${rules.length ? `<div class="panel">${list}</div>` : `<div class="section">${list}</div>`}`;
+}
+function afterRules() {
+  const chain = $("#chain");
+  const runTest = () => {
+    const input = $("#test-url").value;
+    const res = $("#test-result");
+    if (chain) $$(".rule", chain).forEach((li) => { li.classList.remove("passed", "matched", "unreached"); li.style.removeProperty("--trace"); li.style.transitionDelay = ""; });
+    if (chain) chain.classList.remove("tested");
+    if (!input.trim()) { res.hidden = true; return; }
+    const t = parseTarget(input);
+    if (!t || t.error) { res.hidden = false; res.innerHTML = `<p class="err">${esc(t ? t.error : "")}</p>`; return; }
+    const src = $("input[name=src]:checked").value;
+    const cur = clone(model); cur.rules = order.map((n) => model.rules.find((r) => r.name === n));
+    const d = explain(cur, t, src);
+    res.hidden = false;
+    res.innerHTML = resultHTML(cur, t, src, d);
+    if (!chain) return;
+    const rows = $$(".rule", chain);
+    const color = `var(--${routeOf(d.action).kind})`;
+    const matchIdx = d.index ? d.index - 1 : (d.rule === "port" ? -1 : rows.length - 1);
+    rows.forEach((li, i) => {
+      li.style.setProperty("--trace", color);
+      if (d.rule === "port") { li.classList.add("unreached"); return; }
+      if (i < matchIdx) li.classList.add("passed");
+      else if (i === matchIdx) li.classList.add("matched");
+      else li.classList.add("unreached");
+      li.style.transitionDelay = (i * 40) + "ms";
+      $(".node", li).style.transitionDelay = (i * 40) + "ms";
+    });
+    requestAnimationFrame(() => chain.classList.add("tested"));
+    const m = rows[matchIdx];
+    if (m && m.getBoundingClientRect().top > window.innerHeight) m.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  };
+  let timer;
+  $("#testform").addEventListener("submit", (e) => { e.preventDefault(); runTest(); });
+  $("#test-url").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(runTest, 300); });
+  $$("input[name=src]").forEach((r) => r.addEventListener("change", runTest));
+  if (!chain) return;
+  $("#filter").addEventListener("input", (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    let shown = 0;
+    $$(".rule[data-name]", chain).forEach((li) => {
+      const r = model.rules.find((x) => x.name === li.dataset.name);
+      const hay = [r.name, r.note || "", r.action, ...(r.hosts || []), ...(r.domains || []), ...(r.cidrs || [])].join(" ").toLowerCase();
+      const hit = !q || hay.includes(q);
+      li.classList.toggle("hidden", !hit); if (hit) shown++;
+      $(".handle", li).disabled = !!q || readOnly();
+    });
+    chain.classList.toggle("filtered", !!q);
+    $("#filter-meta").textContent = q ? `${shown} of ${order.length} rules match; reordering is off while filtering` : `${order.length} rules`;
+  });
+  // drag and drop
+  let dragName = null;
+  chain.addEventListener("dragstart", (e) => {
+    const h = e.target.closest(".handle"); if (!h) return;
+    const li = h.closest(".rule"); dragName = li.dataset.name; li.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dragName);
+    e.dataTransfer.setDragImage(li, 30, 20);
+  });
+  chain.addEventListener("dragover", (e) => {
+    if (!dragName) return; const li = e.target.closest(".rule"); if (!li) return;
+    e.preventDefault(); $$(".drop-before", chain).forEach((x) => x.classList.remove("drop-before")); li.classList.add("drop-before");
+  });
+  chain.addEventListener("drop", (e) => {
+    if (!dragName) return; e.preventDefault(); const li = e.target.closest(".rule");
+    const target = li && li.dataset.name ? li.dataset.name : null;
+    const from = order.indexOf(dragName); order.splice(from, 1);
+    const to = target ? order.indexOf(target) : order.length; order.splice(to < 0 ? order.length : to, 0, dragName);
+    dragName = null; rerenderChain(); orderChanged();
+  });
+  chain.addEventListener("dragend", () => { dragName = null; $$(".dragging, .drop-before", chain).forEach((x) => x.classList.remove("dragging", "drop-before")); });
+  // keyboard reordering
+  chain.addEventListener("keydown", (e) => {
+    const h = e.target.closest(".handle"); if (!h) return;
+    const name = h.closest(".rule").dataset.name;
+    if (e.key === " " || e.key === "Enter") {
+      e.preventDefault();
+      if (lifted && lifted.name === name) { const pos = order.indexOf(name) + 1; lifted = null; rerenderChain(name); announce(`Dropped ${name} at position ${pos} of ${order.length}.`); orderChanged(); }
+      else { lifted = { name, before: order.slice() }; rerenderChain(name); announce(`Picked up ${name}, position ${order.indexOf(name) + 1} of ${order.length}. Use the arrow keys to move it.`); }
+    } else if (lifted && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+      e.preventDefault(); const i = order.indexOf(name), j = i + (e.key === "ArrowUp" ? -1 : 1);
+      if (j < 0 || j >= order.length) return;
+      [order[i], order[j]] = [order[j], order[i]]; rerenderChain(name); announce(`${name}, position ${j + 1} of ${order.length}.`);
+    } else if (lifted && e.key === "Escape") {
+      e.preventDefault(); order = lifted.before; lifted = null; rerenderChain(name); announce(`Move cancelled. ${name} is back at position ${order.indexOf(name) + 1}.`);
+    }
+  });
+  chain.addEventListener("click", (e) => { const b = e.target.closest("[data-menu]"); if (b) openRuleMenu(b, b.dataset.menu); });
+}
+function rerenderChain(focusName) {
+  const chain = $("#chain");
+  const html = order.map((n, i) => ruleRow(model.rules.find((r) => r.name === n), i, order.length)).join("");
+  const def = chain.lastElementChild.outerHTML;
+  chain.innerHTML = html + def;
+  if (lifted) { const li = $(`.rule[data-name="${CSS.escape(lifted.name)}"]`, chain); li.classList.add("lifted"); }
+  if (focusName) { const h = $(`.rule[data-name="${CSS.escape(focusName)}"] .handle`, chain); if (h) h.focus(); }
+}
+function orderChanged() {
+  const same = order.join() === model.rules.map((r) => r.name).join();
+  if (same) { hideSavebar(); dirty = null; return; }
+  const review = () => { const next = clone(model); next.rules = order.map((n) => model.rules.find((r) => r.name === n)); openReview({ title: "Review: reorder rules", next, back: () => {} }); };
+  const discard = () => { order = model.rules.map((r) => r.name); dirty = null; route(); };
+  dirty = { msg: "Rule order changed. Nothing is saved until you review and apply.", review, discard };
+  showSavebar(dirty.msg, review, discard);
+}
+function openRuleMenu(btn, name) {
+  const menu = $("#menu");
+  const i = order.indexOf(name);
+  const ro = readOnly();
+  menu.innerHTML = `<button role="menuitem" data-act="edit">${icon("edit")}Edit</button><button role="menuitem" data-act="dup"${ro ? " disabled" : ""}>${icon("copy")}Duplicate</button><hr>
+    <button role="menuitem" data-act="top"${i === 0 || ro ? " disabled" : ""}>${icon("up")}Move to top</button><button role="menuitem" data-act="up"${i === 0 || ro ? " disabled" : ""}>${icon("up")}Move up</button><button role="menuitem" data-act="down"${i === order.length - 1 || ro ? " disabled" : ""}>${icon("down")}Move down</button><button role="menuitem" data-act="bottom"${i === order.length - 1 || ro ? " disabled" : ""}>${icon("down")}Move to bottom</button><hr>
+    <button role="menuitem" class="danger" data-act="del"${ro ? " disabled" : ""}>${icon("trash")}Delete…</button>`;
+  placeMenu(menu, btn);
+  menu.onclick = (e) => {
+    const b = e.target.closest("button[data-act]"); if (!b || b.disabled) return; closeMenu();
+    const act = b.dataset.act;
+    if (act === "edit") { location.hash = "#rule/" + encodeURIComponent(name); return; }
+    if (act === "dup") { location.hash = "#rule-new?from=" + encodeURIComponent(name); return; }
+    if (act === "del") {
+      const next = clone(model); next.rules = next.rules.filter((r) => r.name !== name);
+      const t = TRAFFIC.rules[name] || [0, 0];
+      const r = model.rules.find((x) => x.name === name);
+      const pat = [...(r.hosts || []), ...(r.domains || [])][0];
+      let after = "";
+      if (pat) { const d = explain(next, { host: pat, port: 443, kind: "tunnel" }, "local"); after = ` Requests for ${esc(pat)} would then follow ${d.index ? `rule <code>${esc(d.rule)}</code>` : "the default"}: ${routeOf(d.action).label}${routeOf(d.action).name ? " " + esc(routeOf(d.action).name) : ""}.`; }
+      openReview({ title: `Review: delete rule ${name}`, next, hint: { warnings: [`This rule decided ${fmtNum(t[0])} requests (${fmtBytes(t[1])}) in the last 24 hours.${after}`], done: "Rule deleted. Saved and reloaded." } });
+      return;
+    }
+    const k = order.indexOf(name); order.splice(k, 1);
+    const to = act === "top" ? 0 : act === "bottom" ? order.length : act === "up" ? k - 1 : k + 1;
+    order.splice(to, 0, name); rerenderChain(); orderChanged();
+    const h = $(`.rule[data-name="${CSS.escape(name)}"] .r-menu`); if (h) h.focus();
+    announce(`${name} moved to position ${to + 1}.`);
+  };
+}
+function placeMenu(menu, btn) {
+  menu.hidden = false;
+  const r = btn.getBoundingClientRect();
+  const w = menu.offsetWidth, h = menu.offsetHeight;
+  let left = r.right + window.scrollX - w, top = r.bottom + window.scrollY + 4;
+  if (left < 8) left = 8;
+  if (r.bottom + h + 8 > window.innerHeight && r.top - h - 4 > 0) top = r.top + window.scrollY - h - 4;
+  menu.style.left = left + "px"; menu.style.top = top + "px";
+  const first = $("button:not([disabled])", menu); if (first) first.focus();
+  menu._opener = btn;
+}
+function closeMenu() { const m = $("#menu"); if (!m.hidden) { m.hidden = true; if (m._opener) m._opener.focus(); } }
+document.addEventListener("click", (e) => { if (!e.target.closest("#menu") && !e.target.closest("[data-menu],[data-umenu],[data-imenu]")) { $("#menu").hidden = true; } });
+document.addEventListener("keydown", (e) => {
+  const menu = $("#menu");
+  if (!menu.hidden) {
+    if (e.key === "Escape") { e.preventDefault(); closeMenu(); }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); const items = $$("button:not([disabled])", menu); const i = items.indexOf(document.activeElement); const j = (i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length; items[j].focus(); }
+    return;
+  }
+  if (e.key === "/" && !e.target.closest("input, textarea, select, [contenteditable]")) {
+    const f = $("#filter") || $("#test-url") || $("#rtest-url"); if (f) { e.preventDefault(); f.focus(); }
+  }
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { if (saveHandlers) { e.preventDefault(); saveHandlers.onReview(); } }
+});
+
+/* ------------------------------------------------------------- rule editor */
+let editing = null;
+function screenRuleEdit(name, from) {
+  const existing = name ? model.rules.find((r) => r.name === name) : null;
+  if (name && !existing) return pageHead("Rule not found", `There is no rule named <code>${esc(name)}</code>. It may have been renamed or deleted.`, "", `<a href="#rules">Rules</a>`) + `<a class="btn" href="#rules">Back to rules</a>`;
+  const src = existing || (from ? model.rules.find((r) => r.name === from) : null);
+  const r = src ? clone(src) : { name: "", hosts: [], domains: [], action: "direct" };
+  if (!existing && src) r.name = src.name + "-copy";
+  editing = { original: existing ? existing.name : null };
+  const act = routeOf(r.action);
+  const ups = model.upstreams;
+  const t = TRAFFIC.rules[r.name] || [0, 0];
+  const hosts = RULEHOSTS[r.name] || [];
+  const title = existing ? `Edit rule <span class="name-code">${esc(existing.name)}</span>` : "Add rule";
+  const ro = readOnly();
+  return pageHead(title, existing ? `Position ${model.rules.indexOf(existing) + 1} of ${model.rules.length}. Changes apply after you review and apply them.` : "A new rule is tried before the rules below the position you choose.", "", `<a href="#rules">Rules</a> /`) +
+  `<div id="error-summary"></div>
+  <div class="editor">
+    <form id="rule-form" novalidate>
+      <fieldset class="fsec" ${ro ? "disabled" : ""}><header><h2>Name and note</h2><p>The name appears in logs, statistics, and errors.</p></header>
+        <div class="fields">
+          <div class="field" data-f="name"><label for="f-name">Name</label><input class="input mono" id="f-name" value="${esc(r.name)}" autocomplete="off" spellcheck="false" aria-describedby="f-name-hint f-name-err"><div class="hint" id="f-name-hint">Lowercase letters, digits, dots, hyphens, and underscores.</div><div id="f-name-err"></div></div>
+          <div class="field"><label for="f-note">Note <span class="hint">optional</span></label><input class="input" id="f-note" value="${esc(r.note || "")}" maxlength="120" aria-describedby="f-note-hint"><div class="hint" id="f-note-hint">One line, up to 120 characters. It replaces a comment in the file.</div></div>
+        </div></fieldset>
+      <fieldset class="fsec" ${ro ? "disabled" : ""}><header><h2>Match</h2><p>The rule matches when any pattern matches and the port is listed, or no ports are listed.</p></header>
+        <div class="fields">
+          ${tokenField("f-domains", "domains", "Domains", "A name and all of its subdomains: <code>example.com</code> matches <code>a.example.com</code>.", r.domains || [])}
+          ${tokenField("f-hosts", "hosts", "Hosts", "Exact names only.", r.hosts || [])}
+          ${tokenField("f-cidrs", "cidrs", "CIDRs", "IP-literal targets inside a prefix. Names never match a CIDR.", r.cidrs || [])}
+          ${tokenField("f-ports", "ports", "Ports", "Empty matches any port.", (r.ports || []).map(String))}
+          <div id="f-match-err"></div>
+        </div></fieldset>
+      <fieldset class="fsec" ${ro ? "disabled" : ""}><header><h2>Action</h2><p>Where matching requests go.</p></header>
+        <div class="fields">
+          <div class="field"><span class="label" id="act-l">Route</span>
+            <div class="seg action" role="radiogroup" aria-labelledby="act-l">
+              <label><input type="radio" name="act" value="direct"${act.kind === "direct" ? " checked" : ""}><span class="direct">Direct</span></label>
+              <label><input type="radio" name="act" value="upstream"${act.kind === "upstream" ? " checked" : ""}${ups.length ? "" : " disabled"}><span class="upstream">Upstream</span></label>
+              <label><input type="radio" name="act" value="block"${act.kind === "block" ? " checked" : ""}><span class="block">Block</span></label>
+            </div>
+            <div class="hint" id="act-hint"></div>
+          </div>
+          <div class="field" id="up-field"${act.kind === "upstream" ? "" : " hidden"}><label for="f-up">Upstream</label>
+            <select class="input" id="f-up">${ups.map((u) => `<option value="${esc(u.name)}"${act.name === u.name ? " selected" : ""}>${esc(u.name)}: ${esc(u.address)}, ${esc((STATUS.upstreams[u.name] || { text: "up" }).text.toLowerCase())}</option>`).join("")}</select>
+            <div class="hint"><a href="#upstreams">Add an upstream</a></div></div>
+          <div class="direct-only fields" id="direct-opts"${act.kind === "direct" ? "" : " hidden"}>
+            <label class="check"><input type="checkbox" id="f-loop"${r.allow_loopback ? " checked" : ""}><span>Allow loopback and this Mac's own addresses</span><span class="hint">Local clients may reach 127.0.0.1, ::1, and names that resolve to this Mac.</span></label>
+            <label class="check"><input type="checkbox" id="f-priv"${r.allow_private ? " checked" : ""}><span>Allow private addresses that names resolve to</span><span class="hint">For devices on the home network by name, such as a NAS. Typed private IP addresses work without it.</span></label>
+            ${ifEditor("f-if", "rule", r.interfaces)}
+          </div>
+        </div></fieldset>
+      ${existing ? "" : `<fieldset class="fsec"><header><h2>Position</h2><p>First is usual: a new rule is often an exception to the rules below it.</p></header>
+        <div class="fields"><div class="field"><label for="f-pos">Place the rule</label><select class="input" id="f-pos"><option value="0">First</option>${model.rules.map((x, i) => i ? `<option value="${i}">Before ${esc(x.name)}</option>` : "").join("")}<option value="${model.rules.length}">Last</option></select></div></div></fieldset>`}
+      <div class="form-foot">
+        <button class="btn primary" type="submit"${ro ? " disabled" : ""}>Review changes</button>
+        <a class="btn" href="#rules">Cancel</a>
+        <span class="spacer"></span>
+        ${existing ? `<button class="btn danger" type="button" id="f-del"${ro ? " disabled" : ""}>${icon("trash")}Delete rule</button>` : ""}
+      </div>
+    </form>
+    <aside class="side" aria-label="Test and traffic">
+      <section class="panel"><div class="panel-head"><h3>Test this rule</h3></div>
+        <div class="test-body">
+          <input class="input mono" id="rtest-url" placeholder="https://wiki.internal.example/" aria-label="Test a URL against this draft" autocomplete="off" spellcheck="false" value="${existing ? "" : ""}">
+          <div class="seg sm" role="radiogroup" aria-label="Client"><label><input type="radio" name="rsrc" value="local" checked><span>Local</span></label><label><input type="radio" name="rsrc" value="remote"><span>Remote</span></label></div>
+          <div id="rtest-out" role="status" aria-live="polite"><p class="hint">Tested against the configuration with this draft applied.</p></div>
+        </div></section>
+      ${existing && statsOn() ? `<section class="panel"><div class="panel-head"><h3>Last 24 hours</h3><span class="num hint">${fmtNum(t[0])} req, ${fmtBytes(t[1])}</span></div>
+        ${hosts.length ? `<ul class="hosts ${routeOf(r.action).kind}">${hosts.map(([h, v]) => `<li><span class="h">${esc(h)}</span><span class="v num">${fmtNum(v)} req</span><span class="hb"><i class="${bar(v, hosts[0][1])}"></i></span></li>`).join("")}</ul><div class="panel-foot"><a href="#domains">All hosts of this rule</a></div>` : `<p class="panel-foot muted">No requests matched this rule.</p>`}</section>` : ""}
+    </aside>
+  </div>`;
+}
+function draftFromForm() {
+  const f = (id) => $(`[data-tokens="${id}"]`);
+  const r = { name: $("#f-name").value.trim() };
+  const note = $("#f-note").value.trim(); if (note) r.note = note;
+  const hosts = tokValues(f("f-hosts")), domains = tokValues(f("f-domains")), cidrs = tokValues(f("f-cidrs")), ports = tokValues(f("f-ports"));
+  if (hosts.length) r.hosts = hosts;
+  if (domains.length) r.domains = domains;
+  if (cidrs.length) r.cidrs = cidrs;
+  if (ports.length) r.ports = ports.map(Number);
+  const a = $("input[name=act]:checked").value;
+  r.action = a === "upstream" ? "upstream:" + $("#f-up").value : a;
+  if (a === "direct") {
+    if ($("#f-loop").checked) r.allow_loopback = true;
+    if ($("#f-priv").checked) r.allow_private = true;
+    const fl = $('[data-ifl="f-if"]'); const v = fl ? ifValue(fl) : undefined; if (v) r.interfaces = v;
+  }
+  return r;
+}
+function nextWithDraft(r) {
+  const next = clone(model);
+  if (editing.original) { const i = next.rules.findIndex((x) => x.name === editing.original); next.rules[i] = r; }
+  else { const pos = Number(($("#f-pos") || { value: 0 }).value); next.rules.splice(pos, 0, r); }
+  return next;
+}
+function checkDraft(r, final) {
+  let errs = 0;
+  $$("[data-tokens]").forEach((fld) => { errs += showTokenErrors(fld); });
+  const nameErr = !r.name ? (final ? "required" : "") : !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(r.name) ? `"${r.name}" does not match ^[a-z0-9][a-z0-9._-]{0,63}$` : model.rules.some((x) => x.name === r.name && x.name !== editing.original) ? `duplicate rule name "${r.name}"` : "";
+  $("#f-name-err").innerHTML = nameErr ? `<div class="err">${esc(nameErr)}</div>` : "";
+  $('[data-f="name"]').classList.toggle("invalid", !!nameErr);
+  if (nameErr) errs++;
+  const none = !r.hosts && !r.domains && !r.cidrs && !r.ports;
+  $("#f-match-err").innerHTML = none && final ? `<div class="err">The rule has none of hosts, domains, cidrs, or ports, so it would match every destination; a catch-all belongs in proxy.default.</div>` : "";
+  if (none && final) errs++;
+  // warning example from the validator: a later rule repeats a pattern of an earlier one
+  const next = nextWithDraft(r); const idx = next.rules.indexOf(r);
+  const shadowed = (r.domains || []).filter((d) => next.rules.slice(0, idx).some((e) => (e.domains || []).includes(d) && !e.ports));
+  const dh = $('[data-tokens="f-domains"]');
+  const prev = $(".wrn", dh); if (prev) prev.remove();
+  if (shadowed.length) { const e = next.rules.slice(0, idx).find((x) => (x.domains || []).includes(shadowed[0])); $(`#f-domains-err`).insertAdjacentHTML("beforeend", `<div class="wrn">Warning: "${esc(shadowed[0])}" repeats rule "${esc(e.name)}", which matches first, so it can never match.</div>`); }
+  return errs;
+}
+function afterRuleEdit() {
+  const form = $("#rule-form"); if (!form) return;
+  const name = editing.original;
+  const initial = JSON.stringify(draftFromForm());
+  const actHint = () => {
+    const a = $("input[name=act]:checked").value;
+    $("#act-hint").textContent = a === "direct" ? "cuttle resolves the name and connects itself." : a === "block" ? "cuttle answers 403 without any lookup or connection." : "The upstream proxy resolves and connects; nothing falls back to direct.";
+    $("#up-field").hidden = a !== "upstream"; $("#direct-opts").hidden = a !== "direct";
+  };
+  actHint();
+  const test = () => {
+    const out = $("#rtest-out"); const v = $("#rtest-url").value;
+    if (!v.trim()) { out.innerHTML = `<p class="hint">Tested against the configuration with this draft applied.</p>`; return; }
+    const t = parseTarget(v); if (t.error) { out.innerHTML = `<p class="err">${esc(t.error)}</p>`; return; }
+    const r = draftFromForm();
+    if (checkDraft(r, false)) { out.innerHTML = `<p class="err">Fix the errors to test this draft.</p>`; return; }
+    const next = nextWithDraft(r);
+    const src = $("input[name=rsrc]:checked").value;
+    const d = explain(next, t, src);
+    const self = ruleMatches(r, t);
+    const shadow = self && d.rule !== r.name && d.index && d.index < next.rules.indexOf(r) + 1;
+    out.innerHTML = `<div class="verdict"><div class="v-line">${self ? `<span class="yes">${icon("check")} This rule matches</span>` : `<span class="no">This rule does not match</span>`}</div>
+      ${shadow ? `<div class="v-line shadow">${icon("alert")} Rule ${d.index}, <span class="name-code">${esc(d.rule)}</span>, matches first.</div>` : ""}
+      <div class="v-line">The chain decides ${routeBadge(d.action)} ${d.index ? `by rule ${d.index}, <span class="name-code">${esc(d.rule)}</span>` : `by <span class="name-code">${esc(d.rule)}</span>`}</div>
+      <div class="v-line hint">Interfaces: ${esc(routeOf(d.action).kind === "block" ? "none" : ifaceLine(next, d))}</div></div>`;
+  };
+  let timer;
+  const changed = () => {
+    actHint();
+    clearTimeout(timer); timer = setTimeout(() => { checkDraft(draftFromForm(), false); test(); }, 250);
+    const now = JSON.stringify(draftFromForm());
+    if (now !== initial) {
+      dirty = { msg: name ? `Unsaved changes to rule ${name}` : "Unsaved new rule", review: review, discard: () => route() };
+      showSavebar(dirty.msg, review, dirty.discard);
+    } else { hideSavebar(); dirty = null; }
+  };
+  const review = () => {
+    const r = draftFromForm();
+    const n = checkDraft(r, true);
+    if (n) {
+      const items = $$(".field.invalid").map((f) => { const l = $("label, .label", f); const id = ($("input", f) || {}).id; return `<li><a href="#${id}" data-focus="${id}">${esc(l ? l.textContent.replace("optional", "").trim() : "Field")}</a>: ${esc(($(".err", f) || {}).textContent || "")}</li>`; });
+      if ($("#f-match-err").textContent) items.push(`<li>${esc($("#f-match-err").textContent)}</li>`);
+      $("#error-summary").innerHTML = `<div class="error-summary" role="alert" tabindex="-1"><h2>${n} problem${n > 1 ? "s" : ""} to fix before review</h2><ul>${items.join("")}</ul></div>`;
+      $("#error-summary .error-summary").focus();
+      $$("#error-summary [data-focus]").forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); $("#" + a.dataset.focus).focus(); }));
+      return;
+    }
+    $("#error-summary").innerHTML = "";
+    const next = nextWithDraft(r);
+    const ren = name && r.name !== name ? { kind: "rules", rename: [name, r.name], refs: "statistics keep the old name for past traffic" } : null;
+    openReview({ title: name ? `Review: change rule ${name}` : `Review: add rule ${r.name}`, next, hint: ren, back: () => { $("#f-name").focus(); } });
+  };
+  bindTokens(form, changed);
+  bindIf(form, changed);
+  form.addEventListener("input", changed);
+  form.addEventListener("change", changed);
+  form.addEventListener("submit", (e) => { e.preventDefault(); review(); });
+  $("#rtest-url").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(test, 250); });
+  $$("input[name=rsrc]").forEach((x) => x.addEventListener("change", test));
+  const del = $("#f-del");
+  if (del) del.addEventListener("click", () => { const next = clone(model); next.rules = next.rules.filter((r) => r.name !== name); const t = TRAFFIC.rules[name] || [0, 0]; openReview({ title: `Review: delete rule ${name}`, next, hint: { warnings: [`This rule decided ${fmtNum(t[0])} requests in the last 24 hours.`], done: "Rule deleted. Saved and reloaded." } }); });
+  if (name === "video" && document.body.dataset.open === "edit-shadow") {
+    $("#rtest-url").value = "https://metrics.example.org/"; checkDraft(draftFromForm(), false); test();
+  }
+  if (name === "restricted" && document.body.dataset.open === "edit-demo") {
+    const box = $('[data-tokens="f-domains"] input');
+    box.value = "docs.internal.example *.mirror.example"; box.dispatchEvent(new Event("blur"));
+    $("#rtest-url").value = "https://wiki.internal.example/"; test();
+  }
+}
+
+/* --------------------------------------------------------------- upstreams */
+function usersOfUpstream(m, name) {
+  const u = m.rules.filter((r) => r.action === "upstream:" + name).map((r) => `rule <a class="name-code" href="#rule/${encodeURIComponent(r.name)}">${esc(r.name)}</a>`);
+  if (m.proxy.default === "upstream:" + name) u.push("<code>proxy.default</code>");
+  if (m.remote.default === "upstream:" + name) u.push("<code>proxy.remote.default</code>");
+  return u;
+}
+function screenUpstreams() {
+  const head = pageHead("Upstreams", "Proxies that carry requests on <code>upstream:&lt;name&gt;</code> routes. A failed upstream never falls back to direct.", `<button class="btn primary" type="button" id="add-up"${readOnly() ? " disabled" : ""}>${icon("plus")}Add upstream</button>`);
+  if (!model.upstreams.length) return head + `<div class="empty"><h3>No upstreams</h3><p>Add one to send some destinations through another cuttle instance or an egress proxy. Until then, rules can route only direct or block.</p><button class="btn primary" type="button" id="add-up2">${icon("plus")}Add upstream</button></div>`;
+  return head + `<div class="panel"><div class="ent-head"><span>Upstream</span><span>Address and disclosure</span><span>State</span><span>Used by</span><span>Last 24 hours</span><span></span></div><ul class="ents">${model.upstreams.map((u) => {
+    const st = STATUS.upstreams[u.name] || { state: "up", text: "Up since 10:02" };
+    const users = usersOfUpstream(model, u.name);
+    const t = TRAFFIC.upstreams[u.name] || [0, 0];
+    return `<li class="ent"><div class="e-col"><a class="e-name" href="#" data-edit-up="${esc(u.name)}">${esc(u.name)}</a>${u.note ? `<span class="e-note">${esc(u.note)}</span>` : ""}</div>
+      <div class="e-col"><code>${esc(u.address)}</code><span class="badge">disclosure ${esc(u.disclosure)}</span><span class="hint">${u.disclosure === "via" ? "Another cuttle instance; adds one Via entry" : "Discloses no intermediary"}</span></div>
+      <div class="e-col"><span class="state ${st.state}">${esc(st.text)}</span>${st.error ? `<span class="hint">Last error: ${esc(st.error)}</span>` : ""}</div>
+      <div class="e-col e-use">${users.length ? `<span>${users.join(", ")}</span>` : `<span class="badge warn">${icon("alert")}Not used by any action</span>`}</div>
+      ${statsOn() ? `<div class="r-traffic num"><div><b>${fmtNum(t[0])}</b> req</div><div>${fmtBytes(t[1])}</div></div>` : `<div class="r-traffic"></div>`}
+      <button class="btn quiet icon-btn r-menu" type="button" aria-haspopup="menu" aria-label="Actions for upstream ${esc(u.name)}" data-umenu="${esc(u.name)}">${icon("more")}</button></li>`;
+  }).join("")}</ul></div>`;
+}
+function upstreamEditor(u) {
+  const isNew = !u;
+  u = u || { name: "", address: "" };
+  $("#editor-title").textContent = isNew ? "Add upstream" : `Edit upstream ${u.name}`;
+  $("#editor-sub").textContent = isNew ? "A plain-HTTP proxy that rules can send requests to." : "Renaming also updates every rule and default that uses it.";
+  $("#editor-body").innerHTML = `<div class="fields">
+    <div class="row2"><div class="field" data-f="uname"><label for="u-name">Name</label><input class="input mono" id="u-name" value="${esc(u.name)}" autocomplete="off" spellcheck="false" aria-describedby="u-name-err"><div id="u-name-err"></div></div>
+    <div class="field" data-f="uaddr"><label for="u-addr">Address</label><input class="input mono" id="u-addr" value="${esc(u.address)}" placeholder="10.8.0.6:3128" autocomplete="off" spellcheck="false" aria-describedby="u-addr-hint u-addr-err"><div class="hint" id="u-addr-hint">host:port of a plain-HTTP proxy</div><div id="u-addr-err"></div></div></div>
+    <div class="field"><label for="u-note">Note <span class="hint">optional</span></label><input class="input" id="u-note" value="${esc(u.note || "")}" maxlength="120"></div>
+    <div class="field" data-f="udisc"><span class="label" id="u-disc-l">Disclosure</span>
+      <div class="rcards" role="radiogroup" aria-labelledby="u-disc-l" aria-describedby="u-disc-err">
+        <label class="rcard"><input type="radio" name="u-disc" value="via"${u.disclosure === "via" ? " checked" : ""}><b>via</b><span class="hint">Another cuttle instance. Adds one Via entry so that loops are detected.</span></label>
+        <label class="rcard"><input type="radio" name="u-disc" value="none"${u.disclosure === "none" ? " checked" : ""}><b>none</b><span class="hint">An egress proxy, or any proxy that must not see an intermediary.</span></label>
+      </div><div class="hint">There is no default: either wrong choice fails.</div><div id="u-disc-err"></div></div>
+    <details class="disclosure"><summary>Timeouts: connect ${esc(u.connect_timeout || "10s")}, response ${esc(u.response_timeout || "60s")}, unreachable hold ${esc(u.unreachable_hold || "5s")}</summary>
+      <div class="row2"><div class="field"><label for="u-ct">Connect</label><input class="input mono" id="u-ct" value="${esc(u.connect_timeout || "")}" placeholder="10s, the default"></div>
+      <div class="field"><label for="u-rt">Response</label><input class="input mono" id="u-rt" value="${esc(u.response_timeout || "")}" placeholder="60s, the default"></div>
+      <div class="field"><label for="u-hold">Unreachable hold</label><input class="input mono" id="u-hold" value="${esc(u.unreachable_hold || "")}" placeholder="5s, the default"></div></div></details>
+    ${ifEditor("u-if", "upstream", u.interfaces)}
+  </div>`;
+  bindIf($("#editor-body"), () => {});
+  const dlg = $("#editor");
+  $("#editor-review").onclick = () => {
+    const nu = { name: $("#u-name").value.trim(), address: $("#u-addr").value.trim() };
+    const note = $("#u-note").value.trim(); if (note) nu.note = note;
+    const disc = $("input[name=u-disc]:checked"); if (disc) nu.disclosure = disc.value;
+    [["connect_timeout", "#u-ct"], ["response_timeout", "#u-rt"], ["unreachable_hold", "#u-hold"]].forEach(([k, s]) => { const v = $(s).value.trim(); if (v) nu[k] = v; });
+    const iv = ifValue($('[data-ifl="u-if"]') || document.createElement("div")); if (iv) nu.interfaces = iv;
+    const errs = [];
+    const setErr = (f, id, msg) => { $(`[data-f="${f}"]`).classList.toggle("invalid", !!msg); $(id).innerHTML = msg ? `<div class="err">${esc(msg)}</div>` : ""; if (msg) errs.push(msg); };
+    setErr("uname", "#u-name-err", !nu.name ? "required" : !/^[a-z][a-z0-9-]{0,31}$/.test(nu.name) ? `"${nu.name}" does not match ^[a-z][a-z0-9-]{0,31}$` : model.upstreams.some((x) => x.name === nu.name && x.name !== u.name) ? `duplicate upstream name "${nu.name}"` : "");
+    setErr("uaddr", "#u-addr-err", !nu.address ? "required" : !/^[a-z0-9.-]+:\d{1,5}$/i.test(nu.address) ? `"${nu.address}" is not host:port` : "");
+    setErr("udisc", "#u-disc-err", nu.disclosure ? "" : 'required: "via" for another cuttle instance, "none" for an egress proxy');
+    if (errs.length) { const f = $(".field.invalid input"); if (f) f.focus(); return; }
+    const next = clone(model);
+    let hint = null;
+    if (isNew) next.upstreams.push(nu);
+    else {
+      const i = next.upstreams.findIndex((x) => x.name === u.name); next.upstreams[i] = nu;
+      if (nu.name !== u.name) {
+        let n = 0;
+        next.rules.forEach((r) => { if (r.action === "upstream:" + u.name) { r.action = "upstream:" + nu.name; n++; } });
+        hint = { kind: "upstreams", rename: [u.name, nu.name], refs: `${n} rule${n === 1 ? "" : "s"} updated` };
+      }
+    }
+    if (isNew) hint = { warnings: [`Upstream <code>${esc(nu.name)}</code> is not used by any action yet. Add a rule that routes to it.`] };
+    dlg.close();
+    openReview({ title: isNew ? `Review: add upstream ${nu.name}` : `Review: change upstream ${u.name}`, next, hint, back: () => dlg.showModal() });
+  };
+  dlg.showModal();
+  $("#u-name").focus();
+}
+function afterUpstreams() {
+  const add = () => upstreamEditor(null);
+  ["#add-up", "#add-up2"].forEach((s) => { const b = $(s); if (b) b.addEventListener("click", add); });
+  $$("[data-edit-up]").forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); upstreamEditor(model.upstreams.find((u) => u.name === a.dataset.editUp)); }));
+  $$("[data-umenu]").forEach((b) => b.addEventListener("click", () => {
+    const name = b.dataset.umenu; const users = usersOfUpstream(model, name); const menu = $("#menu");
+    menu.innerHTML = `<button role="menuitem" data-act="edit">${icon("edit")}Edit</button><hr>` + (users.length ? `<button role="menuitem" class="danger" disabled>${icon("trash")}Delete</button><div class="m-note">Used by ${users.map((x) => x.replace(/<[^>]+>/g, "")).join(", ")}. Change those first.</div>` : `<button role="menuitem" class="danger" data-act="del">${icon("trash")}Delete…</button>`);
+    placeMenu(menu, b);
+    menu.onclick = (e) => { const x = e.target.closest("button[data-act]"); if (!x) return; closeMenu(); if (x.dataset.act === "edit") upstreamEditor(model.upstreams.find((u) => u.name === name)); else { const next = clone(model); next.upstreams = next.upstreams.filter((u) => u.name !== name); openReview({ title: `Review: delete upstream ${name}`, next }); } };
+  }));
+  if (document.body.dataset.open === "upstream-new") add();
+}
+
+/* -------------------------------------------------------------- interfaces */
+function usersOfIface(m, name) {
+  const u = [];
+  const pi = (m.proxy.interfaces || []).indexOf(name); if (pi > -1) u.push(`<code>proxy.interfaces</code> position ${pi + 1}`);
+  m.rules.forEach((r) => { if ((r.interfaces || []).includes(name)) u.push(`rule <a class="name-code" href="#rule/${encodeURIComponent(r.name)}">${esc(r.name)}</a>`); });
+  m.upstreams.forEach((x) => { if ((x.interfaces || []).includes(name)) u.push(`upstream <span class="name-code">${esc(x.name)}</span>`); });
+  return u;
+}
+function matchOf(row) { const d = model.interfaces.find((x) => (x.mac ? x.mac === row.mac : true) && (x.device ? x.device === row.device : true) && (x.mac || x.device)); return d ? d.name : ""; }
+function screenInterfaces() {
+  const head = pageHead("Interfaces", "Name this Mac's network interfaces so that rules and upstreams can choose which ones carry their connections.", `<button class="btn" type="button" id="if-refresh">${icon("refresh")}Refresh</button>`);
+  const defs = model.interfaces.length
+    ? `<div class="panel"><div class="ent-head"><span>Interface</span><span>Identity</span><span>State</span><span>Used by</span><span>Last 24 hours</span><span></span></div><ul class="ents">${model.interfaces.map((d) => {
+      const st = STATUS.interfaces[d.name] || { state: "online", text: "Online", device: d.device || "" };
+      const users = usersOfIface(model, d.name); const t = TRAFFIC.interfaces[d.name] || [0, 0];
+      const ident = [d.mac ? "hardware address" : "", d.device ? `device <code>${esc(d.device)}</code>` : "", d.kind ? `kind ${esc(d.kind)}` : ""].filter(Boolean).join(", ");
+      return `<li class="ent"><div class="e-col"><span class="e-name">${esc(d.name)}</span>${d.note ? `<span class="e-note">${esc(d.note)}</span>` : ""}</div>
+        <div class="e-col"><span>${ident}</span>${st.device ? `<span class="hint">Matches ${esc(st.device)}</span>` : ""}</div>
+        <div class="e-col"><span class="state ${st.state}">${esc(st.text)}</span></div>
+        <div class="e-col e-use">${users.length ? `<span>${users.join(", ")}</span>` : `<span class="hint">No list uses it; its traffic is still counted.</span>`}</div>
+        ${statsOn() ? `<div class="r-traffic num"><div>${fmtBytes(t[1])}</div><div>${fmtNum(t[0])} req</div></div>` : `<div class="r-traffic"></div>`}
+        <button class="btn quiet icon-btn r-menu" type="button" aria-label="Actions for interface ${esc(d.name)}" data-imenu="${esc(d.name)}">${icon("more")}</button></li>`;
+    }).join("")}</ul></div>`
+    : `<div class="empty"><h3>No interfaces defined</h3><p>Direct connections follow macOS routing. Define the interfaces below to choose which ones cuttle uses, and to count traffic per interface.</p></div>`;
+  const rows = DETECTED.map((r) => {
+    const m = matchOf(r);
+    return `<tr><td class="host" data-label="Device">${esc(r.device)}</td><td data-label="Kind">${esc(r.kind)}</td><td data-label="Link"><span class="state ${r.media === "active" ? "online" : "offline"}">${esc(r.media)}</span></td><td class="host" data-label="Address">${esc(r.ipv4)}${r.ipv6 !== "-" ? `<br>${esc(r.ipv6)}` : ""}</td><td data-label="Default route">${esc(r.def)}</td><td class="host" data-label="Hardware address">${esc(r.mac)}</td>
+      <td data-label="">${m ? `<span class="badge">${esc(m)}</span>` : `<button class="btn sm" type="button" data-define="${esc(r.device)}"${readOnly() ? " disabled" : ""}>${icon("plus")}Define…</button>`}</td></tr>`;
+  }).join("");
+  return head + `<h2 class="sr">Defined interfaces</h2>${defs}
+    <div class="section"><div class="section-head"><h2>Detected on this Mac</h2><p>Read at 10:14 from the system, as <code>cuttle interfaces</code> shows it.</p></div>
+    <div class="panel tablewrap"><table class="data resp"><thead><tr><th>Device</th><th>Kind</th><th>Link</th><th>Address</th><th>Default route</th><th>Hardware address</th><th>Definition</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+function defineEditor(dev) {
+  const row = DETECTED.find((r) => r.device === dev);
+  const wifi = row.kind === "wifi";
+  const used = model.interfaces.map((d) => d.name);
+  let name = wifi ? "wifi" : row.kind === "wired" ? "eth-" + "abcdefgh".split("").find((c) => !used.includes("eth-" + c)) : "if-" + row.device;
+  $("#editor-title").textContent = `Define ${row.device}`;
+  $("#editor-sub").textContent = `${row.kind === "wired" ? "Wired" : row.kind === "wifi" ? "Wi-Fi" : "Other"} interface, ${row.media}, ${row.ipv4}`;
+  $("#editor-body").innerHTML = `<div class="fields">
+    <div class="row2"><div class="field"><label for="i-name">Name</label><input class="input mono" id="i-name" value="${esc(name)}" spellcheck="false" aria-describedby="i-name-hint"><div class="hint" id="i-name-hint">Used in lists, logs, and statistics.</div></div>
+    <div class="field"><label for="i-note">Note <span class="hint">optional</span></label><input class="input" id="i-note" maxlength="120" placeholder="Second desk adapter"></div></div>
+    <div class="field"><span class="label" id="i-id-l">Identify it by</span>
+      <div class="rcards" role="radiogroup" aria-labelledby="i-id-l">
+        <label class="rcard"><input type="radio" name="i-id" value="mac"${wifi ? "" : " checked"}><b>Hardware address</b><span class="hint"><code>${esc(row.mac)}</code>. Follows the adapter across ports; recommended for adapters and phones.</span></label>
+        <label class="rcard"><input type="radio" name="i-id" value="device"${wifi ? " checked" : ""}><b>Device name and kind</b><span class="hint"><code>${esc(row.device)}</code>, ${esc(row.kind)}. Stable for built-in Wi-Fi, which may change its address per network.</span></label>
+        <label class="rcard"><input type="radio" name="i-id" value="both"><b>Both</b><span class="hint">Matches only while both agree.</span></label>
+      </div></div>
+  </div>`;
+  const dlg = $("#editor");
+  $("#editor-review").onclick = () => {
+    const how = $("input[name=i-id]:checked").value;
+    const d = { name: $("#i-name").value.trim() };
+    const note = $("#i-note").value.trim(); if (note) d.note = note;
+    if (how !== "device") d.mac = row.mac;
+    if (how !== "mac") { d.device = row.device; if (row.kind !== "other") d.kind = row.kind; }
+    const next = clone(model); next.interfaces.push(d);
+    dlg.close();
+    openReview({ title: `Review: define interface ${d.name}`, next, hint: { warnings: ["The new interface is not in any list yet, so its connections follow macOS routing. Add it to proxy.interfaces or a rule to use it."] }, back: () => dlg.showModal() });
+  };
+  dlg.showModal();
+  $("#i-name").focus();
+}
+function afterInterfaces() {
+  $$("[data-define]").forEach((b) => b.addEventListener("click", () => defineEditor(b.dataset.define)));
+  $("#if-refresh").addEventListener("click", () => toast("ok", "Interfaces read again.", "No change since 10:14."));
+  $$("[data-imenu]").forEach((b) => b.addEventListener("click", () => {
+    const name = b.dataset.imenu; const users = usersOfIface(model, name); const menu = $("#menu");
+    menu.innerHTML = `<button role="menuitem" data-act="edit">${icon("edit")}Edit</button><hr>` + (users.length ? `<button role="menuitem" class="danger" disabled>${icon("trash")}Delete</button><div class="m-note">Used by ${users.map((x) => x.replace(/<[^>]+>/g, "")).join(", ")}. Remove it from those lists first.</div>` : `<button role="menuitem" class="danger" data-act="del">${icon("trash")}Delete…</button>`);
+    placeMenu(menu, b);
+    menu.onclick = (e) => { const x = e.target.closest("button[data-act]"); if (!x) return; closeMenu(); if (x.dataset.act === "del") { const next = clone(model); next.interfaces = next.interfaces.filter((d) => d.name !== name); openReview({ title: `Review: delete interface ${name}`, next }); } else toast("ok", "The editor matches Define…", "It adds rename with list updates."); };
+  }));
+  if (document.body.dataset.open === "define") defineEditor("en8");
+}
+
+/* ------------------------------------------------------------------ proxy */
+function durField(id, label, key, def, hint) {
+  const v = model.proxy[key] || "";
+  return `<div class="field"><label for="${id}">${label}</label><input class="input mono" id="${id}" data-key="${key}" value="${esc(v)}" placeholder="${def}, the default" spellcheck="false" aria-describedby="${id}-h"><div class="hint" id="${id}-h">${hint}</div></div>`;
+}
+function screenProxy() {
+  const p = model.proxy;
+  const ro = readOnly() ? " disabled" : "";
+  return pageHead("Proxy", "How clients reach cuttle and what happens to requests that no rule matches.") +
+  `<form id="proxy-form" novalidate>
+    <fieldset class="fsec"${ro}><header><h2>Listeners</h2><p>Addresses that clients connect to.</p></header><div class="fields">
+      ${tokenField("p-listen", "listen", `Listen on <span class="badge restart">Restart</span>`, "IP:port literals. Applies at the next start. A non-loopback address needs remote sources.", p.listen || ["127.0.0.1:3128"])}
+    </div></fieldset>
+    <fieldset class="fsec"${ro}><header><h2>Default route</h2><p>For local clients when no rule matches. <a href="#remote">Remote clients</a> have their own.</p></header><div class="fields">
+      <div class="field"><span class="label" id="p-def-l">Route</span><div class="seg action" role="radiogroup" aria-labelledby="p-def-l">
+        <label><input type="radio" name="p-def" value="direct"${(p.default || "direct") === "direct" ? " checked" : ""}><span class="direct">Direct</span></label>
+        ${model.upstreams.map((u) => `<label><input type="radio" name="p-def" value="upstream:${esc(u.name)}"${p.default === "upstream:" + u.name ? " checked" : ""}><span class="upstream">${esc(u.name)}</span></label>`).join("")}
+        <label><input type="radio" name="p-def" value="block"${p.default === "block" ? " checked" : ""}><span class="block">Block</span></label></div></div>
+    </div></fieldset>
+    <fieldset class="fsec"${ro}><header><h2>Timeouts and limits</h2><p>Go durations such as <code>10s</code> or <code>1m30s</code>. Clear a field to use the default.</p></header><div class="fields"><div class="row2">
+      ${durField("p-ct", "Connect", "connect_timeout", "10s", "Lookup and connect, all addresses together.")}
+      ${durField("p-rt", "Response", "response_timeout", "60s", "First response head of plain HTTP.")}
+      ${durField("p-it", "Idle tunnel", "idle_timeout", "1h", "0s keeps idle tunnels open.")}
+      <div class="field"><label for="p-max">Connection limit</label><input class="input mono" id="p-max" inputmode="numeric" value="${esc(p.max_connections || "")}" placeholder="1024, the default" aria-describedby="p-max-h"><div class="hint" id="p-max-h">16–65536 client connections.</div></div>
+    </div></div></fieldset>
+    <fieldset class="fsec"${ro}><header><h2>Interfaces</h2><p>The default list for direct routes. A rule's own list replaces it.</p></header><div class="fields">
+      ${ifEditor("p-if", "proxy", p.interfaces)}
+      <div class="row2">${durField("p-iat", "Attempt timeout", "interface_attempt_timeout", "3s", "Before the next interface is tried.")}${durField("p-dem", "Demotion", "interface_demotion", "30s", "How long a failed interface stays last. 0s disables.")}</div>
+    </div></fieldset>
+  </form>`;
+}
+function afterProxy() {
+  const form = $("#proxy-form");
+  const read = () => {
+    const p = {};
+    const listen = tokValues($('[data-tokens="p-listen"]')); if (listen.length) p.listen = listen;
+    p.default = $("input[name=p-def]:checked").value;
+    $$("input[data-key]", form).forEach((i) => { if (i.value.trim()) p[i.dataset.key] = i.value.trim(); });
+    const max = $("#p-max").value.trim(); if (max) p.max_connections = /^\d+$/.test(max) ? Number(max) : max;
+    const fl = $('[data-ifl="p-if"]'); if (fl) { const v = ifValue(fl); if (v) p.interfaces = v; }
+    return p;
+  };
+  const initial = JSON.stringify(read());
+  const review = () => {
+    const p = read();
+    if (typeof p.max_connections === "string") { $("#p-max").closest(".field").classList.add("invalid"); $("#p-max-h").insertAdjacentHTML("afterend", `<div class="err">proxy.max_connections must be an integer</div>`); $("#p-max").focus(); return; }
+    const next = clone(model); next.proxy = p;
+    openReview({ title: "Review: proxy settings", next, back: () => {} });
+  };
+  const changed = () => {
+    if (JSON.stringify(read()) !== initial) { dirty = { msg: "Unsaved changes to the proxy settings", review, discard: () => route() }; showSavebar(dirty.msg, review, dirty.discard); }
+    else { hideSavebar(); dirty = null; }
+  };
+  bindTokens(form, changed); bindIf(form, changed);
+  form.addEventListener("input", changed); form.addEventListener("change", changed);
+}
+
+/* ---------------------------------------------------------------- account */
+function screenAccount() {
+  return pageHead("Account", "The admin password and the browsers signed in with it.") +
+  `<form id="pw-form" novalidate>
+    <fieldset class="fsec"><header><h2>Password</h2><p>12 to 128 bytes. Changing it signs out every other browser. The first password is set with <code>cuttle admin passwd</code>.</p></header><div class="fields">
+      <div class="field" data-f="cur"><label for="pw-cur">Current password</label><input class="input" type="password" id="pw-cur" autocomplete="current-password" aria-describedby="pw-cur-err"><div id="pw-cur-err"></div></div>
+      <div class="field" data-f="new"><label for="pw-new">New password</label><input class="input" type="password" id="pw-new" autocomplete="new-password" aria-describedby="pw-new-err"><div id="pw-new-err"></div></div>
+      <div class="field" data-f="conf"><label for="pw-conf">Confirm new password</label><input class="input" type="password" id="pw-conf" autocomplete="new-password" aria-describedby="pw-conf-err"><div id="pw-conf-err"></div></div>
+      <div><button class="btn primary" type="submit">Change password</button></div>
+    </div></fieldset>
+    <section class="fsec"><header><h2>Sessions</h2><p>Sessions end after 30 idle minutes, 12 hours, a restart, or a password change.</p></header><div class="fields">
+      <dl class="kv flush"><dt>This browser</dt><dd>Signed in at 09:58</dd><dt>Other sessions</dt><dd id="others">1</dd><dt>Password file</dt><dd><code>~/.local/share/cuttle/admin-password</code>, changed 2026-11-20</dd></dl>
+      <div><button class="btn" type="button" id="sign-others">Sign out other sessions</button></div>
+    </div></section>
+  </form>`;
+}
+function afterAccount() {
+  $("#pw-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const cur = $("#pw-cur").value, nw = $("#pw-new").value, cf = $("#pw-conf").value;
+    const set = (f, id, msg) => { $(`[data-f="${f}"]`).classList.toggle("invalid", !!msg); $(id).innerHTML = msg ? `<div class="err">${esc(msg)}</div>` : ""; };
+    set("cur", "#pw-cur-err", cur ? "" : "Enter the current password.");
+    set("new", "#pw-new-err", nw.length < 12 ? "Use at least 12 bytes." : nw.length > 128 ? "Use at most 128 bytes." : "");
+    set("conf", "#pw-conf-err", nw && cf !== nw ? "The passwords do not match." : "");
+    const bad = $(".field.invalid input"); if (bad) { bad.focus(); return; }
+    $$("#pw-form input").forEach((i) => { i.value = ""; });
+    $("#others").textContent = "0";
+    toast("ok", "Password changed.", "Other sessions were signed out. This browser stays signed in.");
+  });
+  $("#sign-others").addEventListener("click", () => { $("#others").textContent = "0"; toast("ok", "Other sessions signed out.", ""); });
+}
+
+/* ---------------------------------------------------------------- domains */
+function screenDomains() {
+  const rows = [
+    ["video.example", "direct", "video", 402, 2040109466], ["www.example.com", "direct", "default", 6120, 851443712],
+    ["cdn.example.net", "direct", "default", 3310, 671088640], ["wiki.internal.example", "upstream:gateway", "restricted", 1840, 197132288],
+    ["git.internal.example", "upstream:gateway", "restricted", 1102, 126877696], ["tracker.example", "block", "ads", 1204, 0],
+    ["fonts.example.org", "direct", "default", 940, 31457280],
+  ];
+  if (!statsOn()) return pageHead("Domains", "Hosts by route, rule, source, and interface.") + `<div class="banner warn">${icon("alert")}<div class="b-body"><strong>Statistics are unavailable: the database is locked by another program.</strong><span>The proxy serves without them.</span></div></div>`;
+  return pageHead("Domains", "Hosts by route, rule, source, and interface. The M2 filters stay; this table shows only the new Route… action.") +
+    `<div class="panel tablewrap"><table class="data resp"><thead><tr><th>Host</th><th>Route</th><th>Rule</th><th class="n">Requests</th><th class="n">Bytes</th><th><span class="sr">Actions</span></th></tr></thead><tbody>${rows.map(([h, a, r, q, b]) =>
+      `<tr><td class="host" data-label="">${esc(h)}</td><td data-label="Route">${routeBadge(a)}</td><td data-label="Rule">${r === "default" ? `<span class="muted">default</span>` : `<a class="name-code" href="#rule/${r}">${r}</a>`}</td><td class="n" data-label="Requests">${fmtNum(q)}</td><td class="n" data-label="Bytes">${fmtBytes(b)}</td><td data-label=""><button class="btn sm" type="button" data-route-host="${esc(h)}">${icon("route")}Route…</button></td></tr>`).join("")}</tbody></table></div>`;
+}
+
+/* --------------------------------------------------------- route a host */
+function routeHost(host) {
+  const labels = host.split(".");
+  const choices = [[host, "hosts", "This host only"]];
+  for (let i = 1; i <= labels.length - 2; i++) { const d = labels.slice(i).join("."); choices.push([d, "domains", `${d} and its subdomains`]); }
+  choices[0] = [host, "hosts", `${host} only`];
+  const def = labels.length >= 3 ? 1 : 0;
+  const cur = explain(model, { host, port: 443, kind: "tunnel" }, "local");
+  $("#editor-title").textContent = `Route ${host}`;
+  $("#editor-sub").innerHTML = "";
+  const actions = [["direct", "Direct", "direct"], ...model.upstreams.map((u) => ["upstream:" + u.name, u.name, "upstream"]), ["block", "Block", "block"]];
+  $("#editor-body").innerHTML = `<div class="fields">
+    <div class="verdict"><div class="v-line">Currently ${routeBadge(cur.action)} ${cur.index ? `by rule ${cur.index}, <span class="name-code">${esc(cur.rule)}</span>` : "by the default route"}</div></div>
+    <div class="field"><span class="label" id="rh-m-l">Match</span><div class="rcards" role="radiogroup" aria-labelledby="rh-m-l">${choices.map(([v, k, l], i) => `<label class="rcard"><input type="radio" name="rh-m" value="${esc(v)}" data-k="${k}"${i === def ? " checked" : ""}><b class="mono">${esc(v)}</b><span class="hint">${esc(l)}</span></label>`).join("")}</div></div>
+    <div class="field"><span class="label" id="rh-a-l">Route</span><div class="seg action" role="radiogroup" aria-labelledby="rh-a-l">${actions.map(([v, l, k], i) => `<label><input type="radio" name="rh-a" value="${esc(v)}"${v === cur.action ? " disabled" : ""}><span class="${k}">${esc(l)}</span></label>`).join("")}</div><div class="hint">The current route is unavailable here; pick where the host should go instead.</div><div id="rh-a-err"></div></div>
+    <div class="field"><label for="rh-w">Where</label><select class="input" id="rh-w"></select><div class="hint">A new rule goes first so that it wins over the rules below it.</div></div>
+  </div>`;
+  const fillWhere = () => {
+    const c = $("input[name=rh-a]:checked"); const a = c ? c.value : "";
+    const same = model.rules.filter((r) => r.action === a && !r.ports);
+    $("#rh-w").innerHTML = `<option value="">New rule, first in the chain</option>` + same.map((r) => `<option value="${esc(r.name)}">Add to rule ${esc(r.name)}</option>`).join("");
+  };
+  fillWhere();
+  $$("input[name=rh-a]").forEach((r) => r.addEventListener("change", fillWhere));
+  const dlg = $("#editor");
+  $("#editor-review").onclick = () => {
+    const m = $("input[name=rh-m]:checked"); const val = m.value, key = m.dataset.k;
+    const c = $("input[name=rh-a]:checked");
+    if (!c) { $("#rh-a-err").innerHTML = `<div class="err">Choose a route.</div>`; $("input[name=rh-a]:not([disabled])").focus(); return; }
+    const a = c.value; const into = $("#rh-w").value;
+    const next = clone(model);
+    let title;
+    if (into) { const r = next.rules.find((x) => x.name === into); r[key] = [...(r[key] || []), val]; title = `Review: add ${val} to rule ${into}`; }
+    else { const base = val.split(".")[0].replace(/[^a-z0-9-]/g, "") || "rule"; let n = base, k = 2; while (next.rules.some((x) => x.name === n)) n = base + "-" + k++; next.rules.unshift({ name: n, [key]: [val], action: a }); title = `Review: route ${val}`; }
+    dlg.close();
+    openReview({ title, next, back: () => dlg.showModal(), hint: { done: "Route saved and reloaded." } });
+  };
+  dlg.showModal();
+}
+document.addEventListener("click", (e) => { const b = e.target.closest("[data-route-host]"); if (b && !readOnly()) routeHost(b.dataset.routeHost); });
+
+/* ------------------------------------------------------------ placeholders */
+function screenPlaceholder(title, lead, text) {
+  return pageHead(title, lead) + `<div class="empty"><h3>Not drawn in this prototype</h3><p>${text}</p></div>`;
+}
+function screenRemote() {
+  const off = !(model.remote.sources || []).length && (model.proxy.listen || []).every((l) => l.startsWith("127.") || l.startsWith("[::1]"));
+  return pageHead("Remote clients", "Other machines that may use this instance, such as an edge instance reaching this gateway.") +
+    (off ? `<div class="empty"><h3>Remote clients are off</h3><p>Every listener is a loopback address, so only this Mac can connect. To accept another machine, add a listener on its private link address on the <a href="#proxy">Proxy</a> page, then allow its sources here.</p><a class="btn" href="#proxy">Open Proxy settings</a></div>` : "");
+}
+
+/* ------------------------------------------------------------------ router */
+function route() {
+  closeMenu(); $("#menu").hidden = true;
+  const h = decodeURIComponent((location.hash || "#" + document.body.dataset.start).slice(1));
+  let [path, query] = h.split("?");
+  let screen = path, html, after = null, navId = path;
+  if (path !== "rules") order = null;
+  lifted = null;
+  if (!dirty || !dirty.keep) { hideSavebar(); dirty = null; }
+  if (path === "overview") { html = screenOverview(); after = afterOverview; }
+  else if (path === "rules") { order = model.rules.map((r) => r.name); html = screenRules(); after = afterRules; }
+  else if (path.startsWith("rule/")) { html = screenRuleEdit(path.slice(5)); after = afterRuleEdit; navId = "rules"; }
+  else if (path === "rule-new") { const from = query && query.startsWith("from=") ? query.slice(5) : null; html = screenRuleEdit(null, from); after = afterRuleEdit; navId = "rules"; }
+  else if (path === "upstreams") { html = screenUpstreams(); after = afterUpstreams; }
+  else if (path === "interfaces") { html = screenInterfaces(); after = afterInterfaces; }
+  else if (path === "proxy") { html = screenProxy(); after = afterProxy; }
+  else if (path === "account") { html = screenAccount(); after = afterAccount; }
+  else if (path === "domains") { html = screenDomains(); }
+  else if (path === "remote") { html = screenRemote(); }
+  else if (path === "live") html = screenPlaceholder("Live", "Active tunnels and live counters, refreshed every 5 seconds.", "Unchanged from M2 apart from the shell and the Route… action on each tunnel's host (design 0009 D3.2).");
+  else if (path === "general") html = screenPlaceholder("General", "Instance name, admin listener, statistics, and log level.", "Follows the Proxy page's pattern of sections and fields (design 0009 D3.7).");
+  else if (path === "advanced") html = screenPlaceholder("Advanced", "The configuration file as TOML text, and its previous version.", "The M2 text editor in this shell, with Review changes and the previous version (design 0009 D3.10).");
+  else { html = screenRules(); navId = "rules"; after = afterRules; }
+  $("#page").innerHTML = html;
+  const title = ($("#page h1") || { textContent: "cuttle" }).textContent;
+  document.title = `${title} · cuttle (prototype)`;
+  $("#top-title").textContent = title;
+  renderNav(navId);
+  const det = $(".topbar details"); if (det) det.open = false;
+  if (after) after();
+}
+window.addEventListener("hashchange", () => { route(); const m = $("#main"); m.focus({ preventScroll: true }); window.scrollTo(0, 0); });
+window.addEventListener("beforeunload", (e) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+
+/* --------------------------------------------------------- prototype bar */
+function applyState(s) {
+  protoState = s;
+  model = clone(INITIAL); disk = HAND; restartKeys = [];
+  if (s === "empty") { model.rules = []; model.upstreams = []; model.interfaces = []; delete model.proxy.interfaces; }
+  renderBanners(); route();
+}
+$("#proto-state").addEventListener("change", (e) => applyState(e.target.value));
+$("#proto-theme").addEventListener("change", (e) => { if (e.target.value) document.documentElement.dataset.theme = e.target.value; else delete document.documentElement.dataset.theme; });
+
+/* ------------------------------------------------------------------- start */
+(function start() {
+  const b = document.body.dataset;
+  if (b.state && b.state !== "normal") { $("#proto-state").value = b.state; }
+  applyState(b.state || "normal");
+  if (b.open === "test") { const i = $("#test-url"); i.value = "https://wiki.internal.example/"; $("#testform").dispatchEvent(new Event("submit", { cancelable: true })); }
+  if (b.open === "review") { const next = clone(model); const r = next.rules.find((x) => x.name === "restricted"); r.domains.push("docs.example.org"); const ads = next.rules.splice(3, 1)[0]; next.rules.splice(1, 0, ads); openReview({ title: "Review: change rule restricted", next, back: () => {} }); }
+  if (b.open === "toast") { toast("ok", "Saved and reloaded.", "Rule restricted: domains +1"); toast("warn", "Saved and reloaded. Restart required.", "proxy.listen applies at the next start: <code>brew services restart cuttle</code>"); }
+  if (b.open === "route-host") routeHost("cdn.video.example.com");
+})();
+</script>
+</body>
+</html>

@@ -117,6 +117,24 @@ commits and the research notes use older wording; the
   short period after it failed while a later interface connected
   ([0008 D9][d8-9]). It applies to all destinations at once.
 
+## Admin UI
+
+- **Canonical form.** The layout in which the admin forms write
+  `config.toml`: a fixed order of tables and keys, fixed formatting, and
+  generated comments ([0009 D6][d9-6]).
+- **Candidate.** The whole configuration text that a save would write:
+  the current file with one form edit applied, the Advanced editor's
+  text, or the previous version ([0009 D7][d9-7]).
+- **Review.** The step before every write from the admin UI. It shows
+  the change summary, notices, and the diff between the current file and
+  the candidate ([0009 D3.11][d9-311]).
+- **Base.** The SHA-256 of the file content that a page or a review
+  started from. A write whose base no longer matches the file is refused
+  as a conflict ([0005 D10][d5-10]).
+- **Note.** The optional one-line `note` of a rule, upstream, or
+  interface, which the canonical form keeps where comments written by
+  hand are lost ([0009 D6][d9-6]).
+
 ## Testing
 
 - **Mocks.** Controlled origins and upstream proxies in `internal/testenv`
@@ -173,6 +191,7 @@ notes, which keep their original wording.
 [d3-10]: design/0003-upstream-chaining-and-exposure.md#d10-source-classes-and-remote-policy
 [d3-11]: design/0003-upstream-chaining-and-exposure.md#d11-destination-address-policy-for-direct-routes
 [d3-13]: design/0003-upstream-chaining-and-exposure.md#d13-edge-gateway-and-egress-deployment
+[d5-10]: design/0005-statistics-and-admin.md#d10-settings
 [d7-2]: design/0007-test-environment-and-gates.md#d2-mocks
 [d7-7]: design/0007-test-environment-and-gates.md#d7-gates
 [d7-8]: design/0007-test-environment-and-gates.md#d8-client-checks
@@ -183,3 +202,6 @@ notes, which keep their original wording.
 [d8-8]: design/0008-interface-selection.md#d8-failover
 [d8-9]: design/0008-interface-selection.md#d9-demotion
 [d8-13]: design/0008-interface-selection.md#d13-name-resolution
+[d9-6]: design/0009-web-configuration.md#d6-configuration-model-and-canonical-writer
+[d9-7]: design/0009-web-configuration.md#d7-edit-and-save-pipeline
+[d9-311]: design/0009-web-configuration.md#d311-review
