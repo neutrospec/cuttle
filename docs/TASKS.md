@@ -41,25 +41,6 @@ A closed task becomes one line under Closed:
 
 ## Active
 
-### TASK-0019 — M4.1 B2: admin shell, visual system, and script core
-
-- Milestone: M4.1
-- Status: review
-- Iteration: 2/3
-- Workers: implementer done on branch `t3/admin-shell-visual-system`;
-  fresh reviewer re-checking the fixes
-- Base: `dccee4c`
-- Candidate: `3eaef5a` (tree `afc5a18`), with `main` at `d730633` merged
-  in `9139ec4`; `7430ead` (tree `1bc90af`) was returned for R-1
-- Evidence: implementer ran `scripts/gate t0`, `t1`, and
-  `scripts/admin-check` on `1bc90af`, all pass; W13 tests, 8 mutation
-  proofs, and 46 headless Chrome screenshots at 1280 and 390 px in light
-  and dark with no horizontal overflow
-- Findings: R-1 (major, UI): host names break mid-label on Domains at
-  1280 px; R-2–R-4 and R-6–R-8 (minor and nits) folded in; R-5 goes to B1
-- Next action: reviewer — re-check the fixes in `7430ead..3eaef5a` and
-  the merge resolution
-
 ## Closed
 
 The history was rewritten on 2026-11-25 (TASK-0003) to remove local
@@ -68,6 +49,9 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0019 — M4.1 B2: admin shell, visual system, and script core —
+  landed `8cba20a`, gates: T0 T1 T2 @ `afc5a18` (landed tree differs only in
+  tracking records); iteration 2 of 3; follow-ups T-R1–T-R3 in OI-0006
 - TASK-0018 — M4.1 A: configuration model and canonical writer — landed
   `63e8090`, gates: T0 T1 @ `5f0459f` (landed tree differs only in tracking
   records); iteration 1 of 3; follow-ups Z-R1–Z-R9 in OI-0006
