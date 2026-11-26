@@ -44,16 +44,19 @@ A closed task becomes one line under Closed:
 ### TASK-0026 — Prebuilt bottles from the tap's CI
 
 - Milestone: none (packaging follow-up to M3.1)
-- Status: implement
+- Status: review
 - Iteration: 1/3
-- Workers: infra on `t3/task-0026-bottles` and a tap branch
-- Base: `64691ef`
-- Candidate: none
-- Evidence: none
+- Workers: infra on `t3/homebrew-bottle-workflows` and tap branches
+  `bottle-workflows` and `cuttle-bottles`
+- Base: `fd5f615`; tap `bcec56d`
+- Candidate: `03db298` (tree `893955b`); tap `90456f5` (workflows) and
+  `2435b3d` (formula header)
+- Evidence: `gates: none` (docs and formula comment only); actionlint
+  1.7.12 with `brew style`'s ignores, a YAML parse, and `brew style` on the
+  tap formula pass; CI evidence follows the approved pushes
 - Findings: none
-- Next action: infra — add `brew test-bot` and `brew pr-pull` workflows to
-  the tap, document the bottle release procedure in 0006 D8, and prepare
-  the first bottle pull request for 0.2.0
+- Next action: reviewer — check the workflows, the release procedure, and
+  the proposed AGENTS.md wording
 
 ## Closed
 
