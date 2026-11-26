@@ -784,8 +784,9 @@ against, which the write checks as `ExpectSHA256`, as `/settings` checks
 its `base`), the form's `op`, fields, rendered values, and `base`, so
 that Review again can rebuild the review, and `return`.
 `POST /config/apply` and `POST /settings` share one function that runs
-the [0005 D10][d5-10] steps: size limit, validation, `WriteAtomic` with `ExpectSHA256` and the
-backup, and reload, under the settings mutex, one save at a time. It
+the [0005 D10][d5-10] steps: size limit, validation, `WriteAtomic` with
+`ExpectSHA256` and the backup, and reload, under the settings mutex, one
+save at a time. It
 first turns CRLF line ends into LF, as `submitted()` does for
 `/settings` today, because the review's hidden `text` field arrives with
 CRLF. It logs `admin settings saved` with the digest and the `op`. On success it
