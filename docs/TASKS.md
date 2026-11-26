@@ -41,6 +41,20 @@ A closed task becomes one line under Closed:
 
 ## Active
 
+### TASK-0026 — Prebuilt bottles from the tap's CI
+
+- Milestone: none (packaging follow-up to M3.1)
+- Status: implement
+- Iteration: 1/3
+- Workers: infra on `t3/task-0026-bottles` and a tap branch
+- Base: `64691ef`
+- Candidate: none
+- Evidence: none
+- Findings: none
+- Next action: infra — add `brew test-bot` and `brew pr-pull` workflows to
+  the tap, document the bottle release procedure in 0006 D8, and prepare
+  the first bottle pull request for 0.2.0
+
 ## Closed
 
 The history was rewritten on 2026-11-25 (TASK-0003) to remove local
