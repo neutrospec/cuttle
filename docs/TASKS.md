@@ -54,21 +54,6 @@ A closed task becomes one line under Closed:
 - Next action: implementer — build task B2 of design 0009 (W13) to the
   approved prototype and return the candidate
 
-### TASK-0018 — M4.1 A: configuration model and canonical writer
-
-- Milestone: M4.1
-- Status: review
-- Iteration: 1/3
-- Workers: implementer done on branch `t3/config-doc-canonical-writer`;
-  fresh reviewer running
-- Base: `dccee4c`
-- Candidate: `72ce3f4` (tree `5f0459f`)
-- Evidence: implementer ran `scripts/gate t0` and `t1` on `5f0459f`, both
-  pass; W1–W4 and W14 tests, a 2-minute fuzz run of `FuzzCanonical`, and 8
-  mutation proofs
-- Findings: none yet
-- Next action: reviewer — risk-based review of `dccee4c..72ce3f4`
-
 ## Closed
 
 The history was rewritten on 2026-11-25 (TASK-0003) to remove local
@@ -77,6 +62,9 @@ landing merge `7e791a4`, all except the TASK-0002 branch commits `918cdfd`,
 `ca4d3a4`, and `a493a4a`, name pre-rewrite trees. The tree IDs below are the
 rewritten ones.
 
+- TASK-0018 — M4.1 A: configuration model and canonical writer — landed
+  `63e8090`, gates: T0 T1 @ `5f0459f` (landed tree differs only in tracking
+  records); iteration 1 of 3; follow-ups Z-R1–Z-R9 in OI-0006
 - TASK-0017 — M4 design: full configuration in the web admin — landed
   `0167a58`, gates: none @ `4b8d4a7`; reviewed tree `dc39942` (iteration 3
   of 3); prototype approved by the user; follow-ups Y-R1–Y-R5 binding for
