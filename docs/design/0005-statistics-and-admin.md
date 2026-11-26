@@ -189,9 +189,10 @@ rate.
   `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, and
   `X-Content-Type-Options: nosniff`. Authenticated pages also carry
   `Cache-Control: no-store`.
-- Pages are rendered with `html/template`. Styles are embedded with
-  `embed`; the pages load nothing from other origins and need no
-  JavaScript.
+- Pages are rendered with `html/template`. Styles and one script are
+  embedded with `embed`; the pages load nothing from other origins. The
+  same-origin script enhances the pages, which work without it
+  ([0009 D10](0009-web-configuration.md#d10-javascript)).
 
 ### D6. Password
 

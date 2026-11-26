@@ -1,48 +1,110 @@
+{{/* layout is the one shell of design 0009 D2: on session pages the
+   sidebar, the phone top bar with its <details> menu, the toasts, the
+   banners, and the page; on the sign-in page a centered panel. */}}
 {{define "layout"}}<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
 {{if gt .Refresh 0}}<meta http-equiv="refresh" content="{{.Refresh}}">
 {{end}}<title>{{.Title}} · cuttle</title>
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/admin.css">
-</head>
+{{if .Shell}}<script src="/static/admin.js" defer></script>
+{{end}}</head>
 <body>
-<header>
-<span class="brand">cuttle</span>
-{{if .Page}}<nav aria-label="Pages">
-<a href="/"{{if eq .Page "overview"}} aria-current="page"{{end}}>Overview</a>
-<a href="/domains"{{if eq .Page "domains"}} aria-current="page"{{end}}>Domains</a>
-<a href="/live"{{if eq .Page "live"}} aria-current="page"{{end}}>Live</a>
-<a href="/settings"{{if eq .Page "settings"}} aria-current="page"{{end}}>Settings</a>
-</nav>
-<form method="post" action="/logout" class="signout">
-<span class="muted">Signed in</span>
-<input type="hidden" name="csrf" value="{{.Token}}">
-<button type="submit" class="secondary">Sign out</button>
-</form>
-{{end}}</header>
-<main{{if .Page}} class="wide"{{end}}>
-{{if and .Page .Message}}<p class="message" role="alert">{{.Message}}</p>
-{{end}}{{template "content" .}}
+{{template "icons"}}
+{{if .Shell}}<a class="skip" href="#main">Skip to content</a>
+<div class="app">
+<aside class="sidebar" aria-label="Navigation">
+<div class="side-inner">
+{{template "brand" .Shell}}
+<nav class="nav" aria-label="Pages">{{template "nav" .Shell}}</nav>
+{{template "shellfoot" .}}
+</div>
+</aside>
+<header class="topbar">
+<details>
+<summary class="topbar-row"><span class="brand">{{template "icon" "mark"}}<span class="sr">cuttle {{.Shell.Name}}</span></span><span class="t-title">{{.Title}}</span><span class="btn quiet sm menu-btn">{{template "icon" "menu"}}Menu</span></summary>
+<nav class="nav" aria-label="Pages">{{template "nav" .Shell}}</nav>
+{{template "shellfoot" .}}
+</details>
+</header>
+<main id="main" tabindex="-1">
+<div class="toasts" id="toasts">{{range .Toasts}}{{template "toast" .}}{{end}}</div>
+<div class="banners">{{range .Banners}}{{template "banner" .}}{{end}}</div>
+<div class="page">
+{{template "content" .}}
+</div>
 </main>
-</body>
+</div>
+<div class="savebar" id="savebar" role="region" aria-label="Unsaved changes" hidden>
+<span class="s-msg" id="savebar-msg">Unsaved changes</span>
+<button class="btn quiet" type="button" id="savebar-discard">Discard</button>
+<button class="btn inv" type="button" id="savebar-submit">Review changes</button>
+</div>
+<div class="sr" id="announce" aria-live="polite"></div>
+{{else}}<main id="main" class="login">
+{{template "content" .}}
+</main>
+{{end}}</body>
 </html>
 {{end}}
 
-{{/* window shows the preset links of a windowView and the exact range. */}}
-{{define "window"}}<div class="window">
-<span class="muted">Window</span>
-{{range .Presets}}<a href="{{.Href}}"{{if .Current}} aria-current="true"{{end}}>{{.Label}}</a>
-{{end}}<span class="range">{{.Range}}</span>
-</div>
+{{/* icon draws one symbol of the icons template. */}}
+{{define "icon"}}<svg class="ic" aria-hidden="true" focusable="false"><use href="#i-{{.}}"/></svg>{{end}}
+
+{{define "brand"}}<div class="brand">{{template "icon" "mark"}}<div><b>cuttle</b><span>{{.Name}}</span></div></div>{{end}}
+
+{{/* nav lists the three groups; a page that a later stage builds has no
+   path yet and shows as unavailable instead of a link that fails. */}}
+{{define "nav"}}{{range .Nav}}<div class="nav-group"><span>{{.Label}}</span>
+{{range .Items}}{{if .Href}}<a href="{{.Href}}"{{if .Current}} aria-current="page"{{end}}>{{template "icon" .Icon}}{{.Label}}{{if .Count}}<span class="count">{{.Count}}</span>{{end}}</a>
+{{else}}<span class="nav-off">{{template "icon" .Icon}}{{.Label}}<span class="sr"> (not available yet)</span>{{if .Count}}<span class="count">{{.Count}}</span>{{end}}</span>
+{{end}}{{end}}</div>
+{{end}}{{end}}
+
+{{define "shellfoot"}}<div class="side-foot">
+<span>Version {{.Shell.Version}}, up {{.Shell.Uptime}}</span>
+<span>Configuration loaded {{.Shell.Loaded}}</span>
+<form method="post" action="/logout">
+<input type="hidden" name="csrf" value="{{.Token}}">
+<button type="submit" class="btn quiet sm">Sign out</button>
+</form>
+</div>{{end}}
+
+{{/* banner is one notice of design 0009 D2 and D3.13: info, ok, warn,
+   or error, with a title, body lines, and actions. */}}
+{{define "banner"}}<div class="banner {{.Kind}}" role="{{if eq .Kind "error"}}alert{{else}}status{{end}}">{{template "icon" (bannerIcon .Kind)}}<div class="b-body">
+<strong>{{template "rich" .Title}}</strong>
+{{range .Lines}}<span>{{template "rich" .}}</span>
+{{end}}{{if .Pre}}<pre>{{.Pre}}</pre>
+{{end}}{{if .Actions}}<div class="b-actions">{{range .Actions}}<a class="btn sm" href="{{.Href}}">{{.Label}}</a>{{end}}</div>
+{{end}}</div></div>
 {{end}}
 
+{{/* toast reports the result of an action (design 0009 D7): ok toasts
+   close after 8 s with the script, warn and error toasts stay. */}}
+{{define "toast"}}<div class="toast {{.Kind}}" role="{{if eq .Kind "ok"}}status{{else}}alert{{end}}" data-toast="{{.Kind}}">{{template "icon" (bannerIcon .Kind)}}<div class="t-body"><strong>{{.Title}}</strong>{{range .Lines}}<span>{{template "rich" .}}</span>{{end}}</div></div>
+{{end}}
+
+{{/* rich writes text segments, with code segments in <code>. */}}
+{{define "rich"}}{{range .}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{end}}{{end}}
+
+{{/* window shows the preset windows of a windowView as a segmented
+   control of links. */}}
+{{define "presets"}}<nav class="seg sm" aria-label="Window">{{range .Presets}}<a href="{{.Href}}"{{if .Current}} aria-current="true"{{end}}>{{.Label}}</a>{{end}}</nav>{{end}}
+
 {{/* stats shows the statistics state of a statsState. */}}
-{{define "stats"}}{{if not .OK}}<p class="message" role="alert">Statistics are unavailable{{if .Reason}}: {{.Reason}}{{end}}. The proxy serves without them.</p>
-{{end}}{{if .WriteError}}<p class="message" role="alert">Last statistics write error at {{time .WriteErrorAt}}: {{.WriteError}}</p>
-{{end}}{{if .QueryError}}<p class="message" role="alert">Statistics query failed: {{.QueryError}}</p>
+{{define "stats"}}{{if not .OK}}<div class="banners"><div class="banner warn" role="status">{{template "icon" "alert"}}<div class="b-body"><strong>Statistics are unavailable{{if .Reason}}: {{.Reason}}{{end}}.</strong><span>The proxy serves without them.</span></div></div></div>
+{{end}}{{if .WriteError}}<div class="banners"><div class="banner warn" role="status">{{template "icon" "alert"}}<div class="b-body"><strong>Last statistics write error at {{time .WriteErrorAt}}: {{.WriteError}}</strong><span>Rows that failed to write are kept for the next attempt.</span></div></div></div>
+{{end}}{{if .QueryError}}<div class="banners"><div class="banner error" role="alert">{{template "icon" "alert"}}<div class="b-body"><strong>Statistics query failed: {{.QueryError}}</strong></div></div></div>
 {{end}}{{end}}
+
+{{/* route draws the badge of a route in its color (design 0009 D11);
+   its argument has Action and Upstream. */}}
+{{define "route"}}{{if eq .Action "direct"}}<span class="badge direct"><span class="sw"></span>direct</span>{{else if eq .Action "block"}}<span class="badge block"><span class="sw"></span>block</span>{{else}}<span class="badge upstream"><span class="sw"></span>upstream <b>{{.Upstream}}</b></span>{{end}}{{end}}
 
 {{define "routename"}}{{if eq .Action "direct"}}direct{{else if eq .Action "block"}}block{{else}}upstream:{{.Upstream}}{{end}}{{end}}

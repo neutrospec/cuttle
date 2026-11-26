@@ -1,32 +1,57 @@
+{{/* settings is the Advanced page of design 0009 D3.10: the M2 text
+   editor of design 0005 D10 in the shell. */}}
 {{define "content"}}{{with .Data}}
-<h1>Settings</h1>
-{{if .Notice}}<p class="{{if .NoticeOK}}notice{{else}}message{{end}}" role="status">{{.Notice}}</p>
-{{end}}{{if .RestartRequired}}<p class="message">Restart required for: {{join .RestartRequired ", "}}. These keys apply at the next start.</p>
-{{end}}{{range .ReloadWarnings}}<p class="warning">Warning: {{.}}</p>
-{{end}}
-<div class="table"><table class="kv">
-<tr><th>File</th><td>{{.Path}}</td></tr>
-<tr><th>Running configuration</th><td>loaded {{time .LoadedAt}}<br><span class="muted">sha256 {{.Running}}</span></td></tr>
-{{if .StartRestart}}<tr><th>Restart required</th><td>{{join .StartRestart ", "}}</td></tr>
-{{end}}<tr><th>Last reload</th><td>{{if .LastReloadError}}failed; the running configuration stayed:<pre>{{range .LastReloadError}}{{.}}
-{{end}}</pre>{{else}}succeeded{{end}}</td></tr>
-</table></div>
-{{if .ReadError}}<p class="message" role="alert">{{.ReadError}}</p>
-{{end}}{{if .Errors}}<h2>Errors</h2>
-<ul class="issues errors">{{range .Errors}}<li>{{.}}</li>{{end}}</ul>
-{{end}}{{if .Warnings}}<h2>Warnings</h2>
-<ul class="issues warnings">{{range .Warnings}}<li>{{.}}</li>{{end}}</ul>
-{{end}}{{if .Conflict}}<h2>Current file</h2>
-<pre class="disk">{{.DiskText}}</pre>
-{{end}}{{if .Editable}}<form method="post" action="/settings" class="editor">
+<header class="page-head">
+<div><h1>Advanced</h1>
+<p class="lead">The configuration file as TOML text. A save checks the text, writes it atomically with the previous version kept in <code>.bak</code>, and reloads.</p></div>
+</header>
+<div class="split">
+<div class="stack">
+<div id="settings-result">{{template "settings-result" $}}</div>
+{{if .Conflict}}<section class="panel" aria-labelledby="disk-h">
+<div class="panel-head"><h2 id="disk-h">Current file</h2></div>
+<div class="panel-foot"><pre class="disk">
+{{.DiskText}}</pre></div>
+</section>
+{{end}}{{if .Editable}}<form method="post" action="/settings" class="editor-form" data-guard="Unsaved changes to the configuration text" data-guard-discard="/settings"{{if .Dirty}} data-guard-dirty{{end}}>
 <input type="hidden" name="csrf" value="{{$.Token}}">
 <input type="hidden" name="base" value="{{.Base}}">
 <label for="text">{{if .Conflict}}Your text{{else}}Configuration{{end}}</label>
 <textarea id="text" name="text" rows="32" spellcheck="false" autocomplete="off" wrap="off">
 {{.Text}}</textarea>
-<div class="buttons">
-<button type="submit" formaction="/settings/validate" class="secondary">Validate</button>
-<button type="submit">Save and reload</button>
+<div class="form-foot">
+<button type="submit" class="btn primary" data-primary>Save and reload</button>
+<button type="submit" formaction="/settings/validate" class="btn" data-fragment="settings-result">Validate</button>
+<span class="spacer"></span>
+<span class="hint">Validate checks the text without saving it.</span>
 </div>
 </form>
-{{end}}{{end}}{{end}}
+{{end}}</div>
+<aside class="panel" aria-labelledby="file-h">
+<div class="panel-head"><h2 id="file-h">File</h2></div>
+<dl class="kv">
+<dt>Path</dt><dd class="mono">{{.Path}}</dd>
+<dt>Running</dt><dd>loaded {{time .LoadedAt}}<br><span class="muted">sha256 <span class="mono">{{.Running}}</span></span></dd>
+{{if .StartRestart}}<dt>Restart required</dt><dd>{{join .StartRestart ", "}}</dd>
+{{end}}<dt>Last reload</dt><dd>{{if .LastReloadError}}failed; the running configuration stayed:<pre>{{range .LastReloadError}}{{.}}
+{{end}}</pre>{{else}}succeeded{{end}}</dd>
+</dl>
+</aside>
+</div>
+{{end}}{{end}}
+
+{{/* settings-result is what Validate and Save report; the script loads
+   it alone as a fragment (design 0009 D10). Its argument is the
+   pageData. */}}
+{{define "settings-result"}}{{with .Data}}<div class="stack" data-block="settings-result">
+{{if .ReadError}}<div class="banner error" role="alert">{{template "icon" "alert"}}<div class="b-body"><strong>{{.ReadError}}</strong></div></div>
+{{end}}{{if .Notice}}<div class="banner {{if .NoticeOK}}ok{{else}}error{{end}}" role="{{if .NoticeOK}}status{{else}}alert{{end}}">{{template "icon" (bannerIcon (or (and .NoticeOK "ok") "error"))}}<div class="b-body"><strong>{{.Notice}}</strong></div></div>
+{{end}}{{if .Errors}}<section class="panel" aria-labelledby="errors-h">
+<div class="panel-head"><h2 id="errors-h">Errors <span class="count">{{len .Errors}}</span></h2></div>
+<ul class="issue-list errors">{{range .Errors}}<li>{{.}}</li>{{end}}</ul>
+</section>
+{{end}}{{if .Warnings}}<section class="panel" aria-labelledby="warnings-h">
+<div class="panel-head"><h2 id="warnings-h">Warnings <span class="count">{{len .Warnings}}</span></h2></div>
+<ul class="issue-list warnings">{{range .Warnings}}<li>{{.}}</li>{{end}}</ul>
+</section>
+{{end}}</div>{{end}}{{end}}

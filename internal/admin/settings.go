@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/neutrospec/cuttle/internal/config"
+	"github.com/neutrospec/cuttle/internal/control"
 )
 
 var sha256Hex = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -31,8 +32,9 @@ type settingsPage struct {
 	// Notice reports what a POST did; NoticeOK marks success.
 	Notice   string
 	NoticeOK bool
-	// RestartRequired and ReloadWarnings come from a save's reload.
-	RestartRequired, ReloadWarnings []string
+	// Dirty marks submitted text that was not saved, so that the page's
+	// script asks before the operator leaves it (design 0009 D3.13).
+	Dirty bool
 	// Conflict holds the file's current content after a 409.
 	Conflict bool
 	DiskText string
@@ -99,8 +101,15 @@ func (d *settingsPage) validate() bool {
 	return len(r.Errors) == 0
 }
 
-func (s *Server) renderSettings(w http.ResponseWriter, code int, v session, d *settingsPage) {
-	s.render(w, code, "settings", pageData{Title: "Settings", Token: v.csrf, Page: "settings", Data: d})
+// renderSettings renders the Advanced page (design 0009 D3.10), or only
+// its result block for a script request (design 0009 D10).
+func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, code int, v session, d *settingsPage, toasts ...toast) {
+	page := pageData{Title: "Advanced", Token: v.csrf, Page: "advanced", Data: d, Toasts: toasts}
+	if wantsFragment(r) {
+		s.renderFragment(w, code, "settings", "settings-result", page)
+		return
+	}
+	s.render(w, code, "settings", page)
 }
 
 // getSettings shows the configuration file in an editor with its SHA-256
@@ -112,12 +121,12 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request, _ string, v
 	data, err := readConfigFile(d.Path)
 	if err != nil {
 		d.ReadError = err.Error()
-		s.renderSettings(w, http.StatusOK, v, d)
+		s.renderSettings(w, r, http.StatusOK, v, d)
 		return
 	}
 	d.Text, d.Base, d.Editable = string(data), config.Digest(data), true
 	d.validate()
-	s.renderSettings(w, http.StatusOK, v, d)
+	s.renderSettings(w, r, http.StatusOK, v, d)
 }
 
 // submitted reads the editor's text and base from a settings form. The
@@ -132,13 +141,14 @@ func (s *Server) submitted(w http.ResponseWriter, r *http.Request, v session) (*
 	if len(d.Text) > config.MaxFileSize {
 		d.Text, d.Editable = "", false
 		d.ReadError = fmt.Sprintf("The submitted configuration is larger than %d KiB; nothing was saved.", config.MaxFileSize>>10)
-		s.renderSettings(w, http.StatusRequestEntityTooLarge, v, d)
+		s.renderSettings(w, r, http.StatusRequestEntityTooLarge, v, d)
 		return nil, false
 	}
 	if !sha256Hex.MatchString(d.Base) {
 		http.Error(w, "400 Bad Request: missing or invalid base", http.StatusBadRequest)
 		return nil, false
 	}
+	d.Dirty = true
 	return d, true
 }
 
@@ -150,11 +160,11 @@ func (s *Server) postValidate(w http.ResponseWriter, r *http.Request, _ string, 
 	}
 	if !d.validate() {
 		d.Notice = "The configuration has errors; nothing was saved."
-		s.renderSettings(w, http.StatusUnprocessableEntity, v, d)
+		s.renderSettings(w, r, http.StatusUnprocessableEntity, v, d)
 		return
 	}
 	d.Notice, d.NoticeOK = "The configuration is valid. It has not been saved.", true
-	s.renderSettings(w, http.StatusOK, v, d)
+	s.renderSettings(w, r, http.StatusOK, v, d)
 }
 
 // postSettings validates the submitted text, writes it atomically if the
@@ -168,7 +178,7 @@ func (s *Server) postSettings(w http.ResponseWriter, r *http.Request, _ string, 
 	}
 	if !d.validate() {
 		d.Notice = "The configuration has errors; the file is unchanged."
-		s.renderSettings(w, http.StatusUnprocessableEntity, v, d)
+		s.renderSettings(w, r, http.StatusUnprocessableEntity, v, d)
 		return
 	}
 	s.settingsMu.Lock()
@@ -183,13 +193,13 @@ func (s *Server) postSettings(w http.ResponseWriter, r *http.Request, _ string, 
 		} else {
 			d.DiskText, d.Editable = rerr.Error(), false
 		}
-		s.renderSettings(w, http.StatusConflict, v, d)
+		s.renderSettings(w, r, http.StatusConflict, v, d)
 		return
 	}
 	if err != nil {
 		s.log.Error("admin settings write failed", "config", d.Path, "error", err.Error())
 		d.Notice = "The file could not be written and is unchanged: " + err.Error()
-		s.renderSettings(w, http.StatusInternalServerError, v, d)
+		s.renderSettings(w, r, http.StatusInternalServerError, v, d)
 		return
 	}
 	d.Base = config.Digest([]byte(d.Text))
@@ -197,12 +207,30 @@ func (s *Server) postSettings(w http.ResponseWriter, r *http.Request, _ string, 
 	res, ok := s.backend.Reload()
 	running := s.settingsBase()
 	d.LoadedAt, d.Running, d.StartRestart, d.LastReloadError = running.LoadedAt, running.Running, running.StartRestart, running.LastReloadError
+	d.Dirty = false
 	if !ok {
 		d.Notice = "Saved, but the reload refused the file; the running configuration is unchanged: " + strings.Join(res.Errors, "; ")
-		s.renderSettings(w, http.StatusUnprocessableEntity, v, d)
+		s.renderSettings(w, r, http.StatusUnprocessableEntity, v, d)
 		return
 	}
-	d.Notice, d.NoticeOK = "Saved and reloaded.", true
-	d.RestartRequired, d.ReloadWarnings = res.RestartRequired, res.Warnings
-	s.renderSettings(w, http.StatusOK, v, d)
+	s.renderSettings(w, r, http.StatusOK, v, d, savedToast(res))
+}
+
+// savedToast reports a save that the reload accepted (design 0009 D7):
+// restart-only keys and warnings make it a toast that stays. The page
+// lists the warnings, which the validator gives for the saved text.
+func savedToast(res control.ReloadResult) toast {
+	t := toast{Kind: "ok", Title: "Saved and reloaded."}
+	if keys := res.RestartRequired; len(keys) > 0 {
+		t.Kind, t.Title = "warn", "Saved and reloaded. Restart required."
+		t.Lines = append(t.Lines, append(plain("Restart required for: "+strings.Join(keys, ", ")+". These keys apply at the next start: "),
+			seg{Text: restartCommand, Code: true}))
+	}
+	if n := len(res.Warnings); n > 0 {
+		if t.Kind == "ok" {
+			t.Kind, t.Title = "warn", "Saved and reloaded with "+plural(n, "warning")+"."
+		}
+		t.Lines = append(t.Lines, plain("The page lists the "+plural(n, "warning")+"."))
+	}
+	return t
 }

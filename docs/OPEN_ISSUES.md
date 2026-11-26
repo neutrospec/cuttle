@@ -441,6 +441,12 @@ Move resolved items to Closed with their resolving commit or evidence.
     editor does. U-R5 (test, nit): `expectRe` in
     `internal/config/config_test.go` cannot express a key that contains
     `:`, so three MAC-key fixtures no longer check the reported key path.
+    U-R3 and U-R4 are settled in TASK-0019 (M4.1 task B2): `/domains`
+    offers the windows as links that drop a date range, its filter form
+    carries the preset in force, a date range marks no preset, and
+    clearing both dates returns to `24h` (`TestAdminDomainsWindow`); the
+    409 view's `<pre class="disk">` starts on a new line after its tag
+    (`TestAdminSettingsForm`).
   - X-R1–X-R5 (from the TASK-0015 reviews; infra unless noted): X-R1
     (minor): `scripts/publish-scan` loses a failing `sed` inside the
     command substitution that tests whether a tag points to a tree, so the

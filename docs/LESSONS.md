@@ -251,3 +251,20 @@ removes entries. Append new entries at the end, oldest first.
 - What to do instead: Set the identity variables directly on each `git`
   command of a control, and check the planted value with `git log
   --format='%an <%ae>'` before counting a pass as a miss.
+
+### 2026-11-26 — implementer — waiting on a DOM change in a browser check
+
+- Task: TASK-0019, checking in `TestAdminScreens` that Validate replaces
+  the Advanced page's result block through a fragment request.
+- Attempts: 3.
+- What failed: The check clicked `[data-fragment="settings-result"]` and
+  polled for `#settings-result .issue-list`. The poll returned at once,
+  because the page already listed the file's warnings, and the check read
+  the old block. After that was fixed, the selector matched the block's
+  own root element, which also carried `data-fragment`, before the
+  button, so the click did nothing and the poll timed out.
+- What to do instead: Capture the node that the request replaces
+  (`const old = document.querySelector("#target > [data-block]")`) and
+  poll until a different node is there. Keep trigger and content markers
+  apart: triggers carry `data-fragment="<target id>"`, and fragment roots
+  carry `data-block="<name>"`.

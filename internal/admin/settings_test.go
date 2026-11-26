@@ -181,16 +181,17 @@ func TestAdminSettingsForm(t *testing.T) {
 	}
 	unchanged("limits")
 
-	// A stale base: someone else changed the file. 409 shows both texts;
-	// the file keeps the other writer's content.
-	other := strings.Replace(fakeConfig, `name = "cuttle-test"`, `name = "cuttle-other"`, 1)
+	// A stale base: someone else changed the file. 409 shows both texts,
+	// the file's leading empty line included (OI-0006 U-R4); the file
+	// keeps the other writer's content.
+	other := "\n" + strings.Replace(fakeConfig, `name = "cuttle-test"`, `name = "cuttle-other"`, 1)
 	if err := os.WriteFile(f.be.path, []byte(other), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	res, body = post("/settings", url.Values{"text": {valid}, "base": {base}})
 	m := baseRE.FindStringSubmatch(body)
 	if res.StatusCode != http.StatusConflict || !strings.Contains(body, "The file changed since this page loaded") ||
-		!strings.Contains(body, "name = &#34;cuttle-other&#34;") || !strings.Contains(body, "default = &#34;block&#34;") ||
+		!strings.Contains(body, "<pre class=\"disk\">\n\nname = &#34;cuttle-other&#34;") || !strings.Contains(body, "default = &#34;block&#34;") ||
 		m == nil || m[1] != config.Digest([]byte(other)) {
 		t.Fatalf("stale base: %d:\n%s", res.StatusCode, body)
 	}

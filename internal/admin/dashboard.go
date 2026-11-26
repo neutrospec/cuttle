@@ -57,7 +57,8 @@ func (s *Server) funcs() template.FuncMap {
 			}
 			return v
 		},
-		"join": strings.Join,
+		"join":       strings.Join,
+		"bannerIcon": bannerIcon,
 		"rowIndex": func(first, i int) int64 {
 			return int64(first + i)
 		},
@@ -248,7 +249,7 @@ func (s *Server) getOverview(w http.ResponseWriter, r *http.Request, _ string, v
 	win, err := s.window(r, "/", nil)
 	d.Window = win
 	if err != nil {
-		s.render(w, http.StatusBadRequest, "overview", pageData{Title: "Overview", Token: v.csrf, Page: "overview", Message: err.Error(), Data: d})
+		s.render(w, http.StatusBadRequest, "overview", pageData{Title: "Overview", Token: v.csrf, Page: "overview", Message: err.Error(), Data: d, status: &st})
 		return
 	}
 	if sv := s.backend.Stats(); sv != nil {
@@ -259,7 +260,7 @@ func (s *Server) getOverview(w http.ResponseWriter, r *http.Request, _ string, v
 			s.log.Warn("admin statistics query", "error", err.Error())
 		}
 	}
-	s.render(w, http.StatusOK, "overview", pageData{Title: "Overview", Token: v.csrf, Page: "overview", Data: d})
+	s.render(w, http.StatusOK, "overview", pageData{Title: "Overview", Token: v.csrf, Page: "overview", Data: d, status: &st})
 }
 
 func (s *Server) fillOverview(ctx context.Context, sv *stats.Stats, d *overview) error {
@@ -349,7 +350,7 @@ func (s *Server) getDomains(w http.ResponseWriter, r *http.Request, _ string, v 
 		err = f.Check()
 	}
 	d.Window = win
-	page := pageData{Title: "Domains", Token: v.csrf, Page: "domains", Data: &d}
+	page := pageData{Title: "Domains", Token: v.csrf, Page: "domains", Data: &d, status: &st}
 	if err != nil {
 		page.Message = err.Error()
 		s.render(w, http.StatusBadRequest, "domains", page)
@@ -437,5 +438,5 @@ type livePage struct {
 func (s *Server) getLive(w http.ResponseWriter, r *http.Request, _ string, v session) {
 	st := s.backend.Status()
 	s.render(w, http.StatusOK, "live", pageData{Title: "Live", Token: v.csrf, Page: "live", Refresh: liveRefresh,
-		Data: livePage{Status: st, Counters: pickCounters(st.Counters)}})
+		Data: livePage{Status: st, Counters: pickCounters(st.Counters)}, status: &st})
 }
