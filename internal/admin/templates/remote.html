@@ -1,0 +1,37 @@
+{{/* remote is the Remote clients page of design 0009 D3.7: the allowed
+   sources, the ports as three explicit choices, the default route for
+   remote clients, allow_direct, and the per-source limit. Its Data is a
+   formPage whose View is a settingsView. */}}
+{{define "content"}}{{with .Data}}
+<header class="page-head"><div><h1>Remote clients</h1>
+<p class="lead">Other machines that may use this instance, such as an edge instance that reaches this gateway.</p></div></header>
+<div id="form-issues">{{template "form-issues" $}}</div>
+{{with .View}}{{if .ReadOnly}}{{template "readonly"}}{{end}}
+{{if .RemoteOff}}<div class="banner info remote-off" role="status">{{template "icon" "info"}}<div class="b-body"><strong>Remote clients are off: every listener is a loopback address.</strong><span>Add a listener on a private link address on the <a href="/proxy">Proxy</a> page, then allow its sources here.</span></div></div>
+{{end}}<form method="post" action="/config/draft" class="settings-form"{{if not .ReadOnly}} data-guard="Unsaved changes to the remote client settings" data-guard-discard="/remote"{{if $.Data.Form.Dirty}} data-guard-dirty{{end}}{{end}}>
+{{template "default-button"}}<input type="hidden" name="csrf" value="{{$.Token}}">
+{{range $.Data.Form.Hidden}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">
+{{end}}<fieldset class="fsec"{{if .ReadOnly}} disabled{{end}}><header><h2>Sources</h2><p>Remote clients connect from these networks to a listener that is not a loopback address.</p></header><div class="fields">
+{{template "list-field" ($.Data.Form.Field "sources")}}</div></fieldset>
+<fieldset class="fsec"{{if .ReadOnly}} disabled{{end}}><header><h2>Ports</h2><p>Destination ports that remote clients may reach. Local clients have no port policy.</p></header><div class="fields">
+{{with $.Data.Form.Field "ports"}}<div class="field choice{{if .Invalid}} invalid{{end}}" id="field-ports"><span class="label" id="f-ports-l">Destination ports</span>
+<div class="rcards" role="radiogroup" id="f-ports" aria-labelledby="f-ports-l"{{with .Described}} aria-describedby="{{.}}"{{end}}>
+<label class="rcard"><input type="radio" name="ports" value="default"{{if eq .Value "default"}} checked{{end}}><b>Default (80 and 443)</b><span class="hint">Plain HTTP and HTTPS only.</span></label>
+<label class="rcard"><input type="radio" name="ports" value="these"{{if eq .Value "these"}} checked{{end}}><b>These ports</b><span class="hint">Only the ports listed below.</span></label>
+<label class="rcard"><input type="radio" name="ports" value="none"{{if eq .Value "none"}} checked{{end}}><b>No ports (remote clients refused)</b><span class="hint">Writes <code>ports = []</code>, which refuses remote clients on every port.</span></label>
+</div>
+{{template "field-msgs" .}}{{end}}<div class="sub">{{template "list-field" ($.Data.Form.Field "ports_list")}}</div>
+</div></div></fieldset>
+<fieldset class="fsec"{{if .ReadOnly}} disabled{{end}}><header><h2>Default route</h2><p>For remote clients when no rule matches. <a href="/proxy">Local clients</a> have their own.</p></header><div class="fields">
+{{template "action-field" ($.Data.Form.Action "default" .Upstreams .NoDirect)}}{{if .NoDirect}}<p class="hint no-direct">Direct is available only while Allow direct is on.</p>
+{{end}}{{template "check-field" ($.Data.Form.Field "allow_direct")}}</div></fieldset>
+<fieldset class="fsec"{{if .ReadOnly}} disabled{{end}}><header><h2>Limits</h2><p>Clear the field to use the default.</p></header><div class="fields"><div class="row2">
+{{template "text-field" ($.Data.Form.Field "max_connections_per_source")}}</div></div></fieldset>
+{{if not .ReadOnly}}<div class="form-foot">
+<button type="submit" class="btn primary" name="intent" value="review" data-primary data-fragment="review" data-alt="form-issues">Review changes</button>
+<button type="submit" class="btn" name="intent" value="check" data-fragment="form-issues">Check</button>
+<span class="spacer"></span>
+<span class="hint">Nothing is written until you apply the review. Command-Enter reviews.</span>
+</div>
+{{end}}</form>
+{{end}}{{template "review-dialog"}}{{end}}{{end}}

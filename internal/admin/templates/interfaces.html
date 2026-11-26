@@ -1,0 +1,49 @@
+{{/* interfaces is the Interfaces page of design 0009 D3.6: the defined
+   interfaces with their state, identity, users, and traffic, and the
+   interfaces detected on this Mac with Define…, which opens the editor
+   in a dialog with the script and as a page without it. Its Data is an
+   interfacesView. */}}
+{{define "content"}}{{with .Data}}
+<header class="page-head"><div><h1>Interfaces</h1>
+<p class="lead">Name this Mac's network interfaces so that the default list, rules, and upstreams can choose which ones carry their connections.</p></div>
+{{if not .ReadOnly}}<div class="actions"><a class="btn" href="/interfaces/new" data-fragment="editor-slot">{{template "icon" "plus"}}Add manually</a></div>{{end}}</header>
+{{if .ReadOnly}}{{template "readonly"}}{{end}}
+<section aria-labelledby="defined-h"><h2 id="defined-h" class="sr">Defined interfaces</h2>
+{{if .Defs}}<div class="panel"><div class="ent-head" aria-hidden="true"><span>Interface</span><span>Identity</span><span>State</span><span>Used by</span><span>Last 24 hours</span><span></span></div><ul class="ents">
+{{range .Defs}}{{$d := .}}<li class="ent">
+<div class="e-col"><a class="e-name" href="{{.EditHref}}" data-fragment="editor-slot">{{.Name}}</a>{{if .Note}}<span class="e-note">{{.Note}}</span>{{end}}</div>
+<div class="e-col"><span>{{template "rich" .Identity}}</span>{{if .Device}}<span class="hint">Matches {{.Device}}</span>{{end}}</div>
+<div class="e-col"><span class="state {{.State}}">{{.Text}}</span></div>
+<div class="e-col e-use">{{if .Users}}<span>Used by {{range $i, $u := .Users}}{{if $i}}, {{end}}{{$u.Before}}{{if $u.Href}}<a class="name-code" href="{{$u.Href}}">{{$u.Name}}</a>{{else}}<code>{{$u.Name}}</code>{{end}}{{$u.After}}{{end}}</span>{{else}}<span class="hint">No list uses it; its traffic is still counted.</span>{{end}}</div>
+{{with .Traffic}}<div class="r-traffic num"><div><a href="{{$d.TrafficHref}}"><b>{{bytes .Bytes}}</b></a></div><div>{{num .Requests}} req</div></div>{{else}}<div class="r-traffic"></div>{{end}}
+<details class="menu-details ifmenu r-menu"><summary class="btn quiet icon-btn" aria-label="Actions for interface {{.Name}}">{{template "icon" "more"}}</summary>
+<div class="menu" role="menu"><a role="menuitem" href="{{.EditHref}}" data-fragment="editor-slot">{{template "icon" "edit"}}Edit</a><hr>
+{{if .Delete}}<form method="post" action="/config/draft">
+<input type="hidden" name="csrf" value="{{$.Token}}">
+{{range .Delete}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">
+{{end}}<button role="menuitem" type="submit" class="danger" name="intent" value="review" data-fragment="review">{{template "icon" "trash"}}Delete…</button></form>
+{{else if $.Data.ReadOnly}}<button role="menuitem" type="button" class="danger" disabled>{{template "icon" "trash"}}Delete</button>
+{{else}}<button role="menuitem" type="button" class="danger" disabled>{{template "icon" "trash"}}Delete</button><div class="m-note">Used by {{.UsedBy}}. Remove it from those lists first.</div>
+{{end}}</div></details>
+</li>
+{{end}}</ul></div>
+{{if not .Stats}}<p class="empty-line">Statistics unavailable, so the traffic of each interface is not shown.</p>{{end}}
+{{else}}<div class="empty"><h3>No interfaces defined</h3><p>Direct connections follow macOS routing. Define the interfaces below to choose which ones cuttle uses, and to count traffic per interface.</p></div>
+{{end}}</section>
+<section class="section" aria-labelledby="detected-h"><div class="section-head"><div><h2 id="detected-h">Detected on this Mac</h2><p>As <code>cuttle interfaces</code> lists them: the interfaces with a hardware address.</p></div>
+<a class="btn sm" href="/interfaces" data-fragment="detected">{{template "icon" "refresh"}}Refresh</a></div>
+<div id="detected">{{template "detected" $}}</div></section>
+<dialog id="editor-dialog" class="editor-dialog" aria-label="Interface editor"><div id="editor-slot" class="review-slot"></div></dialog>
+{{template "review-dialog"}}{{end}}{{end}}
+
+{{/* detected is the table of the interfaces detected on this Mac, which
+   Refresh loads again as a fragment. Its argument is the pageData. */}}
+{{define "detected"}}{{$ro := .Data.ReadOnly}}{{with .Data.Detected}}<div class="stack" data-block="detected">
+{{if .Err}}<div class="banner error" role="alert">{{template "icon" "alert"}}<div class="b-body"><strong>The interface table could not be read.</strong><span>{{.Err}}</span></div></div>
+{{else}}<div class="panel tablewrap"><table class="data resp detected">
+<thead><tr><th>Device</th><th>Kind</th><th>Link</th><th>Address</th><th>Default route</th><th>Hardware address</th><th>Definition</th></tr></thead>
+<tbody>{{range .Rows}}<tr><td class="host lead-cell">{{.Device}}</td><td data-label="Kind">{{.KindLabel}}</td><td data-label="Link"><span class="state {{if .Active}}online{{else}}offline{{end}}">{{.Media}}</span></td><td class="mono addr" data-label="Address">{{.IPv4}}{{if ne .IPv6 "-"}}<span class="addr6">{{.IPv6}}</span>{{end}}</td><td data-label="Default route">{{.Default}}</td><td class="host" data-label="Hardware address">{{.MAC}}</td><td class="def-cell">{{if .Match}}{{range .Match}}<a class="badge" href="/interfaces/{{.}}">{{.}}</a> {{end}}{{else if not $ro}}<a class="btn sm" href="{{.Define}}" data-fragment="editor-slot">{{template "icon" "plus"}}Define…</a>{{end}}</td></tr>
+{{else}}<tr><td class="empty-line" colspan="7">No interface with a hardware address was found.</td></tr>
+{{end}}</tbody></table></div>
+<p class="hint">Read from the system at {{.ReadAt}}. Hardware addresses and interface addresses appear only on this page and in the file.</p>
+{{end}}</div>{{end}}{{end}}

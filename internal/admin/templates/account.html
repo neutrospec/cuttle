@@ -1,0 +1,36 @@
+{{/* account is the Account page of design 0009 D3.9: the password
+   change of D12, the sessions, and the password file. The password
+   fields never carry a value back. Its Data is an accountView. */}}
+{{define "content"}}{{with .Data}}
+<header class="page-head"><div><h1>Account</h1>
+<p class="lead">The admin password and the browsers signed in with it.</p></div></header>
+{{if .Message}}<div class="banners"><div class="banner error" role="alert">{{template "icon" "alert"}}<div class="b-body"><strong>{{.Message}}</strong></div></div></div>
+{{end}}<form method="post" action="/account/password" class="account-form">
+<input type="hidden" name="csrf" value="{{$.Token}}">
+<section class="fsec" aria-labelledby="pw-h"><header><h2 id="pw-h">Password</h2><p>Changing it signs out every other browser; this one stays signed in. The first password is set with <code>cuttle admin passwd</code>.</p></header><div class="fields">
+<div class="field{{if .CurrentErr}} invalid{{end}}" id="field-current"><label for="pw-current">Current password</label>
+<input class="input" type="password" id="pw-current" name="current" autocomplete="current-password"{{if .CurrentErr}} aria-invalid="true" aria-describedby="pw-current-e"{{end}}>
+{{if .CurrentErr}}<div class="msgs" id="pw-current-e"><p class="err">{{.CurrentErr}}</p></div>
+{{end}}</div>
+<div class="field{{if .NewErr}} invalid{{end}}" id="field-new"><label for="pw-new">New password</label>
+<input class="input" type="password" id="pw-new" name="new" autocomplete="new-password" aria-describedby="pw-new-h{{if .NewErr}} pw-new-e{{end}}"{{if .NewErr}} aria-invalid="true"{{end}}>
+<div class="hint" id="pw-new-h">12 to 128 bytes. A passphrase of several words is easy to type and hard to guess.</div>
+{{if .NewErr}}<div class="msgs" id="pw-new-e"><p class="err">{{.NewErr}}</p></div>
+{{end}}</div>
+<div class="field{{if .ConfirmErr}} invalid{{end}}" id="field-confirm"><label for="pw-confirm">Confirm new password</label>
+<input class="input" type="password" id="pw-confirm" name="confirm" autocomplete="new-password"{{if .ConfirmErr}} aria-invalid="true" aria-describedby="pw-confirm-e"{{end}}>
+{{if .ConfirmErr}}<div class="msgs" id="pw-confirm-e"><p class="err">{{.ConfirmErr}}</p></div>
+{{end}}</div>
+<div><button class="btn primary" type="submit" data-primary>Change password</button></div>
+</div></section>
+</form>
+<section class="fsec" aria-labelledby="sessions-h"><header><h2 id="sessions-h">Sessions</h2><p>Sessions end after 30 idle minutes, after 12 hours, at a restart, and when the password changes.</p></header><div class="fields">
+<dl class="kv flush"><dt>This browser</dt><dd>Signed in {{.SignedIn}}</dd>
+<dt>Other sessions</dt><dd class="num" id="other-sessions">{{.Others}}</dd>
+<dt>Password file</dt><dd><code>{{.PasswordPath}}</code>{{if .Changed}}<br><span class="muted">Changed {{.Changed}}</span>{{end}}</dd></dl>
+<form method="post" action="/account/sessions">
+<input type="hidden" name="csrf" value="{{$.Token}}">
+<button class="btn" type="submit"{{if not .Others}} disabled{{end}}>Sign out other sessions</button>
+</form>
+</div></section>
+{{end}}{{end}}

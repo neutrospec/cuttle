@@ -1,0 +1,38 @@
+{{/* general is the General page of design 0009 D3.7: the instance name,
+   the admin listener as three explicit choices, the statistics, and the
+   log level. Its Data is a formPage whose View is a settingsView. */}}
+{{define "content"}}{{with .Data}}
+<header class="page-head"><div><h1>General</h1>
+<p class="lead">The instance name, this admin page's listener, statistics, and logging.</p></div></header>
+<div id="form-issues">{{template "form-issues" $}}</div>
+{{with .View}}{{if .ReadOnly}}{{template "readonly"}}{{end}}
+<form method="post" action="/config/draft" class="settings-form"{{if not .ReadOnly}} data-guard="Unsaved changes to the general settings" data-guard-discard="/general"{{if $.Data.Form.Dirty}} data-guard-dirty{{end}}{{end}}>
+{{template "default-button"}}<input type="hidden" name="csrf" value="{{$.Token}}">
+{{range $.Data.Form.Hidden}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">
+{{end}}<fieldset class="fsec"{{if .ReadOnly}} disabled{{end}}><header><h2>Instance</h2><p>How this instance names itself.</p></header><div class="fields">
+{{template "text-field" ($.Data.Form.Field "name")}}</div></fieldset>
+<fieldset class="fsec"{{if .ReadOnly}} disabled{{end}}><header><h2>Admin listener</h2><p>Where this page is served. A loopback address only.</p></header><div class="fields">
+{{with $.Data.Form.Field "admin_listen"}}<div class="field choice{{if .Invalid}} invalid{{end}}" id="field-admin_listen"><span class="label" id="f-admin_listen-l">Listener <span class="badge restart">Restart</span></span>
+<div class="rcards" role="radiogroup" id="f-admin_listen" aria-labelledby="f-admin_listen-l" aria-describedby="f-admin_listen-h{{if .HasMsgs}} {{.MsgID}}{{end}}">
+<label class="rcard"><input type="radio" name="admin_listen" value="default"{{if eq .Value "default"}} checked{{end}}><b>Default (127.0.0.1:3129)</b><span class="hint">The address the starter file uses.</span></label>
+<label class="rcard"><input type="radio" name="admin_listen" value="at"{{if eq .Value "at"}} checked{{end}}><b>On at</b><span class="hint">Another loopback address or port.</span></label>
+<label class="rcard"><input type="radio" name="admin_listen" value="disabled"{{if eq .Value "disabled"}} checked{{end}}><b>Disabled</b><span class="hint">Writes <code>listen = ""</code>. After the next start this page is no longer served.</span></label>
+</div>
+<div class="hint" id="f-admin_listen-h">Applies at the next start.{{with $.Data.View.AdminStart}} The running instance serves this page at <code>{{.}}</code>.{{end}}</div>
+{{template "field-msgs" .}}{{end}}<div class="sub">{{template "text-field" ($.Data.Form.Field "admin_at")}}</div>
+</div></div></fieldset>
+<fieldset class="fsec"{{if .ReadOnly}} disabled{{end}}><header><h2>Statistics</h2><p>Hourly traffic per host, kept on this Mac. Clear a field to use the default.</p></header><div class="fields"><div class="row2">
+{{template "text-field" ($.Data.Form.Field "retention_days")}}{{template "text-field" ($.Data.Form.Field "max_hosts_per_hour")}}</div></div></fieldset>
+<fieldset class="fsec"{{if .ReadOnly}} disabled{{end}}><header><h2>Logging</h2><p>Routing decisions log at Info.</p></header><div class="fields">
+{{with $.Data.Form.Field "log_level"}}<div class="field{{if .Invalid}} invalid{{end}}" id="field-log_level"><span class="label" id="f-log_level-l">{{.Label}}</span>
+<div class="seg" role="radiogroup" id="f-log_level" aria-labelledby="f-log_level-l"{{with .Described}} aria-describedby="{{.}}"{{end}}>{{range $.Data.View.LogLevels}}<label><input type="radio" name="log_level" value="{{.Value}}"{{if .Checked}} checked{{end}}><span>{{.Label}}</span></label>{{end}}</div>
+{{template "field-msgs" .}}</div>{{end}}
+</div></fieldset>
+{{if not .ReadOnly}}<div class="form-foot">
+<button type="submit" class="btn primary" name="intent" value="review" data-primary data-fragment="review" data-alt="form-issues">Review changes</button>
+<button type="submit" class="btn" name="intent" value="check" data-fragment="form-issues">Check</button>
+<span class="spacer"></span>
+<span class="hint">Nothing is written until you apply the review. Command-Enter reviews.</span>
+</div>
+{{end}}</form>
+{{end}}{{template "review-dialog"}}{{end}}{{end}}

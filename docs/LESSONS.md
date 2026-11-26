@@ -320,3 +320,30 @@ removes entries. Append new entries at the end, oldest first.
   before comparing it, or write the expected literal in its escaped form
   (`domains &#43;1`). `&#34;` and `&#39;` replace `"` and `'` the same
   way.
+
+### 2026-11-26 — reviewer — browser checks from two worktrees at once
+
+- Task: TASK-0021 and TASK-0022, run in parallel worktrees, each running
+  `scripts/admin-check`.
+- Attempts: 2 (the TASK-0021 implementer and the TASK-0022 reviewer each
+  hit it once).
+- What failed: the script ends with `/usr/bin/pgrep -f
+  'cuttle-bin-|TestAdminChrome|TestAdminScreens'`, which matched the other
+  worktree's concurrent run, so it printed `admin-check: processes left:
+  <pid>` and exited 1 although every test passed.
+- What to do instead: before counting that failure, check whose checkout
+  the process belongs to with `lsof -a -p <pid> -d cwd` and its start
+  time, and rerun when `pgrep` finds nothing. OI-0006 AB-R4 tracks
+  scoping the pattern to the run's own temporary directories.
+
+### 2026-11-26 — reviewer — mutation run against a package that does not build the file
+
+- Task: TASK-0022, a mutation of `cmd/cuttle/serve.go`.
+- Attempts: 2.
+- What failed: `go test -run '^TestEnsureStarterNotSynced$'
+  ./internal/config` ran an existing test that never compiles
+  `cmd/cuttle`, so it passed and looked like a surviving mutation; the
+  `no tests to run` check from the 2026-11-25 entry does not catch this.
+- What to do instead: run each mutation against the package that contains
+  the mutated file, or one that imports it, and confirm with `go list
+  -deps <pkg> | grep <mutated package>`.

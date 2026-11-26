@@ -103,12 +103,17 @@ func prepareServe(lookup env, cfgFlag string, stderr io.Writer) (*serveState, er
 	s.log = logx.NewLogger(out, s.level)
 
 	wrote, err := config.EnsureStarter(s.cfgPath)
+	if wrote && errors.Is(err, config.ErrNotSynced) {
+		// The file is in place; only its directory entry may not be durable
+		// yet (OI-0006 Z-R4).
+		s.log.Warn("wrote starter configuration, but the directory could not be synced", "path", s.cfgPath, "error", err.Error())
+		err = nil
+	} else if wrote {
+		s.log.Info("wrote starter configuration", "path", s.cfgPath)
+	}
 	if err != nil {
 		s.close()
 		return nil, fmt.Errorf("write starter configuration: %w", err)
-	}
-	if wrote {
-		s.log.Info("wrote starter configuration", "path", s.cfgPath)
 	}
 	if err := config.CheckFileSecurity(s.cfgPath); err != nil {
 		s.log.Error("configuration refused", "error", err.Error())

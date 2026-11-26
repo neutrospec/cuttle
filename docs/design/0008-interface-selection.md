@@ -314,8 +314,12 @@ into the error (`internal/config/validate.go`, `Parse`). When the
 `LastKey` of a syntax error is `interface`, starts with `interface.`, or
 ends with `interfaces`, the message is only its position and the fixed
 text `TOML syntax: invalid value; put it in double quotes`. So neither
-`cuttle check`, the log, `last_reload_error`, nor the settings page
-carries a MAC written where a MAC belongs.
+`cuttle check`, the log, `last_reload_error`, nor the validation
+messages on the admin settings pages carry a MAC written where a MAC
+belongs. Those messages still name keys as written, also inside
+`[[interface]]`, such as an unknown key `interface[2].macc`. The admin
+pages that show the file itself, the editors, the review, and the
+previous version's diff, show its MACs as written ([0009 D12][d9-12]).
 
 That is the whole rule. Every other message shows what the operator
 wrote, as written: key names, rule names, instance names, host patterns,
@@ -707,9 +711,13 @@ for width.
   re-read finds, with a timestamp, the device, and the changed fields, such
   as `2026-11-25T01:02:03.456Z en7 media active->inactive`. It does not
   decode notices. Ctrl-C ends it.
-- Outside the configuration file and its editor, MACs and the addresses
-  of interface table rows appear only in this command's terminal output,
-  because the user needs them to write and check the configuration.
+- Outside the configuration file and the admin views of it, MACs and
+  the addresses of interface table rows appear only in this command's
+  terminal output and in the detected table of the admin Interfaces page
+  ([0009 D3.6, D12][d9-12]), which reads the same table, because the user
+  needs them to write and check the configuration. Status, logs,
+  counters, statistics, toasts, change summaries, and validator messages
+  never show a MAC.
   Configured listener addresses still appear in `cuttle status` and the
   listener log lines, as in M1.4.
 - Exit status 0 on success, 1 when the table cannot be read, 2 on a usage
@@ -1234,6 +1242,7 @@ in group 0); D15 (tried interfaces in `skipped` wherever they come, and
 [d5-10]: 0005-statistics-and-admin.md#d10-settings
 [d6-4]: 0006-packaging-paths-and-lifecycle.md#d4-control-socket
 [d7-7]: 0007-test-environment-and-gates.md#d7-gates
+[d9-12]: 0009-web-configuration.md#d12-security-and-privacy
 [oi-6]: ../OPEN_ISSUES.md#oi-0006--design-follow-ups-from-the-task-0001-final-review
 [oi-7]: ../OPEN_ISSUES.md#oi-0007--local-network-privacy-for-cuttle-under-launchd
 [oi-8]: ../OPEN_ISSUES.md#oi-0008--interface-behavior-on-the-users-devices
